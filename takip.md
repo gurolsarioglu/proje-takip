@@ -117,20 +117,34 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - A4 baskı ve PDF formatına uygun `@media print` CSS kuralları uygulandı.
 * **15/15 Kabul Testi Geçti:** Tüm birim ve kabul testleri eksiksiz geçmektedir.
 
-### [23 Ekim 2026 - 14:40] - OpenProject Split-Screen & Gün Bazlı Gantt Ok Bağlantıları Tamamlandı
-* **Gantt Günlük X Ekseni Takvimi (istekler/Yeni Metin Belgesi.txt & 2.jpeg):**
-  - X ekseni üstte ay başlığı (`Ekim 2026`), altta her bir günü (1..31) temsil eden sütunlarla inşa edildi.
-  - Bugünün günü takvimde vurgulandı.
-* **Gantt İçi Tarih Formatı (istekler/1.jpg):**
-  - Barların içinde tarih gösterimi talep edilen `GG.AA.YYYY ➔ GG.AA.YYYY` (örn. `20.10.2026 ➔ 23.10.2026`) formatına çevrildi.
-* **Kavisli Bağımlılık Okları (SVG Bezier):**
-  - Öncül görevin sağ ucundan ardıl görevin sol başına uzanan dinamik altın sarısı SVG okları (`#gantt-arrow-gold`) ve başlangıç daireleri (`#f59e0b`) çizildi.
-  - Bağımlılık ilişkisi görsel olarak doğrudan takvim üzerinde oklarla görünür kılındı.
-* **OpenProject Split-Screen (Sağ Detay Çekmecesi):**
-  - Görevlere veya Gantt barlarına tıklandığında sayfa terk edilmeden sağdan açılan detay çekmecesi eklendi.
-  - Görev ID'si (`#T...`), Tür (`GÖREV`, `MİLESTONE`, `HATA`), Öncelik, Durum, İlerleme Çubuğu (`%`), Görevli Personel Kartı (İletişim & Ülke), Öncül & Ardıl bağlantıları ve gecikme gerekçeleri yer almaktadır.
-* **Hızlı Arama ve Canlı Filtreleme (Primer Toolbar):**
-  - OpenProject Primer tarzı arama kutusu ve "Tümü", "Benim Görevlerim", "Devam Eden", "Öncül Bekleyen", "Tamamlandı" filtre sekmeleri eklendi.
+### [23 Ekim 2026 - 15:30] - Microsoft To Do Çift Yönlü Entegrasyon Altyapısı
+* **Çift Yönlü Senkronizasyon Mimarisi (`src/server/integrations/microsoftTodo.ts`):**
+  - Tenant kullanıcılarının Outlook / Microsoft To Do hesaplarındaki görevleri ve projede kendilerine atanan görevleri eşitleyen servis katmanı kuruldu.
+  - Açıklama, not ve durum güncellemelerinin çift yönlü (Two-Way) senkronizasyon mantığı hazırlandı.
+  - Şartname ve kabul testlerine `MICROSOFT TO DO: Çift yönlü görev senkronizasyonu` testi eklendi (16/16 test başarılı).
+  - Kullanıcı isteği doğrultusunda canlı prodüksiyon OAuth2 bağlantısı beklemeye alındı, altyapı hazırlandı.
+
+### [23 Ekim 2026 - 16:15] - Premium Executive Beyaz Tema & Tipografi Dönüşümü (Plus Jakarta Sans)
+* **Tasarım Vizyonu & Felsefesi:**
+  - Koyu, neon ve yapay zeka jenerik şablon hissi veren koyu tema terk edildi; yerine Linear, Stripe, Apple ve modern OpenProject standartlarında "Executive White" ışıl ışıl beyaz kurumsal arayüz inşa edildi.
+* **Tipografi & Yazı Fontları:**
+  - Modern kurumsal SaaS standartlarında Google Fonts'tan **Plus Jakarta Sans** (400, 500, 600, 700, 800) ve teknik/metrik alanlar için **JetBrains Mono** entegre edildi.
+  - Tüm başlıklar, kartlar, tablolar ve butonlar bu tipografi hiyerarşisiyle yeniden biçimlendirildi.
+* **Renk Paleti & Işık Dengesi:**
+  - Gövde arka planı: Soft pürüzsüz açık gri-beyaz (`#f8fafc`).
+  - Yan menü (Sidebar) & Üst başlık (Header): Saf beyaz (`#ffffff`), 1px ince saten kenarlık (`#e2e8f0`).
+  - Kartlar & Tablolar: Derinlik veren mikro gölgeli beyaz zemin (`#ffffff`, `box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05)`).
+  - Yazı Rengi: Okunaklı, göz yormayan derin obsidian-arduvaz (`#0f172a`, ikincil `#334155`, üçüncül `#64748b`).
+  - Vurgu & Aksiyon: Kurumsal safir mavisi (`#2563eb`), zümrüt yeşili (`#059669`), amber sarısı (`#d97706`).
+* **Korunan & Kusursuzlaşan Bileşenler:**
+  - **İş Paketleri Tablosu**: Açık temada Stripe netliğinde grid çizgileri ve durum rozetleri.
+  - **Gantt Şeması**: Günlük takvim hücreleri, pürüzsüz satır çizgileri ve dinamik altın bağımlılık okları.
+  - **Kanban Panosu**: Açık gri sütunlar, beyaz görev kartları, sürükle-bırak göstergeleri.
+  - **OpenProject Split-Screen**: Sağdan açılan görev inceleme ve düzenleme çekmecesi.
+  - **Özel Raporlar Tuvali**: Sürükle-bırak rapor bileşenleri, KPI kartları ve baskı önizleme.
+  - **Ekip & Personel Yönetimi**: Ülke bayrakları, telefon/e-posta ve yetkilendirme rozetleri.
 * **Test & Doğrulama:**
-  - 14/14 test eksiksiz geçti (`npm test`). Tarayıcı alt ajanı ile tüm ekranlar görüntülendi ve doğrulandı.
+  - 16/16 kabul testi eksiksiz geçti (`npm test`).
+  - Tarayıcı alt ajanı ile tüm sekmeler gerçek zamanlı olarak test edildi ve ekran görüntüleri doğrulandı.
+
 
