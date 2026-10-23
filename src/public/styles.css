@@ -2546,6 +2546,55 @@ body {
   margin-top: 4px;
 }
 
+.ms-sync-badge.disconnected {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.warning-dot {
+  color: #f59e0b;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.ms-connection-alert-box {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.ms-connection-alert-box .alert-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.ms-connection-alert-box .alert-text {
+  font-size: 0.86rem;
+  color: #fde68a;
+  line-height: 1.5;
+}
+
+.ms-connection-alert-box .alert-text strong {
+  display: block;
+  font-size: 0.92rem;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.ms-connection-alert-box .alert-text code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #67e8f9;
+  font-family: var(--font-mono);
+}
+
 .pulse-dot {
   width: 8px;
   height: 8px;

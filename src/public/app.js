@@ -2021,10 +2021,41 @@ document.addEventListener('DOMContentLoaded', () => {
     syncBtn.onclick = async () => {
       try {
         const res = await apiCall('/api/todo/sync', 'POST');
-        showToast(`Microsoft To Do ile senkronize edildi (${res.count} görev güncel).`, 'success');
+        showToast(`Yerel görevler eşitlendi (${res.count} kayıt). Canlı Outlook eşitlemesi için Azure yapılandırması gereklidir.`, 'info');
         await loadAndRenderMicrosoftTodo();
       } catch (err) {
         showToast('Eşitleme hatası: ' + err.message, 'error');
+      }
+    };
+  }
+
+  // Azure / Microsoft 365 Canlı Bağlantı Ayarları Butonu
+  const azureBtn = document.getElementById('openAzureConfigBtn');
+  if (azureBtn) {
+    azureBtn.onclick = () => {
+      document.getElementById('azureConfigModal')?.classList.add('open');
+    };
+  }
+
+  // Azure Config Form Submit
+  const azureForm = document.getElementById('azureConfigForm');
+  if (azureForm) {
+    azureForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const tenantId = document.getElementById('azureTenantId').value.trim();
+      const clientId = document.getElementById('azureClientId').value.trim();
+      const clientSecret = document.getElementById('azureClientSecret').value.trim();
+
+      try {
+        await apiCall('/api/todo/azure-config', 'POST', {
+          tenant_id: tenantId,
+          client_id: clientId,
+          client_secret: clientSecret
+        });
+        showToast('Azure Entra ID kimlik bilgileri kaydedildi.', 'success');
+        document.getElementById('azureConfigModal')?.classList.remove('open');
+      } catch (err) {
+        showToast('Azure ayarları kaydedilemedi: ' + err.message, 'error');
       }
     };
   }

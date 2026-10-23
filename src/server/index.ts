@@ -976,6 +976,42 @@ app.post('/api/todo/sync', (req, res) => {
   }
 });
 
+// Azure Entra ID / Microsoft 365 Canlı Entegrasyon Bilgileri
+const azureTenantConfigs = new Map<string, { tenant_id: string; client_id: string; client_secret?: string }>();
+
+app.get('/api/todo/azure-config', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const config = azureTenantConfigs.get(auth.tenant_id);
+    res.json({
+      is_configured: !!config,
+      tenant_id: config?.tenant_id || '',
+      client_id: config?.client_id || '',
+      has_secret: !!config?.client_secret
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/todo/azure-config', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (user?.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yalnızca Admin Azure bağlantı ayarlarını yapılandırabilir.' });
+    }
+    const { tenant_id, client_id, client_secret } = req.body;
+    if (!tenant_id || !client_id) {
+      return res.status(400).json({ error: 'Directory (Tenant) ID ve Application (Client) ID zorunludur.' });
+    }
+    azureTenantConfigs.set(auth.tenant_id, { tenant_id, client_id, client_secret });
+    res.json({ success: true, message: 'Azure Entra ID kimlik bilgileri başarıyla kaydedildi.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Fallback SPA route
 app.use((req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));

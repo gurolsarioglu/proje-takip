@@ -499,16 +499,33 @@
             </div>
             <div class="ms-title-group">
               <h2>Görevler & Kişisel To Do Listem</h2>
-              <div class="ms-sync-badge">
-                <span class="pulse-dot"></span>
-                <span>Microsoft Exchange & Entra ID bağlantısı aktif</span>
+              <div class="ms-sync-badge disconnected">
+                <span class="warning-dot">●</span>
+                <span>Canlı Microsoft 365 Bağlantısı Yapılandırılmadı (Yerel Mod)</span>
               </div>
             </div>
           </div>
           <div class="ms-header-right">
+            <button id="openAzureConfigBtn" class="action-btn outline-btn sm-btn">
+              <span>⚙️ Azure / 365 Canlı Bağlantı Ayarları</span>
+            </button>
             <button id="msSyncNowBtn" class="action-btn secondary-btn sm-btn">
               <span>🔄 Şimdi Eşitle</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Canlı Eşitleme Bilgilendirme ve Neden Çalışmıyor Notu -->
+        <div class="card ms-connection-alert-box">
+          <div class="alert-icon">⚠️</div>
+          <div class="alert-text">
+            <strong>Gerçek Outlook / Microsoft To Do Masaüstü Eşitlemesi Neden Henüz Çalışmıyor?</strong>
+            <p>
+              Masaüstünüzdeki veya cep telefonunuzdaki gerçek Outlook / To Do hesabınızla canlı senkronizasyon yapılabilmesi için 
+              <strong>Microsoft Entra ID (Azure Portal)</strong> üzerinde bir <em>Uygulama Kaydı (App Registration)</em> açılması, 
+              <code>Tenant ID</code>, <code>Client ID</code> ve <code>Tasks.ReadWrite</code> izinlerinin sisteme girilmesi gerekmektedir. 
+              Bu kimlik bilgileri olmadan harici hiçbir sistem Microsoft bulutundaki kullanıcı posta kutunuza erişemez.
+            </p>
           </div>
         </div>
 
@@ -746,6 +763,45 @@
           <button type="submit" class="action-btn primary-btn">Açıklamayı Gönder</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 4.1. Azure & Microsoft 365 Canlı Bağlantı Kurulum Modalı -->
+  <div id="azureConfigModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>⚙️ Microsoft 365 & Azure Entra ID Canlı Bağlantı Kurulumu</h3>
+        <button class="modal-close" data-close="azureConfigModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="azure-help-guide" style="background:#1e293b; border-left:4px solid #38bdf8; padding:12px; border-radius:6px; margin-bottom:16px; font-size:0.85rem; line-height:1.5;">
+          <strong>Gerçek Outlook / Microsoft To Do Senkronizasyonu İçin Gerekli Adımlar:</strong>
+          <ol style="margin-top:8px; padding-left:18px;">
+            <li><strong>Azure Portal:</strong> <code>portal.azure.com</code> adresinde <em>Microsoft Entra ID ➔ App registrations</em> bölümünden yeni uygulama kaydı açın.</li>
+            <li><strong>API İzinleri:</strong> <em>API Permissions ➔ Microsoft Graph</em> altında <code>Tasks.ReadWrite</code> ve <code>offline_access</code> izinlerini ekleyin ve Tenant Yöneticisi Onayı (Admin Consent) verin.</li>
+            <li>Aşağıdaki kimlik bilgilerini girin:</li>
+          </ol>
+        </div>
+
+        <form id="azureConfigForm">
+          <div class="form-group">
+            <label for="azureTenantId">Directory (Tenant) ID *</label>
+            <input type="text" id="azureTenantId" class="styled-input" placeholder="Örn: 8b2f9c1a-..." required>
+          </div>
+          <div class="form-group">
+            <label for="azureClientId">Application (Client) ID *</label>
+            <input type="text" id="azureClientId" class="styled-input" placeholder="Örn: 3d5e7a9b-..." required>
+          </div>
+          <div class="form-group">
+            <label for="azureClientSecret">Client Secret (İstemci Parolası)</label>
+            <input type="password" id="azureClientSecret" class="styled-input" placeholder="Azure'dan oluşturulan gizli anahtar">
+          </div>
+          <div class="modal-footer" style="margin-top:16px;">
+            <button type="button" class="action-btn secondary-btn" data-close="azureConfigModal">Kapat</button>
+            <button type="submit" class="action-btn primary-btn">Kaydet & Doğrula</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
