@@ -12,7 +12,7 @@ import { DelayService } from '../modules/delay/delay.service.js';
 import { TaskService } from '../modules/task/task.service.js';
 import { NotificationService } from '../modules/notification/notification.service.js';
 import { ReportingService } from '../modules/reporting/reporting.service.js';
-import { AuthContext, UUID } from '../core/types.js';
+import { AuthContext, UUID, Task } from '../core/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -283,7 +283,17 @@ app.get('/api/projects/:id/tasks', (req, res) => {
 app.post('/api/tasks', (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { project_id, title, initial_start_date, initial_due_date, assignee_id, description } = req.body;
+    const {
+      project_id,
+      title,
+      initial_start_date,
+      initial_due_date,
+      assignee_id,
+      description,
+      type,
+      priority,
+      predecessor_id
+    } = req.body;
 
     if (!projectService.canEditTasks(auth, project_id)) {
       return res.status(403).json({ error: 'Görev ekleme yetkiniz yok.' });
@@ -296,9 +306,108 @@ app.post('/api/tasks', (req, res) => {
       initial_start_date,
       initial_due_date,
       assignee_id,
-      description
+      description,
+      { type, priority }
     );
-    res.status(201).json(task);
+
+    // Eğer öncül seçildiyse otomatik bağımlılık ekle (OpenProject akışı)
+    if (predecessor_id) {
+      try {
+        dependencyService.addDependency(auth, predecessor_id, task.id);
+      } catch (depErr) {
+        // Bağımlılık eklenemezse (örn: döngü riski) logla ama görevi koru
+        console.warn('Otomatik bağımlılık ekleme uyarısı:', depErr);
+      }
+    }
+
+    const createdWithStatus = db.getTaskById(auth.tenant_id, task.id);
+    res.status(201).json(createdWithStatus || task);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// OpenProject Split Screen: Görev Detay Paneli (Sağ Çekmece)
+app.get('/api/tasks/:id/details', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const task = db.getTaskById(auth.tenant_id, req.params.id);
+    if (!task) return res.status(404).json({ error: 'Görev bulunamadı.' });
+
+    const project = db.getProjectById(auth.tenant_id, task.project_id);
+    const assignee = task.assignee_id ? db.getUserById(auth.tenant_id, task.assignee_id) : null;
+    const safeAssignee = assignee ? {
+      id: assignee.id,
+      name: assignee.name,
+      email: assignee.email,
+      phone: assignee.phone,
+      country: assignee.country,
+      department: assignee.department
+    } : null;
+
+    // Öncüller ve Ardıllar
+    const allDeps = db.getDependencies(auth.tenant_id);
+    const predIds = allDeps.filter(d => d.successor_id === task.id).map(d => d.predecessor_id);
+    const succIds = allDeps.filter(d => d.predecessor_id === task.id).map(d => d.successor_id);
+
+    const predecessors = predIds.map(pid => {
+      const pt = db.getTaskById(auth.tenant_id, pid);
+      if (!pt) return null;
+      const pa = pt.assignee_id ? db.getUserById(auth.tenant_id, pt.assignee_id) : null;
+      return {
+        id: pt.id,
+        title: pt.title,
+        work_status: pt.work_status,
+        assignee_name: pa?.name || 'Atanmamış'
+      };
+    }).filter(Boolean);
+
+    const successors = succIds.map(sid => {
+      const st = db.getTaskById(auth.tenant_id, sid);
+      if (!st) return null;
+      const sa = st.assignee_id ? db.getUserById(auth.tenant_id, st.assignee_id) : null;
+      return {
+        id: st.id,
+        title: st.title,
+        work_status: st.work_status,
+        assignee_name: sa?.name || 'Atanmamış'
+      };
+    }).filter(Boolean);
+
+    // Gecikme ve Açıklama Kayıtları
+    const delays = delayService.getDelayRecords(auth.tenant_id, task.id);
+    const can_edit = projectService.canEditTasks(auth, task.project_id) || task.assignee_id === auth.user_id;
+
+    res.json({
+      task,
+      project: project ? { id: project.id, title: project.title } : null,
+      assignee: safeAssignee,
+      predecessors,
+      successors,
+      delays,
+      can_edit
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/tasks/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const task = db.getTaskById(auth.tenant_id, req.params.id);
+    if (!task) return res.status(404).json({ error: 'Görev bulunamadı.' });
+
+    const { progress, type, priority, description, title } = req.body;
+    const updates: Partial<Task> = {};
+    if (typeof progress === 'number') updates.progress = Math.max(0, Math.min(100, progress));
+    if (type) updates.type = type;
+    if (priority) updates.priority = priority;
+    if (description !== undefined) updates.description = description;
+    if (title) updates.title = title;
+
+    const updated = db.updateTask(auth.tenant_id, req.params.id, updates);
+    res.json(updated);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

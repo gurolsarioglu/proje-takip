@@ -1,0 +1,1 @@
+zaman çizelgesini x ekseninde ayın günleri olarak gösterip ilişkli olan görevleri bir birine ok işareti ile bağlayarak göster. resim 2. örnek

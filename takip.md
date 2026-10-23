@@ -57,7 +57,16 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 - [x] **Adım 5:** Testler ve Tarayıcı Doğrulaması:
   - 14/14 Birim & Kabul Testi tamamlandı (`npm test` başarıyla geçti).
   - Tarayıcı alt ajanı ile Admin ve Hans (Almanya - DE) girişleri, menü geçişleri ve yetki kısıtları doğrulandı.
-- [ ] **Adım 6:** Kullanıcı ile konuşarak adım adım yeni taleplerin geliştirilmesi.
+- [x] **Adım 6:** OpenProject Entegrasyonu & İşlevsel/Görsel Adaptasyon:
+  - OpenProject repo incelemesi: Work Packages, Split Screen (Sağ Detay Çekmecesi), Primer Design System özellikleri uyarlandı.
+  - **Sağ Detay Çekmecesi (Split Screen):** Göreve tıklandığında sayfa yenilenmeden sağdan açılan detay paneli (ID, Tür, Durum, Personel Kartı, Öncül/Ardıl İlişkileri, Gecikme Açıklama Akışı).
+  - **İş Paketi Filtre & Canlı Arama:** Metin arama, proje ve durum filtreleme çubuğu.
+- [/] **Adım 7:** Kullanıcı Talepleri (istekler/1.jpg & 2.jpeg):
+  - **X Ekseni Gün Takvimi:** Ay isimleri ve gün numaraları (1, 2, ... 31) x ekseninde sütunlar olarak gösterilecek.
+  - **Tarih Formatı:** Barların içindeki tarihler `GG.AA.YYYY` formatında yazılacak.
+  - **Ok İşareti ile Bağımlılık Bağlantısı (Resim 2 Örneği):** Öncül görevden ardıl göreve giden kavisli SVG ok çizgisi ile görevler birbirine bağlanacak.
+  - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve ikonlarla resim 2 kalitesinde modern görünüm.
+- [ ] **Adım 8:** Tarayıcı Testleri ve Canlı Onay.
 
 ---
 

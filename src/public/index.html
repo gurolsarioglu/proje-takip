@@ -177,12 +177,27 @@
         </div>
       </header>
 
-      <!-- ================= GÖRÜNÜM 1: GÖREVLERİM (MY TASKS) ================= -->
+      <!-- ================= GÖRÜNÜM 1: GÖREVLERİM & İŞ PAKETLERİ ================= -->
       <section id="view-my-tasks" class="view-section active">
         <div class="welcome-banner">
           <div>
             <h3 class="welcome-heading" id="welcomeUserText">Hoş geldiniz!</h3>
             <p class="welcome-sub" data-i18n="my_tasks_sub">Size atanan görevler, durumları ve yaklaşan teslim tarihleri aşağıda listelenmiştir.</p>
+          </div>
+        </div>
+
+        <!-- OpenProject Tarzı Arama & Canlı Filtreleme Çubuğu -->
+        <div class="op-toolbar">
+          <div class="op-search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="taskSearchInput" class="op-search-input" placeholder="İş paketlerinde veya görevlerde ara...">
+          </div>
+          <div class="op-filter-tabs">
+            <button class="op-tab-btn active" data-filter="all">Tümü (<span id="countAll">0</span>)</button>
+            <button class="op-tab-btn" data-filter="mine">Benim Görevlerim</button>
+            <button class="op-tab-btn" data-filter="IN_PROGRESS">Devam Eden</button>
+            <button class="op-tab-btn" data-filter="BLOCKED">Öncül Bekleyen</button>
+            <button class="op-tab-btn" data-filter="COMPLETED">Tamamlandı</button>
           </div>
         </div>
 
@@ -297,9 +312,19 @@
         <button class="modal-close" data-close="taskModal">&times;</button>
       </div>
       <form id="taskForm" class="modal-body">
-        <div class="form-group">
-          <label for="tTitle">Görev Adı *</label>
-          <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: Arayüz Tasarımı ve Onay">
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label for="tTitle">Görev / İş Paketi Adı *</label>
+            <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: Arayüz Tasarımı ve Onay">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label for="tType">Tür</label>
+            <select id="tType" class="styled-select">
+              <option value="TASK">📌 Görev (Task)</option>
+              <option value="MILESTONE">🏁 Kilometre Taşı (Milestone)</option>
+              <option value="BUG">🐞 Hata (Bug)</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-row">
@@ -308,11 +333,20 @@
             <select id="tAssignee" class="styled-select"></select>
           </div>
           <div class="form-group">
-            <label for="tPredecessor">Neyi Bekliyor? (Öncül Görev)</label>
-            <select id="tPredecessor" class="styled-select">
-              <option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>
+            <label for="tPriority">Öncelik</label>
+            <select id="tPriority" class="styled-select">
+              <option value="NORMAL">Normal</option>
+              <option value="HIGH">🔥 Yüksek</option>
+              <option value="LOW">Düşük</option>
             </select>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label for="tPredecessor">Neyi Bekliyor? (Öncül Görev / Bağımlılık)</label>
+          <select id="tPredecessor" class="styled-select">
+            <option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>
+          </select>
         </div>
 
         <div class="form-row">
@@ -468,6 +502,121 @@
       <div class="drawer-content" id="notifList"></div>
     </div>
   </div>
+
+  <!-- ================= OPENPROJECT WORK PACKAGE DETAY ÇEKMECESİ (SPLIT SCREEN) ================= -->
+  <div id="wpDrawerBackdrop" class="drawer-backdrop" style="display:none;"></div>
+  <aside id="workPackageDrawer" class="op-split-drawer">
+    <div class="op-drawer-header">
+      <div class="op-drawer-meta">
+        <span class="op-project-tag" id="wpProjectTitle">FG Group Projesi</span>
+        <div class="op-id-type-row">
+          <span class="op-id-badge" id="wpId">#101</span>
+          <span class="op-type-badge" id="wpType">GÖREV</span>
+          <span class="op-priority-badge" id="wpPriority">Normal</span>
+        </div>
+      </div>
+      <button class="modal-close" id="wpCloseBtn">&times;</button>
+    </div>
+
+    <div class="op-drawer-body">
+      <!-- Başlık ve Durum -->
+      <div class="op-section">
+        <h2 class="op-task-title" id="wpTitle">Görev Başlığı</h2>
+        <div class="op-status-progress-card">
+          <div class="op-status-line">
+            <span class="op-field-label">Durum:</span>
+            <span class="task-status-pill" id="wpStatusBadge">Devam Ediyor</span>
+          </div>
+          <div class="op-progress-box">
+            <div class="op-progress-header">
+              <span>İlerleme:</span>
+              <strong id="wpProgressText">%50</strong>
+            </div>
+            <div class="op-progress-track">
+              <div class="op-progress-fill" id="wpProgressFill" style="width:50%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sorumlu Personel Kartı -->
+      <div class="op-section">
+        <div class="op-section-title">👤 Sorumlu Personel</div>
+        <div class="op-personnel-card" id="wpAssigneeCard">
+          <div class="op-user-avatar" id="wpAssigneeAvatar">A</div>
+          <div class="op-user-info">
+            <h4 class="op-user-name" id="wpAssigneeName">Ahmet Yılmaz</h4>
+            <span class="op-user-dept" id="wpAssigneeDept">Yazılım & Altyapı</span>
+            <div class="op-user-contact">
+              <span id="wpAssigneeEmail">ahmet@fggroup.com.tr</span>
+              <span id="wpAssigneePhone">+90 532 111 22 33</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zaman Planı -->
+      <div class="op-section">
+        <div class="op-section-title">📅 Zaman Planı & Teslim</div>
+        <div class="op-dates-grid">
+          <div class="op-date-card">
+            <span class="op-date-lbl">Başlangıç</span>
+            <strong id="wpStartDate">2026-10-01</strong>
+          </div>
+          <div class="op-date-card">
+            <span class="op-date-lbl">Hedef Bitiş</span>
+            <strong id="wpDueDate">2026-10-15</strong>
+          </div>
+        </div>
+        <div id="wpDelayBadge" class="op-delay-alert" style="display:none;"></div>
+      </div>
+
+      <!-- Açıklama -->
+      <div class="op-section">
+        <div class="op-section-title">📝 Açıklama & Notlar</div>
+        <p class="op-desc-text" id="wpDesc">Açıklama girilmemiş.</p>
+      </div>
+
+      <!-- Bağımlılık & İlişki Akışı (Relations) -->
+      <div class="op-section">
+        <div class="op-section-title">🔗 Bağımlılıklar & Öncül Akışı (Relations)</div>
+        <div class="op-relations-group">
+          <label class="op-rel-label">⏳ Neyi Bekliyor? (Öncül Görevler):</label>
+          <div id="wpPredecessorsList" class="op-rel-list"></div>
+          
+          <div class="op-add-dep-box" id="wpAddDepBox">
+            <select id="wpAddDepSelect" class="styled-select sm-select">
+              <option value="">+ Öncül Bağımlılık Ekle...</option>
+            </select>
+            <button id="wpAddDepBtn" class="action-btn secondary-btn sm-btn">Bağla</button>
+          </div>
+        </div>
+
+        <div class="op-relations-group" style="margin-top:12px;">
+          <label class="op-rel-label">⏩ Kimi Bekletiyor? (Ardıl Görevler):</label>
+          <div id="wpSuccessorsList" class="op-rel-list"></div>
+        </div>
+      </div>
+
+      <!-- Gecikme & İlerleme Açıklamaları (Activity Stream) -->
+      <div class="op-section">
+        <div class="op-section-title">💬 Aktivite & Gecikme Açıklamaları</div>
+        <div id="wpDelaysList" class="op-activity-list"></div>
+
+        <form id="wpInlineExpForm" class="op-inline-form">
+          <textarea id="wpInlineExpText" class="styled-textarea" rows="2" placeholder="Gecikme gerekçesi veya durum notu yazınız..."></textarea>
+          <button type="submit" class="action-btn primary-btn sm-btn" style="margin-top:6px;">Açıklama Gönder</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Alt Hızlı Eylemler -->
+    <div class="op-drawer-footer">
+      <button id="wpStartBtn" class="action-btn primary-btn sm-btn">▶ Görevi Başlat</button>
+      <button id="wpCompleteBtn" class="action-btn success-btn sm-btn">✓ Görevi Tamamla</button>
+      <button id="wpCloseFooterBtn" class="action-btn secondary-btn sm-btn">Kapat</button>
+    </div>
+  </aside>
 
   <div id="toastContainer" class="toast-container"></div>
 

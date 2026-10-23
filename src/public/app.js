@@ -10,7 +10,10 @@ let state = {
   dependencies: [],
   personnelList: [],
   notifications: [],
-  currentView: 'view-my-tasks'
+  currentView: 'view-my-tasks',
+  activeFilter: 'all',
+  searchQuery: '',
+  activeTaskId: null
 };
 
 const I18N = {
@@ -243,34 +246,50 @@ function renderProjectSelector() {
   el.value = state.currentProjectId;
 }
 
-// 1. GÖREVLERİM LİSTESİ (MY TASKS)
+// 1. GÖREVLERİM & İŞ PAKETLERİ LİSTESİ (MY TASKS & WORK PACKAGES)
 function renderMyTasks() {
   const container = document.getElementById('myTasksTable');
   container.innerHTML = '';
 
-  // Giriş yapan kullanıcının görevlerini filtrele (Admin hepsini de görebilir)
-  const myTasks = state.currentUser?.system_role === 'ADMIN'
-    ? state.tasks
-    : state.tasks.filter(t => t.assignee_id === state.currentUser?.id);
+  const countAllEl = document.getElementById('countAll');
+  if (countAllEl) countAllEl.textContent = state.tasks.length;
 
-  document.getElementById('myTasksCount').textContent = myTasks.length;
+  let filtered = [...state.tasks];
 
-  if (myTasks.length === 0) {
+  // Filtre Sekmesi
+  if (state.activeFilter === 'mine') {
+    filtered = filtered.filter(t => t.assignee_id === state.currentUser?.id);
+  } else if (state.activeFilter !== 'all') {
+    filtered = filtered.filter(t => t.work_status === state.activeFilter);
+  }
+
+  // Arama Sorgusu
+  if (state.searchQuery) {
+    const q = state.searchQuery.toLowerCase();
+    filtered = filtered.filter(t => t.title.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
+  }
+
+  // Badge sayacı güncelle
+  const myOwnTasks = state.tasks.filter(t => t.assignee_id === state.currentUser?.id);
+  document.getElementById('myTasksCount').textContent = myOwnTasks.length;
+
+  if (filtered.length === 0) {
     container.innerHTML = `
       <div style="padding:40px; text-align:center; color:#64748b;">
-        <span style="font-size:2rem;">🎉</span>
-        <h4 style="margin-top:10px; color:#f8fafc;">Şu anda bekleyen göreviniz bulunmuyor!</h4>
-        <p style="font-size:0.85rem; margin-top:4px;">Yeni bir iş atandığında burada listelenecektir.</p>
+        <span style="font-size:2rem;">🔍</span>
+        <h4 style="margin-top:10px; color:#f8fafc;">Arama veya filtre kriterine uygun görev bulunamadı.</h4>
+        <p style="font-size:0.85rem; margin-top:4px;">Yeni görev ekleyebilir veya filtreleri temizleyebilirsiniz.</p>
       </div>
     `;
     return;
   }
 
-  myTasks.forEach(task => {
+  filtered.forEach(task => {
     const isDone = task.work_status === 'COMPLETED';
     const isOverdue = !isDone && new Date(task.current_due_date) < new Date();
     const row = document.createElement('div');
     row.className = 'task-list-row';
+    row.dataset.id = task.id;
 
     // Bağımlılık uyarısı (Öncül bekleniyor mu?)
     let depNote = '';
@@ -302,11 +321,22 @@ function renderMyTasks() {
       quickActionBtn = `<button class="action-btn outline-btn sm-btn btn-explain-task" data-id="${task.id}" data-title="${task.title}">⚠️ Gecikme Bildir</button>`;
     }
 
+    const typeLabel = task.type === 'MILESTONE' ? '🏁' : (task.type === 'BUG' ? '🐞' : '📌');
+    const priorityDot = task.priority === 'HIGH' ? '<span title="Yüksek Öncelik" style="color:#f59e0b; margin-right:4px;">●</span>' : '';
+    const assignee = state.personnelList.find(p => p.id === task.assignee_id);
+
     row.innerHTML = `
       <button class="task-check-btn ${isDone ? 'checked' : ''}" data-id="${task.id}" title="${isDone ? 'Tamamlandı' : 'Tamamla'}"></button>
       <div class="task-info-col">
-        <span class="task-main-title ${isDone ? 'done-title' : ''}">${task.title}</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span>${typeLabel}</span>
+          ${priorityDot}
+          <span class="task-main-title ${isDone ? 'done-title' : ''}">${task.title}</span>
+        </div>
         ${depNote}
+      </div>
+      <div style="font-size:0.8rem; color:#94a3b8;">
+        👤 ${assignee ? assignee.name : 'Atanmamış'}
       </div>
       <div class="task-date-col ${isOverdue ? 'overdue' : ''}">
         📅 ${task.current_due_date.slice(0, 10)} ${isOverdue ? '(Gecikti)' : ''}
@@ -316,6 +346,12 @@ function renderMyTasks() {
       </div>
       <div>${quickActionBtn}</div>
     `;
+
+    // Satıra tıklanınca OpenProject Detay Çekmecesi açılır
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.task-check-btn') || e.target.closest('button')) return;
+      openTaskDrawer(task.id);
+    });
 
     container.appendChild(row);
   });
@@ -367,7 +403,16 @@ function renderProjectsGrid() {
   });
 }
 
-// 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE)
+function formatDateTR(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+
+// 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE) - RESİM 2 VE İSTEKLER ŞARTNAMESİ
 function renderTimeline() {
   const container = document.getElementById('timelineChart');
   container.innerHTML = '';
@@ -380,9 +425,146 @@ function renderTimeline() {
     return;
   }
 
-  state.tasks.forEach((t, idx) => {
-    const row = document.createElement('div');
-    row.className = 'gantt-row';
+  // 1. Tarih Aralığı Hesaplama (En erken başlangıçtan en geç bitişe + marj)
+  let minTime = Infinity;
+  let maxTime = -Infinity;
+
+  state.tasks.forEach(t => {
+    const s = new Date(t.current_start_date).getTime();
+    const d = new Date(t.current_due_date).getTime();
+    if (s < minTime) minTime = s;
+    if (d > maxTime) maxTime = d;
+  });
+
+  if (minTime === Infinity) {
+    minTime = Date.now();
+    maxTime = Date.now() + 30 * 24 * 60 * 60 * 1000;
+  }
+
+  // Başlangıcı 2 gün geriye, bitişi 5 gün ileriye al
+  const startDate = new Date(minTime);
+  startDate.setDate(startDate.getDate() - 2);
+  startDate.setHours(0, 0, 0, 0);
+
+  const endDate = new Date(maxTime);
+  endDate.setDate(endDate.getDate() + 5);
+  endDate.setHours(0, 0, 0, 0);
+
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const totalDays = Math.max(16, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
+  const COL_WIDTH = 44; // Gün sütunu genişliği (px)
+  const timelineWidth = totalDays * COL_WIDTH;
+
+  // 2. Takvim Günleri & Aylar Dizisi
+  const days = [];
+  const monthSpans = [];
+  let currentMonthName = '';
+  let currentMonthSpan = 0;
+
+  const monthNamesTR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(startDate.getTime() + i * MS_PER_DAY);
+    const dayNum = d.getDate();
+    const monthIndex = d.getMonth();
+    const year = d.getFullYear();
+    const mName = `${monthNamesTR[monthIndex]} ${year}`;
+
+    const dateKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    const isToday = dateKey === todayStr;
+
+    days.push({ dayNum, isToday, date: d });
+
+    if (mName !== currentMonthName) {
+      if (currentMonthName) {
+        monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
+      }
+      currentMonthName = mName;
+      currentMonthSpan = 1;
+    } else {
+      currentMonthSpan++;
+    }
+  }
+  if (currentMonthSpan > 0) {
+    monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
+  }
+
+  // 3. HTML İskeleti Oluşturma (Scrollable wrapper, Header, Grid Lines, Task Rows, SVG Overlay)
+  const scrollWrap = document.createElement('div');
+  scrollWrap.className = 'timeline-scroll-wrap';
+
+  // Üst Başlık (Aylar + Günler)
+  const header = document.createElement('div');
+  header.className = 'gantt-grid-header';
+  header.style.width = `${timelineWidth}px`;
+
+  // Aylar satırı
+  const monthsRow = document.createElement('div');
+  monthsRow.className = 'gantt-months-track';
+  monthsRow.innerHTML = monthSpans.map(m => `
+    <div class="gantt-month-header" style="width: ${m.count * COL_WIDTH}px;">
+      ${m.name}
+    </div>
+  `).join('');
+
+  // Günler satırı
+  const daysRow = document.createElement('div');
+  daysRow.className = 'gantt-days-track';
+  daysRow.innerHTML = days.map(d => `
+    <div class="gantt-day-col ${d.isToday ? 'today' : ''}" title="${d.dayNum}">
+      ${d.dayNum}
+    </div>
+  `).join('');
+
+  header.appendChild(monthsRow);
+  header.appendChild(daysRow);
+  scrollWrap.appendChild(header);
+
+  // Görev Satırları ve Izgara Gövdesi
+  const rowsContainer = document.createElement('div');
+  rowsContainer.className = 'gantt-rows-container';
+  rowsContainer.id = 'ganttRowsContainer';
+  rowsContainer.style.width = `${timelineWidth}px`;
+
+  // Arka Plan Dikey Izgara Çizgileri
+  const gridLines = document.createElement('div');
+  gridLines.className = 'gantt-grid-lines';
+  gridLines.style.width = `${timelineWidth}px`;
+  gridLines.innerHTML = days.map(() => `<div class="gantt-grid-line"></div>`).join('');
+  rowsContainer.appendChild(gridLines);
+
+  // SVG Bağlantı Çizgileri Katmanı
+  const svgOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svgOverlay.setAttribute('class', 'gantt-svg-overlay');
+  svgOverlay.setAttribute('id', 'ganttSvgOverlay');
+  svgOverlay.setAttribute('width', timelineWidth);
+  svgOverlay.setAttribute('height', '100%');
+  svgOverlay.innerHTML = `
+    <defs>
+      <marker id="gantt-arrow-gold" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 1 L 9 5 L 0 9 z" fill="#f59e0b" />
+      </marker>
+    </defs>
+  `;
+  rowsContainer.appendChild(svgOverlay);
+
+  // Her görev için bir satır ve kart (Resim 2 Stili)
+  state.tasks.forEach((t) => {
+    const track = document.createElement('div');
+    track.className = 'gantt-row-track';
+    track.style.width = `${timelineWidth}px`;
+
+    const tStart = new Date(t.current_start_date).getTime();
+    const tDue = new Date(t.current_due_date).getTime();
+
+    const startOffsetDays = Math.max(0, (tStart - startDate.getTime()) / MS_PER_DAY);
+    const durationDays = Math.max(1, (tDue - tStart) / MS_PER_DAY + 1);
+
+    const leftPx = Math.round(startOffsetDays * COL_WIDTH);
+    const minWidthPx = Math.max(280, Math.round(durationDays * COL_WIDTH));
 
     const barClass = {
       BLOCKED: 'bar-blocked',
@@ -391,27 +573,102 @@ function renderTimeline() {
       COMPLETED: 'bar-done'
     }[t.work_status] || 'bar-ready';
 
-    // Bağımlı olduğu öncül var mı?
-    const predDep = state.dependencies.find(d => d.successor_id === t.id);
-    let depLine = '';
-    if (predDep) {
-      const predTask = state.tasks.find(pt => pt.id === predDep.predecessor_id);
-      depLine = `<span class="gantt-dep-link">⬅️ "${predTask ? predTask.title : 'Öncül'}" bittikten sonra</span>`;
-    }
+    const chipClass = {
+      BLOCKED: 'chip-blocked',
+      READY: 'chip-ready',
+      IN_PROGRESS: 'chip-progress',
+      COMPLETED: 'chip-done'
+    }[t.work_status] || 'chip-ready';
 
-    row.innerHTML = `
-      <div class="gantt-task-name" title="${t.title}">
-        ${idx + 1}. ${t.title}
-      </div>
-      <div class="gantt-bar-area">
-        <div class="gantt-bar ${barClass}" style="width: ${40 + (idx * 8)}%;">
-          <span>${t.current_start_date.slice(5, 10)} ➔ ${t.current_due_date.slice(5, 10)}</span>
-        </div>
-        ${depLine}
-      </div>
+    const statusText = {
+      BLOCKED: 'Öncül Bekliyor',
+      READY: 'Başlamaya Hazır',
+      IN_PROGRESS: 'Devam Ediyor',
+      COMPLETED: 'Tamamlandı'
+    }[t.work_status] || t.work_status;
+
+    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
+    const prog = t.work_status === 'COMPLETED' ? 100 : (t.progress || 0);
+
+    const pill = document.createElement('div');
+    pill.className = `gantt-pill-bar ${barClass}`;
+    pill.id = `gantt-bar-${t.id}`;
+    pill.style.left = `${leftPx}px`;
+    pill.style.minWidth = `${minWidthPx}px`;
+    pill.dataset.id = t.id;
+
+    // Resim 1 & 2 gereksinimi: tarihler içerde gg.aa.yyyy formatında yazılıyor!
+    pill.innerHTML = `
+      <span class="pill-icon">${typeIcon}</span>
+      <span class="pill-title">${t.title}</span>
+      <span class="pill-progress">${prog}%</span>
+      <span class="pill-dates">${formatDateTR(t.current_start_date)} ➔ ${formatDateTR(t.current_due_date)}</span>
+      <span class="pill-status-chip ${chipClass}">● ${statusText}</span>
     `;
 
-    container.appendChild(row);
+    pill.addEventListener('click', () => openTaskDrawer(t.id));
+
+    track.appendChild(pill);
+    rowsContainer.appendChild(track);
+  });
+
+  scrollWrap.appendChild(rowsContainer);
+  container.appendChild(scrollWrap);
+
+  // 4. Bağımlılık Oklarını Çiz (Resim 2 gibi altın kavisli oklar)
+  setTimeout(() => {
+    drawDependencyArrows(svgOverlay, rowsContainer);
+  }, 60);
+}
+
+function drawDependencyArrows(svg, container) {
+  if (!svg || !container) return;
+
+  state.dependencies.forEach(dep => {
+    const predEl = document.getElementById(`gantt-bar-${dep.predecessor_id}`);
+    const succEl = document.getElementById(`gantt-bar-${dep.successor_id}`);
+
+    if (predEl && succEl) {
+      const predTrack = predEl.closest('.gantt-row-track');
+      const succTrack = succEl.closest('.gantt-row-track');
+      if (!predTrack || !succTrack) return;
+
+      const x1 = predEl.offsetLeft + predEl.offsetWidth;
+      const y1 = predTrack.offsetTop + predEl.offsetTop + (predEl.offsetHeight / 2);
+
+      const x2 = succEl.offsetLeft;
+      const y2 = succTrack.offsetTop + succEl.offsetTop + (succEl.offsetHeight / 2);
+
+      const dx = Math.max(30, Math.abs(x2 - x1) * 0.45);
+      let d;
+
+      if (x2 >= x1 + 10) {
+        // İleriye doğru akıcı S-eğrisi (Resim 2)
+        d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      } else {
+        // Geriye veya dikey döngüsel kavis
+        const midY = (y1 + y2) / 2;
+        d = `M ${x1} ${y1} C ${x1 + 45} ${y1}, ${x1 + 45} ${midY}, ${(x1 + x2)/2} ${midY} S ${x2 - 45} ${y2}, ${x2} ${y2}`;
+      }
+
+      // Başlangıç noktası yuvarlağı (Resim 2 stili)
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', x1);
+      dot.setAttribute('cy', y1);
+      dot.setAttribute('r', '4');
+      dot.setAttribute('fill', '#f59e0b');
+      svg.appendChild(dot);
+
+      // Kavisli ok yolu
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', '#f59e0b');
+      path.setAttribute('stroke-width', '2.4');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('marker-end', 'url(#gantt-arrow-gold)');
+      svg.appendChild(path);
+    }
   });
 }
 
@@ -432,14 +689,21 @@ function renderBoard() {
 
     const assignee = state.personnelList.find(p => p.id === t.assignee_id);
     const isOverdue = t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
+    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
 
     card.innerHTML = `
-      <div style="font-weight:600; font-size:0.9rem; line-height:1.3;">${t.title}</div>
-      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94a3b8;">
+      <div style="font-weight:600; font-size:0.9rem; line-height:1.3; display:flex; align-items:flex-start; gap:6px;">
+        <span>${typeIcon}</span>
+        <span>${t.title}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94a3b8; margin-top:6px;">
         <span>👤 ${assignee ? assignee.name : 'Atanmamış'}</span>
         <span class="${isOverdue ? 'due-chip overdue' : ''}">${t.current_due_date.slice(0, 10)}</span>
       </div>
     `;
+
+    // Tıklanınca sağ çekmeceyi aç
+    card.addEventListener('click', () => openTaskDrawer(t.id));
 
     if (t.work_status === 'COMPLETED') {
       counts.DONE++;
@@ -456,6 +720,172 @@ function renderBoard() {
   document.getElementById('bCountTodo').textContent = counts.TODO;
   document.getElementById('bCountDoing').textContent = counts.DOING;
   document.getElementById('bCountDone').textContent = counts.DONE;
+}
+
+// ================= OPENPROJECT SPLIT SCREEN DRAWER =================
+async function openTaskDrawer(taskId) {
+  state.activeTaskId = taskId;
+  const drawer = document.getElementById('workPackageDrawer');
+  const backdrop = document.getElementById('wpDrawerBackdrop');
+  if (!drawer) return;
+
+  try {
+    const details = await apiCall(`/api/tasks/${taskId}/details`);
+    const { task, project, assignee, predecessors, successors, delays } = details;
+
+    document.getElementById('wpProjectTitle').textContent = project?.title || 'FG Group Projesi';
+    document.getElementById('wpId').textContent = `#${task.id.slice(0, 6)}`;
+    
+    const typeBadge = document.getElementById('wpType');
+    typeBadge.textContent = task.type === 'MILESTONE' ? '🏁 KİLOMETRE TAŞI' : (task.type === 'BUG' ? '🐞 HATA' : '📌 GÖREV');
+    typeBadge.className = `op-type-badge ${task.type === 'MILESTONE' ? 'milestone' : (task.type === 'BUG' ? 'bug' : '')}`;
+
+    const priorityBadge = document.getElementById('wpPriority');
+    priorityBadge.textContent = task.priority === 'HIGH' ? '🔥 Yüksek' : (task.priority === 'LOW' ? 'Düşük' : 'Normal');
+    priorityBadge.className = `op-priority-badge ${task.priority === 'HIGH' ? 'high' : ''}`;
+
+    document.getElementById('wpTitle').textContent = task.title;
+
+    // Durum Pill
+    const statusPillClass = {
+      BLOCKED: 'pill-status-blocked',
+      READY: 'pill-status-ready',
+      IN_PROGRESS: 'pill-status-progress',
+      COMPLETED: 'pill-status-done'
+    }[task.work_status] || 'pill-status-ready';
+
+    const statusText = {
+      BLOCKED: 'Öncül Bekliyor',
+      READY: 'Başlamaya Hazır',
+      IN_PROGRESS: 'Devam Ediyor',
+      COMPLETED: 'Tamamlandı'
+    }[task.work_status] || task.work_status;
+
+    const sb = document.getElementById('wpStatusBadge');
+    sb.className = `task-status-pill ${statusPillClass}`;
+    sb.textContent = statusText;
+
+    const prog = task.work_status === 'COMPLETED' ? 100 : (task.progress || 0);
+    document.getElementById('wpProgressText').textContent = `%${prog}`;
+    document.getElementById('wpProgressFill').style.width = `${prog}%`;
+
+    // Personel Kartı
+    const avatar = document.getElementById('wpAssigneeAvatar');
+    const nameEl = document.getElementById('wpAssigneeName');
+    const deptEl = document.getElementById('wpAssigneeDept');
+    const emailEl = document.getElementById('wpAssigneeEmail');
+    const phoneEl = document.getElementById('wpAssigneePhone');
+
+    if (assignee) {
+      avatar.textContent = assignee.name.slice(0, 1).toUpperCase();
+      nameEl.textContent = assignee.name;
+      deptEl.textContent = `${assignee.department || 'Genel'} (${assignee.country || 'Türkiye'})`;
+      emailEl.textContent = assignee.email;
+      phoneEl.textContent = assignee.phone || 'Telefon belirtilmemiş';
+    } else {
+      avatar.textContent = '?';
+      nameEl.textContent = 'Atanmamış';
+      deptEl.textContent = '-';
+      emailEl.textContent = '-';
+      phoneEl.textContent = '-';
+    }
+
+    // Tarihler & Gecikme Uyarısı
+    document.getElementById('wpStartDate').textContent = task.current_start_date ? task.current_start_date.slice(0, 10) : '-';
+    document.getElementById('wpDueDate').textContent = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
+
+    const delayAlert = document.getElementById('wpDelayBadge');
+    const isOverdue = task.work_status !== 'COMPLETED' && new Date(task.current_due_date) < new Date();
+    if (isOverdue) {
+      delayAlert.style.display = 'flex';
+      delayAlert.innerHTML = '⚠️ <strong>Teslim Tarihi Aşıldı:</strong> Bu görev planlanan bitiş tarihini geçti.';
+    } else {
+      delayAlert.style.display = 'none';
+    }
+
+    document.getElementById('wpDesc').textContent = task.description || 'Bu görev için detaylı açıklama girilmemiş.';
+
+    // Öncül Listesi
+    const predContainer = document.getElementById('wpPredecessorsList');
+    if (predecessors && predecessors.length > 0) {
+      predContainer.innerHTML = predecessors.map(p => `
+        <div class="op-rel-item">
+          <div>
+            <span class="rel-title">${p.title}</span>
+            <div class="rel-user">👤 ${p.assignee_name}</div>
+          </div>
+          <span class="task-status-pill ${p.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-progress'}">${p.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'}</span>
+        </div>
+      `).join('');
+    } else {
+      predContainer.innerHTML = '<span style="font-size:0.8rem; color:#64748b;">(Öncül görev yok - hemen başlayabilir)</span>';
+    }
+
+    // Ardıl Listesi
+    const succContainer = document.getElementById('wpSuccessorsList');
+    if (successors && successors.length > 0) {
+      succContainer.innerHTML = successors.map(s => `
+        <div class="op-rel-item">
+          <div>
+            <span class="rel-title">${s.title}</span>
+            <div class="rel-user">👤 ${s.assignee_name}</div>
+          </div>
+          <span class="task-status-pill ${s.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-blocked'}">${s.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Bekliyor'}</span>
+        </div>
+      `).join('');
+    } else {
+      succContainer.innerHTML = '<span style="font-size:0.8rem; color:#64748b;">(Bu görevi bekleyen ardıl görev yok)</span>';
+    }
+
+    // Öncül Ekleme Dropdown'ı
+    const addDepSelect = document.getElementById('wpAddDepSelect');
+    const currentPredIds = new Set((predecessors || []).map(p => p.id));
+    const eligibleTasks = state.tasks.filter(t => t.id !== task.id && !currentPredIds.has(t.id));
+    addDepSelect.innerHTML = '<option value="">+ Öncül Bağımlılık Seç...</option>' +
+      eligibleTasks.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+
+    // Gecikme & Aktivite Akışı
+    const delaysContainer = document.getElementById('wpDelaysList');
+    if (delays && delays.length > 0) {
+      delaysContainer.innerHTML = delays.map(d => `
+        <div class="op-activity-item ${d.explanation_type === 'SYSTEM_DEPENDENCY_BLOCK' ? 'system' : ''}">
+          <div><strong>${d.explanation_type === 'SYSTEM_DEPENDENCY_BLOCK' ? '⚙️ Sistem Tespiti' : '👤 Personel Açıklaması'}:</strong> ${d.explanation_text || d.delay_reason || 'Gecikme kaydedildi.'}</div>
+          <div class="op-activity-time">${new Date(d.logged_at).toLocaleString('tr-TR')}</div>
+        </div>
+      `).join('');
+    } else {
+      delaysContainer.innerHTML = '<span style="font-size:0.8rem; color:#64748b;">Henüz gecikme kaydı veya aktivite bulunmuyor.</span>';
+    }
+
+    // Butonlar
+    const startBtn = document.getElementById('wpStartBtn');
+    const compBtn = document.getElementById('wpCompleteBtn');
+
+    if (task.work_status === 'READY') {
+      startBtn.style.display = 'inline-flex';
+      compBtn.style.display = 'inline-flex';
+    } else if (task.work_status === 'IN_PROGRESS') {
+      startBtn.style.display = 'none';
+      compBtn.style.display = 'inline-flex';
+    } else {
+      startBtn.style.display = 'none';
+      compBtn.style.display = 'none';
+    }
+
+    // Aç
+    drawer.classList.add('open');
+    if (backdrop) backdrop.style.display = 'block';
+  } catch (err) {
+    showToast('Görev detayları alınamadı: ' + err.message, 'error');
+  }
+}
+
+function closeTaskDrawer() {
+  state.activeTaskId = null;
+  const drawer = document.getElementById('workPackageDrawer');
+  const backdrop = document.getElementById('wpDrawerBackdrop');
+  if (drawer) drawer.classList.remove('open');
+  if (backdrop) backdrop.style.display = 'none';
 }
 
 // 5. PERSONEL TABLOSU (ADMIN)
@@ -539,6 +969,10 @@ function switchView(viewId) {
   } else {
     projContainer.style.display = 'flex';
   }
+
+  if (viewId === 'view-timeline') {
+    renderTimeline();
+  }
 }
 
 // ================= MODALS & EVENTS =================
@@ -613,6 +1047,74 @@ function setupEventListeners() {
     }
   });
 
+  // OpenProject Filtre ve Arama Çubuğu
+  const searchInput = document.getElementById('taskSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      state.searchQuery = e.target.value.trim();
+      renderMyTasks();
+    });
+  }
+
+  document.querySelectorAll('.op-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.op-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.activeFilter = btn.dataset.filter;
+      renderMyTasks();
+    });
+  });
+
+  // OpenProject Split Screen Çekmece Eylemleri
+  document.getElementById('wpCloseBtn')?.addEventListener('click', closeTaskDrawer);
+  document.getElementById('wpCloseFooterBtn')?.addEventListener('click', closeTaskDrawer);
+  document.getElementById('wpDrawerBackdrop')?.addEventListener('click', closeTaskDrawer);
+
+  document.getElementById('wpStartBtn')?.addEventListener('click', async () => {
+    if (!state.activeTaskId) return;
+    await apiCall(`/api/tasks/${state.activeTaskId}/start`, 'POST');
+    showToast('Görev başlatıldı.', 'success');
+    await loadProjectTasks(state.currentProjectId);
+    await openTaskDrawer(state.activeTaskId);
+  });
+
+  document.getElementById('wpCompleteBtn')?.addEventListener('click', async () => {
+    if (!state.activeTaskId) return;
+    await apiCall(`/api/tasks/${state.activeTaskId}/complete`, 'POST');
+    showToast('Görev tamamlandı!', 'success');
+    await loadProjectTasks(state.currentProjectId);
+    await openTaskDrawer(state.activeTaskId);
+  });
+
+  document.getElementById('wpAddDepBtn')?.addEventListener('click', async () => {
+    if (!state.activeTaskId) return;
+    const predId = document.getElementById('wpAddDepSelect').value;
+    if (!predId) return showToast('Lütfen bir öncül görev seçiniz.', 'warning');
+    try {
+      await apiCall('/api/dependencies', 'POST', {
+        predecessor_id: predId,
+        successor_id: state.activeTaskId
+      });
+      showToast('Bağımlılık başarıyla bağlandı.', 'success');
+      await loadProjectTasks(state.currentProjectId);
+      await openTaskDrawer(state.activeTaskId);
+    } catch (err) {
+      showToast('Bağımlılık bağlanamadı: ' + err.message, 'error');
+    }
+  });
+
+  document.getElementById('wpInlineExpForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.activeTaskId) return;
+    const text = document.getElementById('wpInlineExpText').value.trim();
+    if (!text) return;
+    await apiCall(`/api/tasks/${state.activeTaskId}/explanation`, 'POST', { explanation_text: text });
+    showToast('Gerekçe / durum notu kaydedildi.', 'success');
+    document.getElementById('wpInlineExpText').value = '';
+    await loadProjectTasks(state.currentProjectId);
+    await openTaskDrawer(state.activeTaskId);
+  });
+
   // Yeni Görev Modalı Aç
   document.getElementById('newTaskBtn').addEventListener('click', () => {
     populateTaskModalSelects();
@@ -623,6 +1125,8 @@ function setupEventListeners() {
   document.getElementById('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('tTitle').value.trim();
+    const type = document.getElementById('tType')?.value || 'TASK';
+    const priority = document.getElementById('tPriority')?.value || 'NORMAL';
     const assignee_id = document.getElementById('tAssignee').value || undefined;
     const initial_start_date = new Date(document.getElementById('tStart').value).toISOString();
     const initial_due_date = new Date(document.getElementById('tDue').value).toISOString();
@@ -632,23 +1136,14 @@ function setupEventListeners() {
     const newTask = await apiCall('/api/tasks', 'POST', {
       project_id: state.currentProjectId,
       title,
+      type,
+      priority,
       assignee_id,
       initial_start_date,
       initial_due_date,
-      description
+      description,
+      predecessor_id
     });
-
-    // Eğer öncül seçildiyse bağımlılığı anında bağla
-    if (predecessor_id) {
-      try {
-        await apiCall('/api/dependencies', 'POST', {
-          predecessor_id,
-          successor_id: newTask.id
-        });
-      } catch (err) {
-        showToast('Görev eklendi fakat bağımlılık döngü nedeniyle bağlanamadı.', 'warning');
-      }
-    }
 
     showToast('Görev başarıyla oluşturuldu.', 'success');
     document.getElementById('taskModal').classList.remove('open');

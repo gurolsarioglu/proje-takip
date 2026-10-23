@@ -29,7 +29,8 @@ export class TaskService {
     initial_start_date: string,
     initial_due_date: string,
     assignee_id?: UUID,
-    description?: string
+    description?: string,
+    extra?: { type?: 'TASK' | 'MILESTONE' | 'BUG'; priority?: 'LOW' | 'NORMAL' | 'HIGH'; progress?: number }
   ): Task {
     const taskId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -41,6 +42,9 @@ export class TaskService {
       assignee_id,
       title,
       description,
+      type: extra?.type || 'TASK',
+      priority: extra?.priority || 'NORMAL',
+      progress: extra?.progress ?? 0,
       work_status: 'READY', // Başlangıçta öncülü yoksa READY
       initial_start_date,
       initial_due_date,
@@ -155,6 +159,7 @@ export class TaskService {
 
     const updated = this.db.updateTask(auth.tenant_id, task_id, {
       work_status: 'IN_PROGRESS',
+      progress: task.progress && task.progress > 0 ? task.progress : 25,
       actual_start_date: task.actual_start_date || new Date().toISOString()
     });
 
@@ -178,6 +183,7 @@ export class TaskService {
 
     const updatedTask = this.db.updateTask(auth.tenant_id, task_id, {
       work_status: 'COMPLETED',
+      progress: 100,
       actual_completion_date: completionTime,
       completed_by_user_id: auth.user_id,
       actual_start_date: task.actual_start_date || completionTime

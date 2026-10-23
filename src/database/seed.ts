@@ -103,10 +103,46 @@ export function seedDatabase(db: Database) {
   projectService.addOrUpdateMember(authAdmin, proj.id, sarah.id, 'VIEWER');
 
   // Görevler
-  const t1 = taskService.createTask(authAdmin, proj.id, 'Gereksinim Analizi ve Süreç Haritası', '2026-10-01T09:00:00Z', '2026-10-10T18:00:00Z', ahmet.id);
-  const t2 = taskService.createTask(authAdmin, proj.id, 'Sunucu & Veritabanı Kümesi Kurulumu', '2026-10-11T09:00:00Z', '2026-10-18T18:00:00Z', hans.id);
-  const t3 = taskService.createTask(authAdmin, proj.id, 'API Entegrasyonu ve Test Senaryoları', '2026-10-19T09:00:00Z', '2026-10-25T18:00:00Z', sarah.id);
-  const t4 = taskService.createTask(authAdmin, proj.id, 'Son Kullanıcı Kabul Testleri (UAT)', '2026-10-26T09:00:00Z', '2026-11-05T18:00:00Z', ahmet.id);
+  const t1 = taskService.createTask(
+    authAdmin,
+    proj.id,
+    'Gereksinim Analizi ve Süreç Haritası',
+    '2026-10-01T09:00:00Z',
+    '2026-10-10T18:00:00Z',
+    ahmet.id,
+    'İş akışlarının incelenmesi ve FG Group departman ihtiyaçlarının belirlenmesi',
+    { type: 'TASK', priority: 'NORMAL' }
+  );
+  const t2 = taskService.createTask(
+    authAdmin,
+    proj.id,
+    'Sunucu & Veritabanı Kümesi Kurulumu',
+    '2026-10-11T09:00:00Z',
+    '2026-10-18T18:00:00Z',
+    hans.id,
+    'PostgreSQL ve bulut altyapısının yüksek erişilebilirlikle yapılandırılması',
+    { type: 'TASK', priority: 'HIGH' }
+  );
+  const t3 = taskService.createTask(
+    authAdmin,
+    proj.id,
+    'API Entegrasyonu ve Test Senaryoları',
+    '2026-10-19T09:00:00Z',
+    '2026-10-25T18:00:00Z',
+    sarah.id,
+    'Harici sistem bağlantıları ve uç nokta testlerinin yürütülmesi',
+    { type: 'TASK', priority: 'NORMAL' }
+  );
+  const t4 = taskService.createTask(
+    authAdmin,
+    proj.id,
+    'Son Kullanıcı Kabul Testleri (UAT)',
+    '2026-10-26T09:00:00Z',
+    '2026-11-05T18:00:00Z',
+    ahmet.id,
+    'Canlıya geçiş öncesi anahtar kullanıcılarla doğrulama ve onay',
+    { type: 'MILESTONE', priority: 'HIGH' }
+  );
 
   // Bağımlılıklar (Finish-to-Start)
   dependencyService.addDependency(authAdmin, t1.id, t2.id);

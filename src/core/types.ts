@@ -124,6 +124,9 @@ export interface VisibilityRequest {
 }
 
 // 3. Görev
+export type TaskType = 'TASK' | 'MILESTONE' | 'BUG';
+export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH';
+
 export interface Task {
   id: UUID;
   tenant_id: UUID;
@@ -131,6 +134,9 @@ export interface Task {
   assignee_id?: UUID;
   title: string;
   description?: string;
+  type?: TaskType;
+  priority?: TaskPriority;
+  progress?: number; // 0 - 100
   work_status: WorkStatus;
   initial_start_date: string;
   initial_due_date: string;
