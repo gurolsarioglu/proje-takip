@@ -61,23 +61,32 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - OpenProject repo incelemesi: Work Packages, Split Screen (Sağ Detay Çekmecesi), Primer Design System özellikleri uyarlandı.
   - **Sağ Detay Çekmecesi (Split Screen):** Göreve tıklandığında sayfa yenilenmeden sağdan açılan detay paneli (ID, Tür, Durum, Personel Kartı, Öncül/Ardıl İlişkileri, Gecikme Açıklama Akışı).
   - **İş Paketi Filtre & Canlı Arama:** Metin arama, proje ve durum filtreleme çubuğu.
-- [/] **Adım 7:** Kullanıcı Talepleri (istekler/1.jpg & 2.jpeg):
-  - **X Ekseni Gün Takvimi:** Ay isimleri ve gün numaraları (1, 2, ... 31) x ekseninde sütunlar olarak gösterilecek.
-  - **Tarih Formatı:** Barların içindeki tarihler `GG.AA.YYYY` formatında yazılacak.
-  - **Ok İşareti ile Bağımlılık Bağlantısı (Resim 2 Örneği):** Öncül görevden ardıl göreve giden kavisli SVG ok çizgisi ile görevler birbirine bağlanacak.
-  - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve ikonlarla resim 2 kalitesinde modern görünüm.
-- [ ] **Adım 8:** Tarayıcı Testleri ve Canlı Onay.
+- [x] **Adım 7:** Kullanıcı Talepleri (istekler/1.jpg & 2.jpeg):
+  - **X Ekseni Gün Takvimi:** Ay isimleri ve gün numaraları (1, 2, ... 31) x ekseninde sütunlar olarak gösterildi.
+  - **Tarih Formatı:** Barların içindeki tarihler `GG.AA.YYYY` formatında yazıldı.
+  - **Ok İşareti ile Bağımlılık Bağlantısı (Resim 2 Örneği):** Öncül görevden ardıl göreve giden kavisli SVG ok çizgisi ile görevler birbirine bağlandı (başlangıç noktası ve altın ok ucu).
+  - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve görev türü etiketleriyle modern görünüm sağlandı.
+- [x] **Adım 8:** Tarayıcı Testleri ve Canlı Onay:
+  - Tarayıcı alt ajanı ile Zaman Çizelgesi, SVG ok bağlantıları, gün ızgarası ve Split-Screen sağ çekmecesi canlı ekranda test edilip fotoğraflandı.
 
 ---
 
 ## 4. Değişiklik ve Karar Günlüğü (Changelog)
 
-### [23 Ekim 2026 - 13:50] - Sadeleştirilmiş Arayüz & Testler Tamamlandı
-* **14/14 Kabul Testi Geçti:** Multi-tenant ayrımı, döngü engelleme (DAG), gecikme tespiti, otomatik dil seçimi ve personel yetkilendirmesi test edildi.
-* **Görsel Arayüz Canlıya Alındı:** 
-  - `Görevlerim`: Tek tıkla görev tamamlama, bekleme gerekçesi girişi, durum etiketleri.
-  - `Projeler`: İlerleme yüzdeleri ve tarih kartları.
-  - `Zaman Çizelgesi (Gantt)`: Yatay zaman çubukları ve öncül ilişkileri.
-  - `İş Panosu (Kanban)`: 3 sütunlu temiz pano.
-  - `Ekip & Personel`: Personel kartı görünümü ve tek tıkla "Proje Açma İzni" yetkilendirmesi.
-* **Almanca / İngilizce Otomatik Dil Geçişi:** `hans@fggroup.com.tr` ile giriş yapıldığında arayüzün anında Almanca'ya dönüştüğü ve izinli olmadığı için proje açma butonunun gizlendiği doğrulandı.
+### [23 Ekim 2026 - 14:40] - OpenProject Split-Screen & Gün Bazlı Gantt Ok Bağlantıları Tamamlandı
+* **Gantt Günlük X Ekseni Takvimi (istekler/Yeni Metin Belgesi.txt & 2.jpeg):**
+  - X ekseni üstte ay başlığı (`Ekim 2026`), altta her bir günü (1..31) temsil eden sütunlarla inşa edildi.
+  - Bugünün günü takvimde vurgulandı.
+* **Gantt İçi Tarih Formatı (istekler/1.jpg):**
+  - Barların içinde tarih gösterimi talep edilen `GG.AA.YYYY ➔ GG.AA.YYYY` (örn. `20.10.2026 ➔ 23.10.2026`) formatına çevrildi.
+* **Kavisli Bağımlılık Okları (SVG Bezier):**
+  - Öncül görevin sağ ucundan ardıl görevin sol başına uzanan dinamik altın sarısı SVG okları (`#gantt-arrow-gold`) ve başlangıç daireleri (`#f59e0b`) çizildi.
+  - Bağımlılık ilişkisi görsel olarak doğrudan takvim üzerinde oklarla görünür kılındı.
+* **OpenProject Split-Screen (Sağ Detay Çekmecesi):**
+  - Görevlere veya Gantt barlarına tıklandığında sayfa terk edilmeden sağdan açılan detay çekmecesi eklendi.
+  - Görev ID'si (`#T...`), Tür (`GÖREV`, `MİLESTONE`, `HATA`), Öncelik, Durum, İlerleme Çubuğu (`%`), Görevli Personel Kartı (İletişim & Ülke), Öncül & Ardıl bağlantıları ve gecikme gerekçeleri yer almaktadır.
+* **Hızlı Arama ve Canlı Filtreleme (Primer Toolbar):**
+  - OpenProject Primer tarzı arama kutusu ve "Tümü", "Benim Görevlerim", "Devam Eden", "Öncül Bekleyen", "Tamamlandı" filtre sekmeleri eklendi.
+* **Test & Doğrulama:**
+  - 14/14 test eksiksiz geçti (`npm test`). Tarayıcı alt ajanı ile tüm ekranlar görüntülendi ve doğrulandı.
+
