@@ -147,4 +147,17 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - 16/16 kabul testi eksiksiz geçti (`npm test`).
   - Tarayıcı alt ajanı ile tüm sekmeler gerçek zamanlı olarak test edildi ve ekran görüntüleri doğrulandı.
 
+### [23 Ekim 2026 - 16:30] - Arka Zemin Rengi Düzeltmesi & Gantt Bar Kontrast İyileştirmesi
+* **Kök Neden Tespiti:**
+  - `body` stilinde kalan koyu navy (`#0f172a`) zemin rengi ve `.app-main-area` / `.view-section` kapsayıcılarının zemin rengi almaması nedeniyle kartların etrafındaki alanlar koyu görünüyordu.
+  - Ayrıca tamamlanan görevlerin koyu gri (`#64748b`) rengi ve beyaz tarih yazısı kontrast kaybına neden oluyordu.
+* **Uygulanan Düzeltmeler:**
+  - `html`, `body`, `.app-wrapper`, `.app-main-area` ve `.view-section` zeminleri tamamen homojen, göz yormayan açık gri-beyaz (`#f8fafc`) yapıldı.
+  - Gantt barlarında tamamlanan görevler canlı ve kurumsal zümrüt yeşili degradeye (`linear-gradient(135deg, #059669, #047857)`), tarih ve ilerleme rozetleri kontrastlı yarı saydam kapsüllere kavuşturuldu.
+  - `.report-builder-header` ve `.op-split-drawer` zeminleri saf beyaz (`#ffffff`) yapıldı.
+* **Test & Doğrulama:**
+  - Tarayıcı alt ajanı ile Gantt, İş Paketleri ve Kanban sayfalarının tam sayfa ekran görüntüleri alındı, koyu zemin sorununun tamamen ortadan kalktığı doğrulandı.
+  - 16/16 test başarıyla geçti.
+
+
 

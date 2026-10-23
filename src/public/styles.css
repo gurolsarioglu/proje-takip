@@ -36,9 +36,9 @@
   padding: 0;
 }
 
-body {
+html, body {
   font-family: var(--font-main);
-  background-color: #0f172a;
+  background-color: #f8fafc;
   color: var(--text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -174,6 +174,7 @@ body {
 .app-wrapper, .app-layout {
   display: flex;
   min-height: 100vh;
+  background-color: #f8fafc;
 }
 
 /* ================= SIDEBAR ================= */
@@ -376,6 +377,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background-color: #f8fafc;
 }
 
 .main-topbar {
@@ -446,6 +448,7 @@ body {
   display: none;
   padding: 28px;
   flex: 1;
+  background-color: #f8fafc;
 }
 
 .view-section.active {
@@ -933,7 +936,7 @@ body {
 }
 
 .board-column {
-  background: #0f172a;
+  background: #f1f5f9;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 16px;
@@ -1006,8 +1009,8 @@ body {
 
 .primary-btn {
   background: var(--accent-primary);
-  color: #0f172a;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
 }
 
 .primary-btn:hover {
@@ -1021,7 +1024,7 @@ body {
 }
 
 .secondary-btn:hover {
-  background: #334155;
+  background: #f1f5f9;
 }
 
 .outline-btn {
@@ -1090,7 +1093,7 @@ body {
 }
 
 .styled-table th {
-  background: #0f172a;
+  background: #f8fafc;
   color: var(--text-tertiary);
   font-weight: 600;
   text-transform: uppercase;
@@ -1310,9 +1313,9 @@ body {
   width: 520px;
   max-width: 95vw;
   height: 100vh;
-  background: #111a2e;
-  border-left: 1px solid #cbd5e1;
-  box-shadow: -15px 0 40px rgba(0, 0, 0, 0.6);
+  background: #ffffff;
+  border-left: 1px solid #e2e8f0;
+  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.1);
   z-index: 10000;
   display: flex;
   flex-direction: column;
@@ -1715,8 +1718,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+  background: #ffffff;
   border: 1px solid #e2e8f0;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .report-badge-row {
@@ -2912,7 +2917,11 @@ body {
   background: #1d4ed8 !important;
   color: #ffffff !important;
 }
-.gantt-pill-bar, .gantt-pill-bar * {
+.gantt-pill-bar {
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+.gantt-pill-bar * {
   color: #ffffff !important;
 }
 .gantt-pill-bar.bar-progress {
@@ -2920,16 +2929,26 @@ body {
   border-color: #1e40af !important;
 }
 .gantt-pill-bar.bar-ready {
-  background: linear-gradient(135deg, #059669, #047857) !important;
-  border-color: #065f46 !important;
+  background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+  border-color: #0284c7 !important;
 }
 .gantt-pill-bar.bar-blocked {
   background: linear-gradient(135deg, #d97706, #b45309) !important;
   border-color: #92400e !important;
 }
 .gantt-pill-bar.bar-done {
-  background: #64748b !important;
-  border-color: #475569 !important;
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  border-color: #065f46 !important;
+}
+.gantt-pill-bar .pill-dates {
+  background: rgba(0, 0, 0, 0.22) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+.gantt-pill-bar .pill-progress {
+  background: rgba(0, 0, 0, 0.22) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
 }
 .pill-status-chip {
   background: rgba(0, 0, 0, 0.25) !important;
