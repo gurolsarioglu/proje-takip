@@ -70,14 +70,18 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve görev türü etiketleriyle modern görünüm sağlandı.
 - [x] **Adım 8:** Tarayıcı Testleri ve Canlı Onay:
   - Tarayıcı alt ajanı ile Zaman Çizelgesi, SVG ok bağlantıları, gün ızgarası ve Split-Screen sağ çekmecesi canlı ekranda test edilip fotoğraflandı.
-- [x] **Adım 10:** Microsoft To Do & Outlook Arayüzü ve Veri Modeli Geliştirmesi (Yerel Mod):
-  - Kullanıcının paylaştığı Outlook To Do arayüzü referans alınarak liste, kartlar, filtreler ve görev tamamlama akışları geliştirildi.
-  - Uygulama içi görevlerin To Do biçiminde gösterimi ve yerel mazeret/açıklama eşitlemesi hazırlandı.
-  - ⚠️ **ÖNEMLİ TESPİT & GERÇEK DURUM:** Kullanıcının bilgisayarındaki gerçek masaüstü/mobil Outlook ve Microsoft To Do uygulaması ile canlı çift yönlü veri akışının çalışabilmesi için **Microsoft Entra ID (Azure Portal)** üzerinde bir *App Registration (Uygulama Kaydı)* açılması, `Tenant ID`, `Client ID` ve `Tasks.ReadWrite` izinlerinin sisteme bağlanması zorunludur. Bu Azure kimlik bilgileri olmadan dışarıdan bir sistemin kullanıcının Microsoft 365 bulut posta kutusuna yazması teknik ve güvenlik protokolleri gereği mümkün değildir. Arayüz bu dürüstlükle güncellendi.
+- [ ] **Adım 10:** Microsoft To Do & Outlook Canlı Entegrasyonu *(Kullanıcı Kararı: İleri bir tarihte Azure App Registration ile değerlendirilmek üzere beklemeye alındı)*:
+  - Kullanıcı kararıyla bu entegrasyon şu aşamada durduruldu ve menüden gizlendi.
+  - Kod altyapısı ve veri modelleri korundu; ileride Azure Portal üzerinden yetkilendirme sağlandığında kolayca devreye alınabilecek şekilde arşivlendi.
 
 ---
 
 ## 4. Değişiklik ve Karar Günlüğü (Changelog)
+
+### [23 Ekim 2026 - 16:05] - Karar: Microsoft To Do Entegrasyonu İleri Tarihe Ertelendi
+* **Kullanıcı Kararı:** "Şu an yapmayalım, sonra yaparız, değerlendiririz." kararı doğrultusunda canlı Outlook / To Do entegrasyonu beklemeye alındı.
+* **Arayüz Sadeleştirme:** Sol menüdeki Microsoft To Do butonu gizlendi; çalışma alanı yalın ve odaklanmış hale getirildi.
+* **Altyapı:** Yazılan servis ve model kodları silinmedi, ileride ihtiyaç duyulduğunda hızlıca açılabilecek şekilde hazır bekletiliyor.
 
 ### [23 Ekim 2026 - 16:00] - Microsoft To Do Canlı Bağlantı Analizi & Dürüst Durum Güncellemesi
 * **Kullanıcı Geri Bildirimi & Durum Tespiti:**
