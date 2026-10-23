@@ -2482,4 +2482,374 @@ body {
   }
 }
 
+/* ==============================================================
+   MICROSOFT TO DO & OUTLOOK ENTEGRASYONU STİLLERİ
+   ============================================================== */
+
+.ms-todo-pill {
+  background: rgba(2, 132, 199, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(2, 132, 199, 0.35);
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.ms-todo-header-card {
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.1) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+.ms-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ms-logo-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0284c7;
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+}
+
+.ms-todo-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.ms-title-group h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.ms-sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Microsoft To Do Çalışma Alanı */
+.ms-todo-workspace {
+  padding: 24px;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+/* Görev Ekleme Barı (Outlook Stili) */
+.ms-add-task-bar {
+  display: flex;
+  align-items: center;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s;
+}
+
+.ms-add-task-bar:focus-within {
+  border-color: #38bdf8;
+  background: rgba(30, 41, 59, 1);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.ms-add-circle {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--text-tertiary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.ms-add-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.ms-add-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.ms-add-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ms-date-picker-inline {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.ms-star-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ms-star-icon {
+  font-size: 1.3rem;
+  color: var(--text-tertiary);
+  transition: color 0.15s, transform 0.15s;
+}
+
+.ms-star-icon.active {
+  color: #fbbf24;
+  transform: scale(1.1);
+}
+
+/* Görev Listesi */
+.ms-list-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ms-list-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.ms-badge-counter {
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.ms-items-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Görev Kartı (Item) */
+.ms-todo-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  transition: all 0.15s;
+}
+
+.ms-todo-card:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.ms-todo-card.completed {
+  opacity: 0.6;
+}
+
+.ms-todo-card.completed .ms-todo-title {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* Yuvarlak Checkbox */
+.ms-check-btn {
+  background: transparent;
+  border: 2px solid var(--text-tertiary);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: transparent;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ms-check-btn:hover {
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.ms-check-btn.checked {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+}
+
+/* İçerik */
+.ms-todo-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-todo-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.35;
+}
+
+.ms-todo-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+.ms-due-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ms-due-pill.overdue {
+  color: #f87171;
+  font-weight: 600;
+}
+
+.ms-source-pill {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.ms-source-pill.fg {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.ms-source-pill.outlook {
+  background: rgba(2, 132, 199, 0.18);
+  color: #38bdf8;
+}
+
+/* Not Alanı */
+.ms-note-text {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: rgba(15, 23, 42, 0.5);
+  border-left: 2px solid #0284c7;
+  padding: 4px 8px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+/* Yıldız Butonu */
+.ms-star-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.ms-star-btn:hover {
+  transform: scale(1.15);
+}
+
+.ms-star-btn.starred {
+  color: #fbbf24;
+}
+
+/* Tamamlananlar Akordeonu */
+.ms-completed-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+}
+
+.ms-accordion-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 0;
+  margin-bottom: 10px;
+}
+
+.accordion-arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.accordion-arrow.closed {
+  transform: rotate(-90deg);
+}
+
+
 

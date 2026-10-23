@@ -204,7 +204,8 @@ function logout() {
 async function loadInitialData() {
   await Promise.all([
     loadProjects(),
-    loadPersonnel()
+    loadPersonnel(),
+    loadAndRenderMicrosoftTodo()
   ]);
 }
 
@@ -972,13 +973,14 @@ function switchView(viewId) {
     'view-timeline': 'Zaman Çizelgesi (Gantt)',
     'view-board': 'İş Panosu (Kanban)',
     'view-team': 'Ekip & Personel',
-    'view-report-builder': 'Özel Rapor Oluşturucu (Sürükle-Bırak)'
+    'view-report-builder': 'Özel Rapor Oluşturucu (Sürükle-Bırak)',
+    'view-microsoft-todo': 'Microsoft To Do & Outlook Görevleri'
   };
   document.getElementById('currentViewTitle').textContent = titles[viewId] || 'Panel';
 
   // Proje seçici göster/gizle
   const projContainer = document.getElementById('projectSelectorContainer');
-  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder') {
+  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo') {
     projContainer.style.display = 'none';
   } else {
     projContainer.style.display = 'flex';
@@ -990,6 +992,10 @@ function switchView(viewId) {
 
   if (viewId === 'view-report-builder') {
     initReportBuilder();
+  }
+
+  if (viewId === 'view-microsoft-todo') {
+    loadAndRenderMicrosoftTodo();
   }
 }
 
@@ -1797,4 +1803,231 @@ function renderWidgetContent(widget, data) {
       return '<div>Bileşen render edilemedi.</div>';
   }
 }
+
+// ==============================================================
+// 7. MICROSOFT TO DO & OUTLOOK FRONTEND ENTEGRASYONU
+// ==============================================================
+
+let msTodoState = {
+  items: [],
+  showCompleted: false
+};
+
+async function loadAndRenderMicrosoftTodo() {
+  if (!state.currentUser) return;
+  try {
+    const items = await apiCall('/api/todo/items');
+    msTodoState.items = Array.isArray(items) ? items : [];
+    renderMicrosoftTodoList();
+  } catch (err) {
+    console.warn('To Do yükleme hatası:', err);
+  }
+}
+
+function renderMicrosoftTodoList() {
+  const activeContainer = document.getElementById('msActiveTodoList');
+  const completedContainer = document.getElementById('msCompletedTodoList');
+  if (!activeContainer || !completedContainer) return;
+
+  if (!Array.isArray(msTodoState.items)) {
+    msTodoState.items = [];
+  }
+
+  const activeItems = msTodoState.items.filter(item => !item.is_completed);
+  const completedItems = msTodoState.items.filter(item => item.is_completed);
+
+  // Sayaçları Güncelle
+  const activeCountEl = document.getElementById('msActiveCount');
+  if (activeCountEl) activeCountEl.textContent = activeItems.length;
+
+  const completedCountEl = document.getElementById('msCompletedCount');
+  if (completedCountEl) completedCountEl.textContent = completedItems.length;
+
+  const sidebarCountEl = document.getElementById('msTodoCount');
+  if (sidebarCountEl) sidebarCountEl.textContent = activeItems.length;
+
+  // 1. Aktif Görevler
+  if (activeItems.length === 0) {
+    activeContainer.innerHTML = '<div style="color:#64748b; font-size:0.86rem; padding:12px; text-align:center;">🎉 Harika! Bekleyen hiçbir yapılacak işiniz yok.</div>';
+  } else {
+    activeContainer.innerHTML = activeItems.map(item => renderSingleTodoCard(item)).join('');
+  }
+
+  // 2. Tamamlanan Görevler
+  completedContainer.innerHTML = completedItems.map(item => renderSingleTodoCard(item)).join('');
+
+  // Etkinlikleri bağla
+  attachTodoItemEventListeners();
+}
+
+function renderSingleTodoCard(item) {
+  const now = new Date();
+  const isOverdue = item.due_date && !item.is_completed && new Date(item.due_date) < now;
+  const isStarred = !!item.is_starred;
+  const isFgTask = item.source === 'FG_SYSTEM';
+
+  let dateDisplay = '';
+  if (item.due_date) {
+    const d = new Date(item.due_date);
+    const dateFormatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    dateDisplay = `<span class="ms-due-pill ${isOverdue ? 'overdue' : ''}">📅 ${isOverdue ? 'Süresi geçmiş, ' : ''}${dateFormatted}</span>`;
+  }
+
+  return `
+    <div class="ms-todo-card ${item.is_completed ? 'completed' : ''}" data-id="${item.id}">
+      <button type="button" class="ms-check-btn ${item.is_completed ? 'checked' : ''}" data-id="${item.id}" title="${item.is_completed ? 'Tamamlanmadı olarak işaretle' : 'Tamamlandı olarak işaretle'}">
+        ✓
+      </button>
+      <div class="ms-todo-content">
+        <div class="ms-todo-title">${item.title}</div>
+        <div class="ms-todo-meta">
+          ${dateDisplay}
+          <span class="ms-source-pill ${isFgTask ? 'fg' : 'outlook'}">
+            ${isFgTask ? '🏢 FG Group Görevi' : '👤 Kişisel To Do'}
+          </span>
+          <button type="button" class="btn-add-todo-note" data-id="${item.id}" style="background:transparent; border:none; color:#38bdf8; font-size:0.75rem; cursor:pointer;">
+            ${item.body_content ? '📝 Notu Düzenle' : '+ Not Ekle'}
+          </button>
+        </div>
+        ${item.body_content ? `<div class="ms-note-text">📝 ${item.body_content}</div>` : ''}
+      </div>
+      <button type="button" class="ms-star-btn ${isStarred ? 'starred' : ''}" data-id="${item.id}" title="${isStarred ? 'Önemi kaldır' : 'Önemli olarak işaretle'}">
+        ${isStarred ? '★' : '☆'}
+      </button>
+    </div>
+  `;
+}
+
+function attachTodoItemEventListeners() {
+  // Tamamlama Butonları
+  document.querySelectorAll('.ms-check-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const isCompletedNow = btn.classList.contains('checked');
+      try {
+        await apiCall(`/api/todo/items/${id}`, 'PATCH', { is_completed: !isCompletedNow });
+        showToast(isCompletedNow ? 'Görev yapılara alındı.' : 'Görev tamamlandı!', 'success');
+        await loadAndRenderMicrosoftTodo();
+        // Eğer bağlı görev varsa proje görevlerini de tazele
+        if (state.currentProjectId) await loadProjectTasks(state.currentProjectId);
+      } catch (err) {
+        showToast('To Do güncellenemedi: ' + err.message, 'error');
+      }
+    };
+  });
+
+  // Yıldız Butonları
+  document.querySelectorAll('.ms-star-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      try {
+        await apiCall(`/api/todo/items/${id}/star`, 'POST');
+        await loadAndRenderMicrosoftTodo();
+      } catch (err) {}
+    };
+  });
+
+  // Not Ekle / Düzenle Butonları
+  document.querySelectorAll('.btn-add-todo-note').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const currentItem = msTodoState.items.find(i => i.id === id);
+      const note = prompt('Microsoft To Do Görev Notu / Açıklama giriniz:', currentItem?.body_content || '');
+      if (note !== null) {
+        try {
+          await apiCall(`/api/todo/items/${id}`, 'PATCH', { noteText: note });
+          showToast('Not Outlook / To Do ile eşitlendi.', 'success');
+          await loadAndRenderMicrosoftTodo();
+          if (state.currentProjectId) await loadProjectTasks(state.currentProjectId);
+        } catch (err) {
+          showToast('Not kaydedilemedi: ' + err.message, 'error');
+        }
+      }
+    };
+  });
+}
+
+// Microsoft To Do Kontrolleri
+document.addEventListener('DOMContentLoaded', () => {
+  // Akordeon Aç / Kapat
+  const toggleAccordionBtn = document.getElementById('toggleCompletedTodoBtn');
+  const completedList = document.getElementById('msCompletedTodoList');
+  const accordionArrow = document.getElementById('msAccordionArrow');
+  if (toggleAccordionBtn && completedList) {
+    toggleAccordionBtn.onclick = () => {
+      msTodoState.showCompleted = !msTodoState.showCompleted;
+      completedList.style.display = msTodoState.showCompleted ? 'flex' : 'none';
+      if (accordionArrow) {
+        accordionArrow.classList.toggle('closed', !msTodoState.showCompleted);
+      }
+    };
+  }
+
+  // Yıldız Seçim Butonu Form İçi
+  const starCheck = document.getElementById('msTodoStarCheck');
+  const starIcon = document.getElementById('msStarIconDisplay');
+  if (starCheck && starIcon) {
+    starCheck.onchange = () => {
+      starIcon.classList.toggle('active', starCheck.checked);
+      starIcon.textContent = starCheck.checked ? '★' : '☆';
+    };
+  }
+
+  // Yeni To Do Ekle Formu (Outlook Stili)
+  const addForm = document.getElementById('msAddTodoForm');
+  if (addForm) {
+    addForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const titleInput = document.getElementById('msTodoTitleInput');
+      const dateInput = document.getElementById('msTodoDueDateInput');
+      const starInput = document.getElementById('msTodoStarCheck');
+
+      const title = titleInput.value.trim();
+      if (!title) return;
+
+      const due_date = dateInput.value ? new Date(dateInput.value).toISOString() : undefined;
+      const is_starred = starInput ? starInput.checked : false;
+
+      try {
+        await apiCall('/api/todo/items', 'POST', {
+          title,
+          due_date,
+          importance: is_starred ? 'high' : 'normal',
+          is_starred
+        });
+        showToast('Kişisel görev Microsoft To Do listesine eklendi!', 'success');
+        titleInput.value = '';
+        if (dateInput) dateInput.value = '';
+        if (starInput) {
+          starInput.checked = false;
+          if (starIcon) {
+            starIcon.classList.remove('active');
+            starIcon.textContent = '☆';
+          }
+        }
+        await loadAndRenderMicrosoftTodo();
+      } catch (err) {
+        showToast('To Do eklenemedi: ' + err.message, 'error');
+      }
+    };
+  }
+
+  // Şimdi Eşitle Butonu
+  const syncBtn = document.getElementById('msSyncNowBtn');
+  if (syncBtn) {
+    syncBtn.onclick = async () => {
+      try {
+        const res = await apiCall('/api/todo/sync', 'POST');
+        showToast(`Microsoft To Do ile senkronize edildi (${res.count} görev güncel).`, 'success');
+        await loadAndRenderMicrosoftTodo();
+      } catch (err) {
+        showToast('Eşitleme hatası: ' + err.message, 'error');
+      }
+    };
+  }
+});
+
 

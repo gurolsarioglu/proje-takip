@@ -12,6 +12,7 @@ import { DelayService } from '../modules/delay/delay.service.js';
 import { TaskService } from '../modules/task/task.service.js';
 import { NotificationService } from '../modules/notification/notification.service.js';
 import { ReportingService } from '../modules/reporting/reporting.service.js';
+import { MicrosoftTodoService } from '../modules/microsoft_todo/microsoft_todo.service.js';
 import { AuthContext, UUID, Task } from '../core/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,6 +36,7 @@ const delayService = new DelayService(db);
 const taskService = new TaskService(db, dependencyService, delayService);
 const notificationService = new NotificationService(db);
 const reportingService = new ReportingService(db, projectService);
+const microsoftTodoService = new MicrosoftTodoService(db);
 
 // Güvenli Kiracı ve Kullanıcı Bağlamı Middleware'i
 function getAuthContext(req: Request): AuthContext {
@@ -316,8 +318,16 @@ app.post('/api/tasks', (req, res) => {
       try {
         dependencyService.addDependency(auth, predecessor_id, task.id);
       } catch (depErr) {
-        // Bağımlılık eklenemezse (örn: döngü riski) logla ama görevi koru
         console.warn('Otomatik bağımlılık ekleme uyarısı:', depErr);
+      }
+    }
+
+    // Microsoft To Do Entegrasyonu: Görev personele atandıysa otomatik To Do'ya eşitle
+    if (task.assignee_id) {
+      try {
+        microsoftTodoService.syncAssignedTaskToTodo(auth, task);
+      } catch (todoErr) {
+        console.warn('Microsoft To Do sync error:', todoErr);
       }
     }
 
@@ -873,6 +883,96 @@ app.post('/api/reports/custom-layouts', (req, res) => {
     res.status(201).json(newLayout);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 9. Microsoft To Do & Outlook Entegrasyonu API
+// ==========================================
+app.get('/api/todo/items', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    // Eşitlemeyi tazele ve getir
+    microsoftTodoService.syncAllAssignedTasks(auth);
+    const items = microsoftTodoService.getUserTodoList(auth);
+    res.json(items);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/todo/items', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { title, due_date, importance, body_content, is_starred } = req.body;
+    const item = microsoftTodoService.createPersonalTodo(auth, {
+      title,
+      due_date,
+      importance,
+      body_content,
+      is_starred
+    });
+    res.status(201).json(item);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/todo/items/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { is_completed, noteText, is_starred } = req.body;
+    let updated;
+
+    if (typeof is_completed === 'boolean') {
+      updated = microsoftTodoService.updateTodoStatus(auth, req.params.id, is_completed);
+      // Eğer FG Group görevine bağlıysa ve tamamlandıysa ana görevi de tamamla!
+      if (updated.linked_task_id && is_completed) {
+        try {
+          taskService.completeTask(auth, updated.linked_task_id);
+        } catch (e) {
+          // Görev öncül bekliyor veya tamamlanamaz durumda olabilir
+        }
+      }
+    }
+
+    if (noteText !== undefined) {
+      updated = microsoftTodoService.updateTodoNote(auth, req.params.id, noteText);
+      // Eğer bağlıysa mazeret/açıklama olarak da kaydet!
+      if (updated.linked_task_id) {
+        try {
+          delayService.submitExplanation(auth, updated.linked_task_id, noteText);
+        } catch (e) {}
+      }
+    }
+
+    if (is_starred !== undefined) {
+      updated = db.updateTodoItem(auth.tenant_id, req.params.id, { is_starred: !!is_starred });
+    }
+
+    res.json(updated || { success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/todo/items/:id/star', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const item = microsoftTodoService.toggleTodoStarred(auth, req.params.id);
+    res.json(item);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/todo/sync', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const list = microsoftTodoService.syncAllAssignedTasks(auth);
+    res.json({ success: true, count: list.length, items: list });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

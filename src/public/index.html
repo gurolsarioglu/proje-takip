@@ -110,6 +110,12 @@
           <span class="nav-text" data-i18n="nav_board">İş Panosu (Kanban)</span>
         </button>
 
+        <button class="nav-item" data-nav="view-microsoft-todo">
+          <span class="nav-icon">☑️</span>
+          <span class="nav-text">Microsoft To Do</span>
+          <span class="nav-badge ms-todo-pill" id="msTodoCount">0</span>
+        </button>
+
         <button class="nav-item report-auth-only" id="navReportsBuilderBtn" data-nav="view-report-builder" style="display:none;">
           <span class="nav-icon">📈</span>
           <span class="nav-text">Özel Raporlar</span>
@@ -476,6 +482,70 @@
             </div>
           </div>
 
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM 7: MICROSOFT TO DO (OUTLOOK ENTEGRASYONU) ================= -->
+      <section id="view-microsoft-todo" class="view-section">
+        <!-- Microsoft To Do Header Bar -->
+        <div class="card ms-todo-header-card">
+          <div class="ms-header-left">
+            <div class="ms-logo-badge">
+              <svg viewBox="0 0 24 24" fill="none" class="ms-todo-icon" stroke="currentColor" stroke-width="2.5">
+                <path d="M9 11l3 3L22 4"></path>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+              <span>Microsoft To Do</span>
+            </div>
+            <div class="ms-title-group">
+              <h2>Görevler & Kişisel To Do Listem</h2>
+              <div class="ms-sync-badge">
+                <span class="pulse-dot"></span>
+                <span>Microsoft Exchange & Entra ID bağlantısı aktif</span>
+              </div>
+            </div>
+          </div>
+          <div class="ms-header-right">
+            <button id="msSyncNowBtn" class="action-btn secondary-btn sm-btn">
+              <span>🔄 Şimdi Eşitle</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Microsoft To Do Çalışma Alanı (Outlook Stili) -->
+        <div class="ms-todo-workspace card">
+          <!-- Hızlı Görev Ekleme Kutusu (Outlook Stili) -->
+          <form id="msAddTodoForm" class="ms-add-task-bar">
+            <div class="ms-add-circle">+</div>
+            <input type="text" id="msTodoTitleInput" class="ms-add-input" placeholder="Görev ekle (örn: Rapor hazırla, Toplantı notlarını düzenle...)" required>
+            <div class="ms-add-options">
+              <input type="date" id="msTodoDueDateInput" class="ms-date-picker-inline" title="Teslim Tarihi">
+              <label class="ms-star-toggle" title="Önemli olarak işaretle">
+                <input type="checkbox" id="msTodoStarCheck" style="display:none;">
+                <span id="msStarIconDisplay" class="ms-star-icon">☆</span>
+              </label>
+              <button type="submit" class="action-btn primary-btn sm-btn">Ekle</button>
+            </div>
+          </form>
+
+          <!-- Aktif Görevler Listesi -->
+          <div class="ms-todo-list-container">
+            <div class="ms-list-header">
+              <span class="ms-list-title">Yapılacaklar</span>
+              <span class="ms-badge-counter" id="msActiveCount">0</span>
+            </div>
+            <div id="msActiveTodoList" class="ms-items-wrapper"></div>
+          </div>
+
+          <!-- Tamamlanan Görevler Akordeonu -->
+          <div class="ms-completed-section">
+            <button type="button" id="toggleCompletedTodoBtn" class="ms-accordion-btn">
+              <span class="accordion-arrow" id="msAccordionArrow">▾</span>
+              <span>Tamamlandı</span>
+              <span class="ms-badge-counter" id="msCompletedCount">0</span>
+            </button>
+            <div id="msCompletedTodoList" class="ms-items-wrapper" style="display:none;"></div>
+          </div>
         </div>
       </section>
 

@@ -298,3 +298,21 @@ export interface LimitedDependencySummary {
   relation: 'PREDECESSOR' | 'SUCCESSOR';
   is_blocking: boolean;
 }
+
+// 8. Microsoft To Do & Outlook Entegrasyonu
+export interface MicrosoftTodoItem {
+  id: string; // MS Graph ID veya iç UUID
+  tenant_id: UUID;
+  user_id: UUID;
+  entra_oid?: string;
+  title: string;
+  body_content?: string;
+  is_completed: boolean;
+  due_date?: string;
+  importance: 'low' | 'normal' | 'high';
+  is_starred?: boolean;
+  linked_task_id?: UUID; // Proje görevine bağlıysa görev ID'si
+  source: 'FG_SYSTEM' | 'OUTLOOK_TODO';
+  synced_at: string;
+  created_at: string;
+}

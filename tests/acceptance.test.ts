@@ -8,6 +8,7 @@ import { DelayService } from '../src/modules/delay/delay.service.js';
 import { TaskService } from '../src/modules/task/task.service.js';
 import { NotificationService } from '../src/modules/notification/notification.service.js';
 import { ReportingService } from '../src/modules/reporting/reporting.service.js';
+import { MicrosoftTodoService } from '../src/modules/microsoft_todo/microsoft_todo.service.js';
 
 test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryoları', async (t) => {
   const db = new Database(); // Fresh in-memory DB for tests
@@ -18,6 +19,7 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
   const taskService = new TaskService(db, dependencyService, delayService);
   const notificationService = new NotificationService(db);
   const reportingService = new ReportingService(db, projectService);
+  const microsoftTodoService = new MicrosoftTodoService(db);
 
   // Setup Test Tenants and Users
   const tenantA = authService.createTenant('Acme Holding', 'entra-tenant-acme-111');
@@ -320,5 +322,47 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.throws(() => {
       authService.updateUser(authEditorA, normalUser.id, { can_build_reports: false });
     }, /Yetkisiz İşlem/);
+  });
+
+  await t.test('MICROSOFT TO DO: Çift yönlü görev senkronizasyonu, kişisel todo ve açıklama notu eşitlemesi', () => {
+    // 1. Personele atanan görev To Do'ya eşitlenir
+    const taskAssigned = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'ERP Güvenlik Denetimi',
+      '2026-10-10T09:00:00Z',
+      '2026-10-20T18:00:00Z',
+      assigneeA.id,
+      'Güvenlik açıklarının taranması',
+      { priority: 'HIGH' }
+    );
+
+    const syncedTodo = microsoftTodoService.syncAssignedTaskToTodo(authManagerA, taskAssigned);
+    assert.equal(syncedTodo.user_id, assigneeA.id);
+    assert.equal(syncedTodo.title, 'ERP Güvenlik Denetimi');
+    assert.equal(syncedTodo.source, 'FG_SYSTEM');
+    assert.equal(syncedTodo.importance, 'high');
+
+    // 2. Kullanıcı kendine ait kişisel To Do oluşturabilir (Outlook To Do maddesi)
+    const personalTodo = microsoftTodoService.createPersonalTodo(authAssigneeA, {
+      title: 'Müdür ile haftalık görüşme',
+      due_date: '2026-10-15T15:00:00Z',
+      body_content: 'Bütçe onayları konuşulacak'
+    });
+    assert.equal(personalTodo.user_id, assigneeA.id);
+    assert.equal(personalTodo.source, 'OUTLOOK_TODO');
+    assert.equal(personalTodo.is_completed, false);
+
+    // 3. To Do listesini çekme
+    const list = microsoftTodoService.getUserTodoList(authAssigneeA);
+    assert.ok(list.length >= 2);
+
+    // 4. To Do üzerinden açıklama / not girme
+    const updatedWithNote = microsoftTodoService.updateTodoNote(authAssigneeA, syncedTodo.id, 'Tarama başlatıldı, bulgular raporlanıyor.');
+    assert.equal(updatedWithNote.body_content, 'Tarama başlatıldı, bulgular raporlanıyor.');
+
+    // 5. To Do tamamlandı işaretleme
+    const completedTodo = microsoftTodoService.updateTodoStatus(authAssigneeA, personalTodo.id, true);
+    assert.equal(completedTodo.is_completed, true);
   });
 });

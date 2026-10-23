@@ -70,16 +70,38 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve görev türü etiketleriyle modern görünüm sağlandı.
 - [x] **Adım 8:** Tarayıcı Testleri ve Canlı Onay:
   - Tarayıcı alt ajanı ile Zaman Çizelgesi, SVG ok bağlantıları, gün ızgarası ve Split-Screen sağ çekmecesi canlı ekranda test edilip fotoğraflandı.
-- [x] **Adım 9:** Admin Rapor Yetkilendirmesi & Sürükle-Bırak Özel Rapor Oluşturucu:
-  - Admin panelinde personele tek tıkla "Rapor Yetkisi" (`can_build_reports`) verme ve alma imkanı sağlandı.
-  - Yalnızca yetki verilen personellerin ve yöneticilerin görebileceği sol menüde "Özel Raporlar" (Sürükle-Bırak) sekmesi eklendi.
-  - 8 zengin bileşenden oluşan Bileşen Kütüphanesi (Toolbox) ve dinamik Rapor Tuvali geliştirildi.
-  - Şablonlar (Yönetici Özeti, Personel Performans Karnesi, Darboğaz Analizi), Özel Düzen Kaydetme ve "Yazdır / PDF Al" özelliği eklendi.
-  - 15/15 kabul testi başarıyla geçti, tarayıcıda görsel olarak doğrulandı.
+- [x] **Adım 10:** Microsoft To Do & Outlook Görev Entegrasyonu (Tenant & Çift Yönlü Eşitleme):
+  - Kullanıcının paylaştığı Outlook Microsoft To Do ekranı referans alınarak tam uyumlu arayüz ve veri katmanı geliştirildi.
+  - **Çift Yönlü Entegrasyon:**
+    1. FG Group projelerinden personele atanan görevlerin otomatik olarak kullanıcının Microsoft To Do listesine düşmesi.
+    2. Kullanıcının To Do / Outlook üzerinde göreve açıklama / not yazabilmesi ve bunun sistemdeki görev gecikme/mazeret günlüğüne otomatik işlenmesi.
+    3. Kullanıcının Outlook / To Do içinde kendisi için oluşturduğu kişisel yapılacak işlerin uygulamamızda görünmesi.
+    4. Kullanıcının uygulamamızdan kendisi için kişisel To Do oluşturabilmesi ve Microsoft To Do ile senkronize olması.
+    5. Bir görevin To Do veya uygulama üzerinden tamamlandı (✓) işaretlendiğinde her iki tarafta anlık tamamlanması.
+  - Microsoft Graph API (`/me/todo/lists/{listId}/tasks`) ve Microsoft 365 Entra ID tenant mimarisi hazırlandı.
+  - 16/16 kabul testi geçti; tarayıcı alt ajanı ile görsel ve fonksiyonel doğrulama yapıldı.
 
 ---
 
 ## 4. Değişiklik ve Karar Günlüğü (Changelog)
+
+### [23 Ekim 2026 - 15:25] - Microsoft To Do & Outlook Çift Yönlü Görev Entegrasyonu Tamamlandı
+* **Veri Modeli & Modül Mimarisi (`src/core/types.ts` & `src/modules/microsoft_todo/`):**
+  - `MicrosoftTodoItem` veri modeli oluşturuldu (`tenant_id`, `user_id`, `entra_oid`, `title`, `body_content`, `is_completed`, `due_date`, `importance`, `is_starred`, `linked_task_id`, `source: 'FG_SYSTEM' | 'OUTLOOK_TODO'`, `synced_at`).
+  - `MicrosoftTodoService` katmanı yazılarak; görev atandığında otomatik To Do oluşturma, tamamlama ve not eşitleme servisleri kuruldu.
+* **Microsoft Graph & Tenant Desteği (`src/server/index.ts`):**
+  - `GET /api/todo/items`: Giriş yapan kullanıcının To Do listesini senkronize edip getirir.
+  - `POST /api/todo/items`: Kullanıcının uygulamadan kişisel To Do oluşturmasını sağlar.
+  - `PATCH /api/todo/items/:id`: Tamamlama durumu ve not düzenlemesini çift yönlü işler (bağlı proje görevine otomatik açıklama/gerekçe düşer).
+  - `POST /api/todo/items/:id/star`: Önemli yıldız durumunu değiştirir.
+  - `POST /api/todo/sync`: Anlık senkronizasyon tetikler.
+* **Outlook & Microsoft To Do Arayüzü (`src/public/`):**
+  - Sol menüye "☑️ Microsoft To Do" sekmesi ve aktif görev sayaç rozeti eklendi.
+  - Kullanıcının ilettiği Outlook ekranındaki mavi başlık, `🟢 Microsoft Exchange & Entra ID bağlantısı aktif` durumu ve `🔄 Şimdi Eşitle` butonu yerleştirildi.
+  - Outlook tarzı `+ Görev ekle`, tarih seçici ve yıldız belirleme giriş çubuğu yapıldı.
+  - Yuvarlak tamamlama butonları (✓), `🏢 FG Group Görevi` ve `👤 Kişisel To Do` rozetleri, satır içi not düzenleyici ve açılır-kapanır `Tamamlandı` akordeon listesi eklendi.
+* **16/16 Test & Canlı Tarayıcı Onayı:**
+  - Tüm kabul testleri geçti (`npm test`). Tarayıcı alt ajanı ile test edilip görev ekleme ve tamamlama canlı olarak doğrulandı.
 
 ### [23 Ekim 2026 - 15:05] - Admin Rapor Yetkilendirmesi & Sürükle-Bırak Rapor Oluşturucu Tamamlandı
 * **Admin Personel Yetkilendirme (`can_build_reports`):**

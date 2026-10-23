@@ -160,5 +160,44 @@ export function seedDatabase(db: Database) {
   // t2 başladı (Hans)
   taskService.startTask(authAdmin, t2.id);
 
+  // 5. Microsoft To Do & Outlook Başlangıç Eşitlemesi
+  // Kullanıcının paylaştığı Outlook To Do arayüzündeki 'Deneme Görev' ve kişisel todo'lar
+  db.insertTodoItem({
+    id: 'ms_todo_sample_01',
+    tenant_id: tenantFG.id,
+    user_id: admin.id,
+    title: 'Deneme Görev',
+    body_content: 'Outlook To Do üzerinden senkronize edilen kişisel kontrol maddesi',
+    is_completed: false,
+    due_date: '2025-07-24T18:00:00Z',
+    importance: 'high',
+    is_starred: true,
+    source: 'OUTLOOK_TODO',
+    synced_at: new Date().toISOString(),
+    created_at: new Date('2025-07-20T09:00:00Z').toISOString()
+  });
+
+  // Atanan FG Group görevlerinin To Do listesine otomatik aktarılması
+  const allTasks = db.getTasks(tenantFG.id);
+  for (const t of allTasks) {
+    if (t.assignee_id) {
+      db.insertTodoItem({
+        id: `ms_todo_${t.id.slice(0, 8)}`,
+        tenant_id: tenantFG.id,
+        user_id: t.assignee_id,
+        title: t.title,
+        body_content: t.description || 'FG Group Projesi',
+        is_completed: t.work_status === 'COMPLETED',
+        due_date: t.current_due_date,
+        importance: t.priority === 'HIGH' ? 'high' : (t.priority === 'LOW' ? 'low' : 'normal'),
+        is_starred: t.priority === 'HIGH',
+        linked_task_id: t.id,
+        source: 'FG_SYSTEM',
+        synced_at: new Date().toISOString(),
+        created_at: t.created_at
+      });
+    }
+  }
+
   console.log('FG Group verileri ve admin@fggroup.com.tr hesabı başarıyla yüklendi.');
 }

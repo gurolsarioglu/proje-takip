@@ -14,6 +14,7 @@ import {
   DelayRecord,
   Notification,
   PushSubscriptionData,
+  MicrosoftTodoItem,
   UUID
 } from '../core/types.js';
 
@@ -31,6 +32,7 @@ export interface DatabaseState {
   delay_records: DelayRecord[];
   notifications: Notification[];
   push_subscriptions: PushSubscriptionData[];
+  microsoft_todos: MicrosoftTodoItem[];
 }
 
 export class Database {
@@ -43,7 +45,14 @@ export class Database {
     if (this.filePath && fs.existsSync(this.filePath)) {
       try {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
-        this.state = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        this.state = {
+          ...this.getInitialState(),
+          ...parsed
+        };
+        if (!Array.isArray(this.state.microsoft_todos)) {
+          this.state.microsoft_todos = [];
+        }
       } catch (e) {
         console.warn('Failed to load DB file, initializing clean state.', e);
       }
@@ -64,7 +73,8 @@ export class Database {
       task_dependencies: [],
       delay_records: [],
       notifications: [],
-      push_subscriptions: []
+      push_subscriptions: [],
+      microsoft_todos: []
     };
   }
 
@@ -321,5 +331,48 @@ export class Database {
     const subs = this.state.push_subscriptions.filter(s => s.tenant_id === tenant_id && s.endpoint === endpoint);
     subs.forEach(s => s.is_active = false);
     this.save();
+  }
+
+  // --- Microsoft To Do Items ---
+  public getTodoItems(tenant_id: UUID, user_id?: UUID): MicrosoftTodoItem[] {
+    if (!Array.isArray(this.state.microsoft_todos)) this.state.microsoft_todos = [];
+    return this.state.microsoft_todos.filter(
+      t => t.tenant_id === tenant_id && (!user_id || t.user_id === user_id)
+    );
+  }
+
+  public getTodoItemById(tenant_id: UUID, id: string): MicrosoftTodoItem | undefined {
+    if (!Array.isArray(this.state.microsoft_todos)) this.state.microsoft_todos = [];
+    return this.state.microsoft_todos.find(t => t.tenant_id === tenant_id && t.id === id);
+  }
+
+  public getTodoItemByLinkedTaskId(tenant_id: UUID, task_id: UUID): MicrosoftTodoItem | undefined {
+    if (!Array.isArray(this.state.microsoft_todos)) this.state.microsoft_todos = [];
+    return this.state.microsoft_todos.find(t => t.tenant_id === tenant_id && t.linked_task_id === task_id);
+  }
+
+  public insertTodoItem(item: MicrosoftTodoItem): MicrosoftTodoItem {
+    if (!Array.isArray(this.state.microsoft_todos)) this.state.microsoft_todos = [];
+    this.state.microsoft_todos.push(item);
+    this.save();
+    return item;
+  }
+
+  public updateTodoItem(tenant_id: UUID, id: string, updates: Partial<MicrosoftTodoItem>): MicrosoftTodoItem | undefined {
+    if (!Array.isArray(this.state.microsoft_todos)) this.state.microsoft_todos = [];
+    const item = this.state.microsoft_todos.find(t => t.tenant_id === tenant_id && t.id === id);
+    if (!item) return undefined;
+    Object.assign(item, updates);
+    this.save();
+    return item;
+  }
+
+  public deleteTodoItem(tenant_id: UUID, id: string): boolean {
+    if (!Array.isArray(this.state.microsoft_todos)) this.state.microsoft_todos = [];
+    const idx = this.state.microsoft_todos.findIndex(t => t.tenant_id === tenant_id && t.id === id);
+    if (idx === -1) return false;
+    this.state.microsoft_todos.splice(idx, 1);
+    this.save();
+    return true;
   }
 }
