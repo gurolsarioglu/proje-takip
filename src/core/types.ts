@@ -50,6 +50,7 @@ export interface User {
   password?: string;
   system_role: SystemRole;
   can_create_project: boolean;
+  can_build_reports: boolean;
   department?: string;
   created_at: string;
 }
@@ -73,7 +74,16 @@ export interface PersonnelCardDTO {
   password?: string;
   system_role?: SystemRole;
   can_create_project?: boolean;
+  can_build_reports?: boolean;
   department?: string;
+}
+
+export interface CustomReportLayout {
+  id: string;
+  name: string;
+  widgets: Array<{ id: string; widgetType: string; width: 'full' | 'half'; noteText?: string }>;
+  project_id?: string;
+  created_at: string;
 }
 
 // 2. Proje ve Yetki

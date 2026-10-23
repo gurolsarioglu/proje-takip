@@ -110,6 +110,12 @@
           <span class="nav-text" data-i18n="nav_board">İş Panosu (Kanban)</span>
         </button>
 
+        <button class="nav-item report-auth-only" id="navReportsBuilderBtn" data-nav="view-report-builder" style="display:none;">
+          <span class="nav-icon">📈</span>
+          <span class="nav-text">Özel Raporlar</span>
+          <span class="nav-badge gold-badge">Sürükle-Bırak</span>
+        </button>
+
         <div class="nav-section-title admin-only" id="adminNavTitle">Yönetim</div>
         <button class="nav-item admin-only" id="navTeamBtn" data-nav="view-team">
           <span class="nav-icon">👥</span>
@@ -290,12 +296,186 @@
                 <th>İletişim</th>
                 <th>Ülke / Dil</th>
                 <th>Departman</th>
-                <th>Proje Açma İzni</th>
+                <th>Proje Yetkisi</th>
+                <th>Rapor Yetkisi</th>
                 <th>İşlem</th>
               </tr>
             </thead>
             <tbody id="personnelTableBody"></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM 6: ÖZEL RAPOR OLUŞTURUCU (DRAG & DROP) ================= -->
+      <section id="view-report-builder" class="view-section">
+        <!-- Rapor Üst Başlık & Filtreler / İşlem Barı -->
+        <div class="report-builder-header card">
+          <div class="report-title-area">
+            <div class="report-badge-row">
+              <span class="report-badge">DİNAMİK RAPOR OLUŞTURUCU</span>
+              <span class="report-sub-tag">Sürükle-Bırak Tuvali</span>
+            </div>
+            <h2 id="reportDisplayTitle" contenteditable="true" spellcheck="false" title="Başlığı düzenlemek için tıklayın">Yönetim ve Görev Dağılım Raporu</h2>
+            <p class="report-subtitle">Soldaki bileşenleri tuvale sürükleyip bırakarak kendi istediğiniz raporu anında tasarlayın.</p>
+          </div>
+          <div class="report-controls-bar">
+            <div class="report-filter-item">
+              <label for="reportProjectSelect">📁 Proje Seçimi:</label>
+              <select id="reportProjectSelect" class="styled-select sm-select">
+                <option value="all">Tüm Projeler (Konsolide)</option>
+              </select>
+            </div>
+            <div class="report-actions-group">
+              <div class="template-dropdown-wrap">
+                <button id="reportTemplateBtn" class="action-btn secondary-btn sm-btn">
+                  <span>📑 Şablonlar ▾</span>
+                </button>
+                <div id="reportTemplateMenu" class="template-dropdown-menu" style="display:none;">
+                  <button type="button" class="template-item" data-template="executive">
+                    <strong>💼 Yönetici Özeti</strong>
+                    <span>KPI + Durum Dağılımı + Kritik Yol</span>
+                  </button>
+                  <button type="button" class="template-item" data-template="performance">
+                    <strong>👥 Personel Performans Karnesi</strong>
+                    <span>Z/T Oranı + Zamanında Bitiş Puanı</span>
+                  </button>
+                  <button type="button" class="template-item" data-template="bottleneck">
+                    <strong>⚠️ Bağımlılık & Darboğaz Analizi</strong>
+                    <span>En çok bekleten öncüller + Gecikme gerekçeleri</span>
+                  </button>
+                  <button type="button" class="template-item" data-template="all">
+                    <strong>📋 Kapsamlı Rapor (Tüm Bileşenler)</strong>
+                    <span>Tüm metrikler ve listeler</span>
+                  </button>
+                </div>
+              </div>
+
+              <button id="saveReportLayoutBtn" class="action-btn secondary-btn sm-btn" title="Rapor Düzenini Kaydet">
+                💾 Kaydet
+              </button>
+              <button id="clearReportCanvasBtn" class="action-btn danger-bare-btn sm-btn" title="Tuvali Temizle">
+                🗑️ Temizle
+              </button>
+              <button id="printReportBtn" class="action-btn primary-btn sm-btn" title="Yazdır / PDF Al">
+                🖨️ Yazdır / PDF Al
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ana Çalışma Alanı: Sol Bileşen Kütüphanesi + Sağ Tuval -->
+        <div class="report-builder-workspace">
+          
+          <!-- Sol Panel: Sürüklenebilir Bileşenler Kütüphanesi -->
+          <div class="report-toolbox-panel card">
+            <div class="toolbox-header">
+              <h3>📦 Bileşen Kütüphanesi</h3>
+              <p>Tuvale sürükleyin veya <strong>+ Ekle</strong> butonuna basın</p>
+            </div>
+            
+            <div class="toolbox-widgets-list">
+              <!-- Widget 1: Proje İlerleme ve KPI Özeti -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="kpis">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill">ÖZET</span>
+                  <h4>📊 Proje İlerleme & KPI</h4>
+                  <p>Toplam, tamamlanan, geciken işler ve % tamamlanma oranı</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="kpis" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 2: Personel Performans Tablosu -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="performance">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill">PERFORMANS</span>
+                  <h4>👥 Personel Performans Tablosu</h4>
+                  <p>Şartname formülü puanı, zamanında bitirme oranı ve görev adetleri</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="performance" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 3: Görev Durum Dağılımı -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="distribution">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill">GRAFİK</span>
+                  <h4>📈 Görev Durum Dağılımı</h4>
+                  <p>Tamamlanan, Devam Eden, Hazır ve Öncül Bekleyen çubukları</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="distribution" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 4: Kritik Yol ve Geciken Görevler -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="delayed">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill alert-pill">RİSK</span>
+                  <h4>⏳ Kritik Yol & Geciken Görevler</h4>
+                  <p>Vadesi dolmuş veya aşılmış riskli görevlerin listesi</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="delayed" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 5: Bağımlılık & Darboğaz Akışı -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="bottlenecks">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill">ZİNCİR</span>
+                  <h4>🔗 Bağımlılık & Darboğaz Analizi</h4>
+                  <p>En çok ardıl görevi bekleten öncüller ve kilitler</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="bottlenecks" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 6: Gecikme Gerekçeleri Günlüğü -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="explanations">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill">GÜNLÜK</span>
+                  <h4>📝 Gecikme Gerekçeleri & Loglar</h4>
+                  <p>Personelin girdiği mazeretler ve sistem gecikme kayıtları</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="explanations" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 7: Kilometre Taşları (Milestones) -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="milestones">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill">HEDEF</span>
+                  <h4>🎯 Proje Kilometre Taşları</h4>
+                  <p>Kritik aşama ve teslim noktalarının durumu</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="milestones" title="Tuvale Ekle">+</button>
+              </div>
+
+              <!-- Widget 8: Serbest Yönetici Notu -->
+              <div class="toolbox-widget-card" draggable="true" data-widget="note">
+                <div class="widget-drag-handle">⠿</div>
+                <div class="widget-info">
+                  <span class="widget-badge-pill note-pill">NOT</span>
+                  <h4>✍️ Yönetici Notu & Değerlendirme</h4>
+                  <p>Rapor içerisine serbest metin ve yönetici görüşü ekleyin</p>
+                </div>
+                <button type="button" class="add-widget-direct-btn" data-add="note" title="Tuvale Ekle">+</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sağ Panel: Sürükle-Bırak Rapor Tuvali (Drop Canvas) -->
+          <div class="report-canvas-panel">
+            <div id="reportDropCanvas" class="report-canvas-grid">
+              <!-- Boş durum (Empty State) -->
+              <div class="canvas-empty-state" id="canvasEmptyState">
+                <div class="empty-drop-illustration">📥</div>
+                <h4>Rapor Tuvaliniz Boş</h4>
+                <p>Soldaki bileşenleri buraya sürükleyip bırakın veya yukarıdaki <strong>📑 Şablonlar</strong> menüsünden hazır bir rapor seçin.</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
 
@@ -457,6 +637,13 @@
           <label class="checkbox-label">
             <input type="checkbox" id="persCanCreateProj">
             <span><strong>Proje Açma İzni:</strong> Bu personel yeni proje oluşturabilir ve diğer personele görev atayabilir.</span>
+          </label>
+        </div>
+
+        <div class="form-group permission-box">
+          <label class="checkbox-label">
+            <input type="checkbox" id="persCanBuildReports">
+            <span><strong>Raporlama & Özel Rapor Yetkisi:</strong> Bu personel sürükle-bırak ile kendi isteğine göre dinamik raporlar ve paneller oluşturabilir.</span>
           </label>
         </div>
 

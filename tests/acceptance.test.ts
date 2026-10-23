@@ -302,4 +302,23 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
       authService.login(managerA.email, 'yanlis_sifre');
     }, /Hatalı şifre/);
   });
+
+  await t.test('ADMIN & YETKİ: Rapor oluşturma yetkilendirmesi (can_build_reports) ve admin kontrolleri', () => {
+    // 1. Admin yetkisiyle kullanıcı oluşturulurken can_build_reports true gelir
+    const adminUser = authService.createUser(tenantA.id, 'Yetkili Admin', 'super@acme.com', undefined, { system_role: 'ADMIN' });
+    assert.equal(adminUser.can_build_reports, true);
+
+    // 2. Standart kullanıcı varsayılan olarak can_build_reports = false gelir
+    const normalUser = authService.createUser(tenantA.id, 'Düz Personel', 'duz@acme.com', undefined, { system_role: 'USER', can_build_reports: false });
+    assert.equal(normalUser.can_build_reports, false);
+
+    // 3. Admin personele rapor yetkisi verir
+    const updated = authService.updateUser(authManagerA, normalUser.id, { can_build_reports: true });
+    assert.equal(updated.can_build_reports, true);
+
+    // 4. Yetkisiz personel (editorA) başkasının yetkisini güncelleyemez
+    assert.throws(() => {
+      authService.updateUser(authEditorA, normalUser.id, { can_build_reports: false });
+    }, /Yetkisiz İşlem/);
+  });
 });

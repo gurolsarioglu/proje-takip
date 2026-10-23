@@ -181,6 +181,13 @@ function onLoginSuccess(user, tenant, token) {
     newProjBtn.style.display = 'none';
   }
 
+  // Rapor oluşturma yetki kontrolü
+  const canBuildReports = user.system_role === 'ADMIN' || !!user.can_build_reports;
+  const reportsNavBtn = document.getElementById('navReportsBuilderBtn');
+  if (reportsNavBtn) {
+    reportsNavBtn.style.display = canBuildReports ? 'flex' : 'none';
+  }
+
   loadInitialData();
 }
 
@@ -925,6 +932,12 @@ function renderPersonnelTable() {
         </label>
       </td>
       <td>
+        <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; cursor:pointer;">
+          <input type="checkbox" class="report-perm-toggle" data-id="${u.id}" ${u.can_build_reports ? 'checked' : ''} ${isSelf ? 'disabled' : ''}>
+          <span style="color:${u.can_build_reports ? '#34d399' : '#94a3b8'}; font-weight:600;">${u.can_build_reports ? 'Yetkili' : 'Yetkisiz'}</span>
+        </label>
+      </td>
+      <td>
         <button class="action-btn outline-btn sm-btn btn-edit-personnel" data-id="${u.id}">Düzenle</button>
       </td>
     `;
@@ -958,13 +971,14 @@ function switchView(viewId) {
     'view-projects': 'Projeler',
     'view-timeline': 'Zaman Çizelgesi (Gantt)',
     'view-board': 'İş Panosu (Kanban)',
-    'view-team': 'Ekip & Personel'
+    'view-team': 'Ekip & Personel',
+    'view-report-builder': 'Özel Rapor Oluşturucu (Sürükle-Bırak)'
   };
   document.getElementById('currentViewTitle').textContent = titles[viewId] || 'Panel';
 
   // Proje seçici göster/gizle
   const projContainer = document.getElementById('projectSelectorContainer');
-  if (viewId === 'view-team' || viewId === 'view-projects') {
+  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder') {
     projContainer.style.display = 'none';
   } else {
     projContainer.style.display = 'flex';
@@ -972,6 +986,10 @@ function switchView(viewId) {
 
   if (viewId === 'view-timeline') {
     renderTimeline();
+  }
+
+  if (viewId === 'view-report-builder') {
+    initReportBuilder();
   }
 }
 
@@ -1192,7 +1210,8 @@ function setupEventListeners() {
       password: document.getElementById('persPassword').value.trim() || '123',
       country: document.getElementById('persCountry').value,
       department: document.getElementById('persDept').value.trim() || 'Genel',
-      can_create_project: document.getElementById('persCanCreateProj').checked
+      can_create_project: document.getElementById('persCanCreateProj').checked,
+      can_build_reports: document.getElementById('persCanBuildReports')?.checked || false
     };
 
     await apiCall('/api/admin/personnel', 'POST', body);
@@ -1201,14 +1220,31 @@ function setupEventListeners() {
     await loadPersonnel();
   });
 
-  // Personel Proje Yetki Toggle
+  // Personel Yetki Toggles (Proje Açma & Rapor Oluşturma)
   document.getElementById('personnelTable')?.addEventListener('change', async (e) => {
-    const toggle = e.target.closest('.perm-toggle');
-    if (toggle) {
-      await apiCall(`/api/admin/personnel/${toggle.dataset.id}`, 'PUT', {
-        can_create_project: toggle.checked
+    const projToggle = e.target.closest('.perm-toggle');
+    if (projToggle) {
+      await apiCall(`/api/admin/personnel/${projToggle.dataset.id}`, 'PUT', {
+        can_create_project: projToggle.checked
       });
-      showToast('Personel yetkisi güncellendi.', 'success');
+      showToast('Personel proje yetkisi güncellendi.', 'success');
+      await loadPersonnel();
+    }
+
+    const reportToggle = e.target.closest('.report-perm-toggle');
+    if (reportToggle) {
+      await apiCall(`/api/admin/personnel/${reportToggle.dataset.id}`, 'PUT', {
+        can_build_reports: reportToggle.checked
+      });
+      showToast('Personel rapor yetkisi güncellendi.', 'success');
+      await loadPersonnel();
+      if (reportToggle.dataset.id === state.currentUser?.id) {
+        state.currentUser.can_build_reports = reportToggle.checked;
+        const reportsNavBtn = document.getElementById('navReportsBuilderBtn');
+        if (reportsNavBtn) {
+          reportsNavBtn.style.display = (state.currentUser.system_role === 'ADMIN' || state.currentUser.can_build_reports) ? 'flex' : 'none';
+        }
+      }
     }
   });
 
@@ -1254,3 +1290,511 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 300);
   }, 3500);
 }
+
+// ==============================================================
+// 6. ÖZEL RAPOR OLUŞTURUCU (DRAG & DROP REPORT BUILDER)
+// ==============================================================
+
+let reportState = {
+  data: null,
+  selectedProjectId: 'all',
+  widgets: [], // Array of { id, widgetType, width: 'full' | 'half', noteText }
+  draggedWidgetType: null
+};
+
+async function initReportBuilder() {
+  // Proje Seçimini Doldur
+  const projectSelect = document.getElementById('reportProjectSelect');
+  if (projectSelect) {
+    projectSelect.innerHTML = '<option value="all">Tüm Projeler (Konsolide)</option>' +
+      state.projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+    projectSelect.value = reportState.selectedProjectId;
+  }
+
+  // Varsayılan widget seti boşsa şablonla başlat
+  if (reportState.widgets.length === 0) {
+    applyReportTemplate('executive');
+  }
+
+  await loadReportBuilderData();
+  setupReportDragAndDrop();
+  setupReportControls();
+}
+
+async function loadReportBuilderData() {
+  try {
+    const url = `/api/reports/builder-data?project_id=${reportState.selectedProjectId}`;
+    reportState.data = await apiCall(url);
+    renderReportCanvas();
+  } catch (err) {
+    showToast('Rapor verileri alınamadı: ' + err.message, 'error');
+  }
+}
+
+function setupReportDragAndDrop() {
+  // 1. Sol Paneldeki Sürüklenebilir Kartlar
+  document.querySelectorAll('.toolbox-widget-card').forEach(card => {
+    card.addEventListener('dragstart', (e) => {
+      const type = card.dataset.widget;
+      reportState.draggedWidgetType = type;
+      e.dataTransfer.setData('text/plain', type);
+      card.classList.add('is-dragging');
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('is-dragging');
+      reportState.draggedWidgetType = null;
+      document.getElementById('reportDropCanvas')?.classList.remove('drag-over');
+    });
+  });
+
+  // Doğrudan "+" Butonu ile Ekleme
+  document.querySelectorAll('.add-widget-direct-btn').forEach(btn => {
+    btn.onclick = () => {
+      const type = btn.dataset.add;
+      addReportWidget(type);
+    };
+  });
+
+  // 2. Tuval Bırakma Alanı (Canvas Dropzone)
+  const canvas = document.getElementById('reportDropCanvas');
+  if (!canvas) return;
+
+  canvas.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    canvas.classList.add('drag-over');
+  });
+
+  canvas.addEventListener('dragleave', (e) => {
+    if (e.target === canvas) {
+      canvas.classList.remove('drag-over');
+    }
+  });
+
+  canvas.addEventListener('drop', (e) => {
+    e.preventDefault();
+    canvas.classList.remove('drag-over');
+    const type = e.dataTransfer.getData('text/plain') || reportState.draggedWidgetType;
+    if (type) {
+      addReportWidget(type);
+    }
+  });
+}
+
+function setupReportControls() {
+  // Proje Filtresi Değişimi
+  const projSelect = document.getElementById('reportProjectSelect');
+  if (projSelect) {
+    projSelect.onchange = async (e) => {
+      reportState.selectedProjectId = e.target.value;
+      await loadReportBuilderData();
+    };
+  }
+
+  // Şablon Menüsü Aç/Kapa
+  const tmplBtn = document.getElementById('reportTemplateBtn');
+  const tmplMenu = document.getElementById('reportTemplateMenu');
+  if (tmplBtn && tmplMenu) {
+    tmplBtn.onclick = (e) => {
+      e.stopPropagation();
+      tmplMenu.style.display = tmplMenu.style.display === 'none' ? 'flex' : 'none';
+    };
+
+    document.addEventListener('click', (e) => {
+      if (!tmplMenu.contains(e.target) && e.target !== tmplBtn) {
+        tmplMenu.style.display = 'none';
+      }
+    });
+
+    tmplMenu.querySelectorAll('.template-item').forEach(item => {
+      item.onclick = () => {
+        const key = item.dataset.template;
+        applyReportTemplate(key);
+        tmplMenu.style.display = 'none';
+        showToast('Şablon uygulandı.', 'success');
+      };
+    });
+  }
+
+  // Temizle Butonu
+  const clearBtn = document.getElementById('clearReportCanvasBtn');
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      reportState.widgets = [];
+      renderReportCanvas();
+      showToast('Tuval temizlendi.', 'info');
+    };
+  }
+
+  // Kaydet Butonu
+  const saveBtn = document.getElementById('saveReportLayoutBtn');
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const title = document.getElementById('reportDisplayTitle')?.textContent.trim() || 'Özel Rapor';
+      try {
+        await apiCall('/api/reports/custom-layouts', 'POST', {
+          name: title,
+          widgets: reportState.widgets,
+          project_id: reportState.selectedProjectId
+        });
+        showToast('Rapor düzeni başarıyla kaydedildi!', 'success');
+      } catch (err) {
+        showToast('Rapor kaydedilemedi: ' + err.message, 'error');
+      }
+    };
+  }
+
+  // Yazdır / PDF Al Butonu
+  const printBtn = document.getElementById('printReportBtn');
+  if (printBtn) {
+    printBtn.onclick = () => {
+      window.print();
+    };
+  }
+}
+
+function addReportWidget(widgetType, width = 'full', noteText = '') {
+  const newWidget = {
+    id: 'w_' + Math.random().toString(36).substr(2, 9),
+    widgetType,
+    width,
+    noteText
+  };
+  reportState.widgets.push(newWidget);
+  renderReportCanvas();
+  showToast('Bileşen rapora eklendi.', 'info');
+}
+
+function removeReportWidget(widgetId) {
+  reportState.widgets = reportState.widgets.filter(w => w.id !== widgetId);
+  renderReportCanvas();
+}
+
+function toggleWidgetWidth(widgetId) {
+  const w = reportState.widgets.find(w => w.id === widgetId);
+  if (w) {
+    w.width = w.width === 'full' ? 'half' : 'full';
+    renderReportCanvas();
+  }
+}
+
+function applyReportTemplate(templateKey) {
+  if (templateKey === 'executive') {
+    reportState.widgets = [
+      { id: 'w_kpi', widgetType: 'kpis', width: 'full' },
+      { id: 'w_dist', widgetType: 'distribution', width: 'half' },
+      { id: 'w_crit', widgetType: 'delayed', width: 'half' },
+      { id: 'w_note', widgetType: 'note', width: 'full', noteText: 'FG Group Yönetim Değerlendirmesi: Proje teslim hedefleri ve gecikme riskleri yukarıdaki tabloda özetlenmiştir.' }
+    ];
+  } else if (templateKey === 'performance') {
+    reportState.widgets = [
+      { id: 'w_kpi', widgetType: 'kpis', width: 'full' },
+      { id: 'w_perf', widgetType: 'performance', width: 'full' },
+      { id: 'w_note', widgetType: 'note', width: 'full', noteText: 'Personel Performans Notu: Puanlama Şartname v0.3 kabul kurallarına (100 * (0.70*Z + 0.30*T)) göre hesaplanmıştır.' }
+    ];
+  } else if (templateKey === 'bottleneck') {
+    reportState.widgets = [
+      { id: 'w_bottle', widgetType: 'bottlenecks', width: 'half' },
+      { id: 'w_crit', widgetType: 'delayed', width: 'half' },
+      { id: 'w_expl', widgetType: 'explanations', width: 'full' }
+    ];
+  } else if (templateKey === 'all') {
+    reportState.widgets = [
+      { id: 'w_kpi', widgetType: 'kpis', width: 'full' },
+      { id: 'w_perf', widgetType: 'performance', width: 'full' },
+      { id: 'w_dist', widgetType: 'distribution', width: 'half' },
+      { id: 'w_crit', widgetType: 'delayed', width: 'half' },
+      { id: 'w_bottle', widgetType: 'bottlenecks', width: 'half' },
+      { id: 'w_ms', widgetType: 'milestones', width: 'half' },
+      { id: 'w_expl', widgetType: 'explanations', width: 'full' },
+      { id: 'w_note', widgetType: 'note', width: 'full', noteText: '' }
+    ];
+  }
+  renderReportCanvas();
+}
+
+function renderReportCanvas() {
+  const canvas = document.getElementById('reportDropCanvas');
+  if (!canvas) return;
+
+  if (reportState.widgets.length === 0) {
+    canvas.innerHTML = `
+      <div class="canvas-empty-state" id="canvasEmptyState">
+        <div class="empty-drop-illustration">📥</div>
+        <h4>Rapor Tuvaliniz Boş</h4>
+        <p>Soldaki bileşenleri buraya sürükleyip bırakın veya yukarıdaki <strong>📑 Şablonlar</strong> menüsünden hazır bir rapor seçin.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const d = reportState.data;
+  canvas.innerHTML = '';
+
+  reportState.widgets.forEach(w => {
+    const card = document.createElement('div');
+    card.className = `canvas-widget-item ${w.width === 'half' ? 'col-span-6' : 'col-span-12'}`;
+    card.dataset.id = w.id;
+
+    const titles = {
+      kpis: '📊 Proje İlerleme & KPI Özeti',
+      performance: '👥 Personel Performans Tablosu',
+      distribution: '📈 Görev Durum Dağılımı',
+      delayed: '⏳ Kritik Yol & Geciken Görevler',
+      bottlenecks: '🔗 Bağımlılık & Darboğaz Akışı',
+      explanations: '📝 Gecikme Gerekçeleri & Loglar',
+      milestones: '🎯 Kilometre Taşları & Hedefler',
+      note: '✍️ Yönetici Notu & Değerlendirme'
+    };
+
+    const title = titles[w.widgetType] || 'Bileşen';
+
+    card.innerHTML = `
+      <div class="widget-chrome-header">
+        <div class="widget-chrome-title">
+          <span class="widget-chrome-handle" title="Yeniden Sırala">⠿</span>
+          <span>${title}</span>
+        </div>
+        <div class="widget-chrome-actions">
+          <button class="chrome-btn btn-toggle-width" title="Genişliği Değiştir (Yarım / Tam)">
+            ${w.width === 'half' ? '⤢ Tam Genişlik' : '⤡ Yarım'}
+          </button>
+          <button class="chrome-btn delete-btn btn-delete-widget" title="Kaldır">✕</button>
+        </div>
+      </div>
+      <div class="widget-chrome-body">
+        ${renderWidgetContent(w, d)}
+      </div>
+    `;
+
+    // Buton Eylemleri
+    card.querySelector('.btn-toggle-width').onclick = () => toggleWidgetWidth(w.id);
+    card.querySelector('.btn-delete-widget').onclick = () => removeReportWidget(w.id);
+
+    // Not alanında metin değişimi
+    const noteTextarea = card.querySelector('.executive-note-textarea');
+    if (noteTextarea) {
+      noteTextarea.value = w.noteText || '';
+      noteTextarea.oninput = (e) => {
+        w.noteText = e.target.value;
+      };
+    }
+
+    canvas.appendChild(card);
+  });
+}
+
+function renderWidgetContent(widget, data) {
+  if (!data) return '<div style="color:#94a3b8; font-size:0.85rem;">Veri yükleniyor...</div>';
+
+  switch (widget.widgetType) {
+    case 'kpis': {
+      const k = data.kpis;
+      return `
+        <div class="kpi-stat-grid">
+          <div class="kpi-tile">
+            <span class="kpi-tile-num">${k.total_tasks}</span>
+            <span class="kpi-tile-label">Toplam Görev</span>
+          </div>
+          <div class="kpi-tile" style="border-left: 3px solid #10b981;">
+            <span class="kpi-tile-num" style="color:#34d399;">${k.completed_tasks}</span>
+            <span class="kpi-tile-label">Tamamlanan</span>
+          </div>
+          <div class="kpi-tile" style="border-left: 3px solid #3b82f6;">
+            <span class="kpi-tile-num" style="color:#60a5fa;">${k.in_progress_tasks}</span>
+            <span class="kpi-tile-label">Devam Eden</span>
+          </div>
+          <div class="kpi-tile" style="border-left: 3px solid #6366f1;">
+            <span class="kpi-tile-num" style="color:#a5b4fc;">${k.ready_tasks}</span>
+            <span class="kpi-tile-label">Başlamaya Hazır</span>
+          </div>
+          <div class="kpi-tile" style="border-left: 3px solid #ef4444;">
+            <span class="kpi-tile-num" style="color:#f87171;">${k.blocked_tasks}</span>
+            <span class="kpi-tile-label">Öncül Bekleyen</span>
+          </div>
+          <div class="kpi-tile" style="border-left: 3px solid #f59e0b;">
+            <span class="kpi-tile-num" style="color:#fbbf24;">${k.delayed_tasks}</span>
+            <span class="kpi-tile-label">Geciken İşler</span>
+          </div>
+        </div>
+        <div class="kpi-progress-bar-wrap">
+          <div class="kpi-progress-header">
+            <span>Genel Tamamlanma Oranı</span>
+            <span style="color:#34d399; font-weight:700;">%${k.completion_rate}</span>
+          </div>
+          <div class="kpi-progress-track">
+            <div class="kpi-progress-fill" style="width: ${k.completion_rate}%;"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    case 'performance': {
+      if (!data.personnel_performance || data.personnel_performance.length === 0) {
+        return '<div style="color:#94a3b8; font-size:0.85rem;">Personel verisi bulunamadı.</div>';
+      }
+      return `
+        <div class="perf-table-wrap">
+          <table class="styled-table" style="font-size:0.85rem;">
+            <thead>
+              <tr>
+                <th>Personel</th>
+                <th>Departman / Ülke</th>
+                <th>Atanan</th>
+                <th>Tamamlanan</th>
+                <th>Zamanında</th>
+                <th>Geciken</th>
+                <th>Performans Puanı</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.personnel_performance.map(u => {
+                const s = u.performance_score;
+                const badgeClass = s !== null ? (s >= 80 ? 'high' : (s >= 60 ? 'mid' : 'low')) : 'mid';
+                return `
+                  <tr>
+                    <td>
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="profile-avatar" style="width:24px; height:24px; font-size:0.7rem;">${u.name.slice(0, 1)}</div>
+                        <strong>${u.name}</strong>
+                      </div>
+                    </td>
+                    <td>${u.department || 'Genel'} (${u.country})</td>
+                    <td>${u.assigned_count}</td>
+                    <td>${u.completed_count}</td>
+                    <td><span style="color:#34d399; font-weight:600;">${u.on_time_count}</span></td>
+                    <td><span style="color:${u.delayed_count > 0 ? '#f87171' : '#94a3b8'}; font-weight:600;">${u.delayed_count}</span></td>
+                    <td>
+                      <span class="perf-score-badge ${badgeClass}">${u.score_display}</span>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    case 'distribution': {
+      const dist = data.status_distribution || [];
+      const total = data.kpis.total_tasks || 1;
+      return `
+        <div class="status-dist-list">
+          ${dist.map(item => {
+            const pct = Math.round((item.count / total) * 100);
+            return `
+              <div class="status-dist-row">
+                <div class="status-dist-info">
+                  <span>${item.label}</span>
+                  <span>${item.count} görev (%${pct})</span>
+                </div>
+                <div class="status-dist-track">
+                  <div class="status-dist-bar" style="width: ${pct}%; background-color: ${item.color};"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    case 'delayed': {
+      const list = data.critical_tasks || [];
+      if (list.length === 0) {
+        return '<div style="color:#34d399; font-size:0.86rem; padding:12px; background:rgba(16,185,129,0.1); border-radius:6px;">✨ Tebrikler! Şu anda gecikmede olan kritik görev bulunmuyor.</div>';
+      }
+      return `
+        <div class="critical-tasks-list">
+          ${list.map(t => `
+            <div class="critical-task-item">
+              <div>
+                <div class="critical-task-title">${t.title}</div>
+                <div class="critical-task-meta">
+                  <span>👤 ${t.assignee_name}</span>
+                  <span>📅 Vade: ${t.current_due_date.slice(0, 10)}</span>
+                </div>
+              </div>
+              <span class="op-priority-badge high">Gecikti</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    case 'bottlenecks': {
+      const list = data.bottlenecks || [];
+      if (list.length === 0) {
+        return '<div style="color:#94a3b8; font-size:0.85rem;">Henüz bağımlılık darboğazı tespit edilmedi.</div>';
+      }
+      return `
+        <div class="bottlenecks-list">
+          ${list.slice(0, 5).map(b => `
+            <div class="bottleneck-item">
+              <div>
+                <div style="font-weight:600; color:#ffffff; font-size:0.88rem;">${b.title}</div>
+                <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">Sorumlu: ${b.assignee_name}</div>
+              </div>
+              <span class="waiting-badge">⚠️ ${b.waiting_successors_count} Ardıl Bekliyor</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    case 'explanations': {
+      const list = data.delay_explanations || [];
+      if (list.length === 0) {
+        return '<div style="color:#94a3b8; font-size:0.85rem;">Kayıtlı gecikme gerekçesi veya açıklama logu bulunmamaktadır.</div>';
+      }
+      return `
+        <div class="explanations-feed">
+          ${list.slice(0, 5).map(e => `
+            <div class="explanation-entry">
+              <div class="explanation-entry-header">
+                <strong>📌 ${e.task_title}</strong>
+                <span>${new Date(e.detected_at).toLocaleString('tr-TR')} (${e.reported_by})</span>
+              </div>
+              <div class="explanation-text">${e.explanation_text || e.reason || 'Durum gerekçesi girildi.'}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    case 'milestones': {
+      const list = data.milestones || [];
+      if (list.length === 0) {
+        return '<div style="color:#94a3b8; font-size:0.85rem;">Projeye ait kilometre taşı (Milestone) tanımlanmamış.</div>';
+      }
+      return `
+        <div class="critical-tasks-list">
+          ${list.map(m => `
+            <div class="critical-task-item" style="border-left-color: #f59e0b;">
+              <div>
+                <div class="critical-task-title">🏁 ${m.title}</div>
+                <div class="critical-task-meta">
+                  <span>Hedef: ${m.current_due_date.slice(0, 10)}</span>
+                  <span>Sorumlu: ${m.assignee_name}</span>
+                </div>
+              </div>
+              <span class="task-status-pill ${m.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-progress'}">
+                ${m.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'}
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    case 'note': {
+      return `
+        <textarea class="executive-note-textarea" placeholder="Yönetici değerlendirme notunuzu, proje hedeflerini veya özel açıklamaları buraya yazabilirsiniz..."></textarea>
+      `;
+    }
+
+    default:
+      return '<div>Bileşen render edilemedi.</div>';
+  }
+}
+

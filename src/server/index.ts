@@ -116,7 +116,7 @@ app.post('/api/admin/personnel', (req, res) => {
       return res.status(403).json({ error: 'Yetkisiz İşlem: Yeni personel kartı yalnızca Sistem Yöneticisi tarafından oluşturulabilir.' });
     }
 
-    const { name, email, phone, country, password, can_create_project, department, system_role } = req.body;
+    const { name, email, phone, country, password, can_create_project, can_build_reports, department, system_role } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'Ad Soyad ve E-posta alanları zorunludur.' });
     }
@@ -131,6 +131,7 @@ app.post('/api/admin/personnel', (req, res) => {
       country: country || 'Türkiye',
       password: password || '123',
       can_create_project: !!can_create_project,
+      can_build_reports: !!can_build_reports,
       department: department || 'Genel',
       system_role: system_role || 'USER'
     });
@@ -647,6 +648,231 @@ app.post('/api/worker/run', (req, res) => {
     res.json({ success: true, delaysEvaluated, remindersSent });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 8. Özel Rapor Oluşturucu (Custom Report Builder)
+// ==========================================
+const customReportLayouts = new Map<string, Array<{
+  id: string;
+  user_id: string;
+  name: string;
+  project_id?: string;
+  widgets: Array<{ id: string; widgetType: string; width: 'full' | 'half'; noteText?: string }>;
+  created_at: string;
+}>>();
+
+app.get('/api/reports/builder-data', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const caller = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!caller) {
+      return res.status(401).json({ error: 'Kullanıcı oturumu geçersiz.' });
+    }
+
+    if (caller.system_role !== 'ADMIN' && !caller.can_build_reports) {
+      return res.status(403).json({ error: 'Yetkisiz Erişim: Özel rapor oluşturma yetkiniz bulunmamaktadır. Admin tarafından yetkilendirilmeniz gerekir.' });
+    }
+
+    const projectId = req.query.project_id && req.query.project_id !== 'all' ? String(req.query.project_id) : undefined;
+    const projects = projectService.listProjects(auth);
+    const allTasks = db.getTasks(auth.tenant_id, projectId);
+    const allUsers = authService.listUsers(auth.tenant_id);
+    const allDelays = db.getDelayRecords(auth.tenant_id);
+    const allDependencies = db.getDependencies(auth.tenant_id);
+
+    const now = new Date();
+
+    // 1. Task KPIs
+    const totalTasks = allTasks.length;
+    const completedTasks = allTasks.filter(t => t.work_status === 'COMPLETED');
+    const inProgressTasks = allTasks.filter(t => t.work_status === 'IN_PROGRESS');
+    const blockedTasks = allTasks.filter(t => t.work_status === 'BLOCKED');
+    const readyTasks = allTasks.filter(t => t.work_status === 'READY');
+    const delayedTasks = allTasks.filter(t => {
+      if (t.work_status === 'COMPLETED') {
+        return t.actual_completion_date ? new Date(t.actual_completion_date) > new Date(t.current_due_date) : false;
+      }
+      return new Date(t.current_due_date) < now;
+    });
+
+    const completionRate = totalTasks > 0 ? Math.round((completedTasks.length / totalTasks) * 100) : 0;
+
+    // 2. Status Distribution
+    const statusDistribution = [
+      { status: 'COMPLETED', label: 'Tamamlandı', count: completedTasks.length, color: '#10b981' },
+      { status: 'IN_PROGRESS', label: 'Devam Eden', count: inProgressTasks.length, color: '#3b82f6' },
+      { status: 'READY', label: 'Hazır', count: readyTasks.length, color: '#6366f1' },
+      { status: 'BLOCKED', label: 'Öncül Bekleyen', count: blockedTasks.length, color: '#ef4444' }
+    ];
+
+    // 3. User Performance Metrics (Hesaplanmış Şartname Puanı: 100 * (0.70*Z + 0.30*T))
+    const userPerformance = allUsers.map(u => {
+      const assignedTasks = allTasks.filter(t => t.assignee_id === u.id);
+      const userCompleted = assignedTasks.filter(t => t.work_status === 'COMPLETED');
+      const userOnTime = userCompleted.filter(t => t.actual_completion_date && new Date(t.actual_completion_date) <= new Date(t.initial_due_date));
+      const userDelayed = assignedTasks.filter(t => {
+        if (t.work_status === 'COMPLETED') {
+          return t.actual_completion_date ? new Date(t.actual_completion_date) > new Date(t.current_due_date) : false;
+        }
+        return new Date(t.current_due_date) < now;
+      });
+
+      const zRatio = assignedTasks.length > 0 ? (userOnTime.length / assignedTasks.length) : null;
+      const tRatio = assignedTasks.length > 0 ? (userCompleted.length / assignedTasks.length) : null;
+      const score = (zRatio !== null && tRatio !== null) ? Math.round(100 * (0.70 * zRatio + 0.30 * tRatio)) : null;
+
+      return {
+        user_id: u.id,
+        name: u.name,
+        email: u.email,
+        country: u.country,
+        department: u.department,
+        assigned_count: assignedTasks.length,
+        completed_count: userCompleted.length,
+        on_time_count: userOnTime.length,
+        delayed_count: userDelayed.length,
+        performance_score: score,
+        score_display: score !== null ? `${score} / 100` : 'Hesaplanamıyor'
+      };
+    });
+
+    // 4. Bottlenecks (En çok ardıl bekleten öncüller)
+    const predecessorWaitCounts = new Map<string, number>();
+    for (const dep of allDependencies) {
+      predecessorWaitCounts.set(dep.predecessor_id, (predecessorWaitCounts.get(dep.predecessor_id) || 0) + 1);
+    }
+    const bottlenecks = Array.from(predecessorWaitCounts.entries())
+      .map(([taskId, waitCount]) => {
+        const task = allTasks.find(t => t.id === taskId) || db.getTaskById(auth.tenant_id, taskId);
+        const assignee = task?.assignee_id ? db.getUserById(auth.tenant_id, task.assignee_id) : null;
+        return {
+          task_id: taskId,
+          title: task?.title || 'Bilinmeyen Görev',
+          work_status: task?.work_status || 'UNKNOWN',
+          due_date: task?.current_due_date,
+          assignee_name: assignee?.name || 'Atanmamış',
+          waiting_successors_count: waitCount
+        };
+      })
+      .sort((a, b) => b.waiting_successors_count - a.waiting_successors_count);
+
+    // 5. Critical & Delayed Tasks
+    const criticalTasks = delayedTasks.map(t => {
+      const assignee = t.assignee_id ? db.getUserById(auth.tenant_id, t.assignee_id) : null;
+      return {
+        id: t.id,
+        title: t.title,
+        priority: t.priority || 'NORMAL',
+        work_status: t.work_status,
+        progress: t.progress || 0,
+        current_due_date: t.current_due_date,
+        assignee_name: assignee?.name || 'Atanmamış'
+      };
+    });
+
+    // 6. Milestones
+    const milestones = allTasks.filter(t => t.type === 'MILESTONE').map(t => {
+      const assignee = t.assignee_id ? db.getUserById(auth.tenant_id, t.assignee_id) : null;
+      return {
+        id: t.id,
+        title: t.title,
+        work_status: t.work_status,
+        current_due_date: t.current_due_date,
+        assignee_name: assignee?.name || 'Atanmamış'
+      };
+    });
+
+    // 7. Recent Delay Explanations
+    const delayExplanations = allDelays.map(d => {
+      const task = db.getTaskById(auth.tenant_id, d.task_id);
+      const reporter = d.reported_by_user_id ? db.getUserById(auth.tenant_id, d.reported_by_user_id) : null;
+      return {
+        id: d.id,
+        task_id: d.task_id,
+        task_title: task?.title || 'Görev',
+        detected_at: d.detected_at,
+        explanation_source: d.explanation_source,
+        reason: d.reason,
+        explanation_text: d.explanation_text || null,
+        reported_by: reporter?.name || 'Sistem'
+      };
+    });
+
+    // 8. Project Details if selected
+    let selectedProjectReport = null;
+    if (projectId) {
+      try {
+        selectedProjectReport = reportingService.getProjectReport(auth, projectId);
+      } catch (e) {
+        // Ignored
+      }
+    }
+
+    res.json({
+      projects,
+      selected_project: selectedProjectReport,
+      kpis: {
+        total_tasks: totalTasks,
+        completed_tasks: completedTasks.length,
+        in_progress_tasks: inProgressTasks.length,
+        blocked_tasks: blockedTasks.length,
+        ready_tasks: readyTasks.length,
+        delayed_tasks: delayedTasks.length,
+        completion_rate: completionRate
+      },
+      status_distribution: statusDistribution,
+      critical_tasks: criticalTasks,
+      personnel_performance: userPerformance,
+      bottlenecks,
+      milestones,
+      delay_explanations: delayExplanations
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/reports/custom-layouts', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const tenantLayouts = customReportLayouts.get(auth.tenant_id) || [];
+    res.json(tenantLayouts);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/reports/custom-layouts', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const caller = db.getUserById(auth.tenant_id, auth.user_id);
+    if (caller?.system_role !== 'ADMIN' && !caller?.can_build_reports) {
+      return res.status(403).json({ error: 'Yetkisiz Erişim: Rapor kaydetme yetkiniz bulunmamaktadır.' });
+    }
+
+    const { name, widgets, project_id } = req.body;
+    if (!name || !widgets || !Array.isArray(widgets)) {
+      return res.status(400).json({ error: 'Rapor adı ve bileşenler gereklidir.' });
+    }
+
+    const newLayout = {
+      id: crypto.randomUUID(),
+      user_id: auth.user_id,
+      name,
+      widgets,
+      project_id,
+      created_at: new Date().toISOString()
+    };
+
+    const list = customReportLayouts.get(auth.tenant_id) || [];
+    list.push(newLayout);
+    customReportLayouts.set(auth.tenant_id, list);
+
+    res.status(201).json(newLayout);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 

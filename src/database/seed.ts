@@ -36,6 +36,7 @@ export function seedDatabase(db: Database) {
       password: '123',
       system_role: 'ADMIN',
       can_create_project: true,
+      can_build_reports: true,
       department: 'Yönetim'
     }
   );
@@ -52,6 +53,7 @@ export function seedDatabase(db: Database) {
       password: '123',
       system_role: 'USER',
       can_create_project: true, // Proje oluşturabilir
+      can_build_reports: true,  // Rapor oluşturma yetkili
       department: 'Yazılım & Teknoloji'
     }
   );
@@ -67,6 +69,7 @@ export function seedDatabase(db: Database) {
       password: '123',
       system_role: 'USER',
       can_create_project: false, // Standart çalışan
+      can_build_reports: false,
       department: 'Mühendislik'
     }
   );
@@ -82,6 +85,7 @@ export function seedDatabase(db: Database) {
       password: '123',
       system_role: 'USER',
       can_create_project: false, // Standart çalışan
+      can_build_reports: false,
       department: 'Operasyon'
     }
   );

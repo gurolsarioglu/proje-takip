@@ -62,6 +62,7 @@ export class AuthService {
       password: options?.password || '123',
       system_role: options?.system_role || 'USER',
       can_create_project: options?.can_create_project ?? false,
+      can_build_reports: options?.can_build_reports ?? (options?.system_role === 'ADMIN'),
       department: options?.department || 'Genel',
       created_at: new Date().toISOString()
     };

@@ -68,10 +68,37 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve görev türü etiketleriyle modern görünüm sağlandı.
 - [x] **Adım 8:** Tarayıcı Testleri ve Canlı Onay:
   - Tarayıcı alt ajanı ile Zaman Çizelgesi, SVG ok bağlantıları, gün ızgarası ve Split-Screen sağ çekmecesi canlı ekranda test edilip fotoğraflandı.
+- [x] **Adım 9:** Admin Rapor Yetkilendirmesi & Sürükle-Bırak Özel Rapor Oluşturucu:
+  - Admin panelinde personele tek tıkla "Rapor Yetkisi" (`can_build_reports`) verme ve alma imkanı sağlandı.
+  - Yalnızca yetki verilen personellerin ve yöneticilerin görebileceği sol menüde "Özel Raporlar" (Sürükle-Bırak) sekmesi eklendi.
+  - 8 zengin bileşenden oluşan Bileşen Kütüphanesi (Toolbox) ve dinamik Rapor Tuvali geliştirildi.
+  - Şablonlar (Yönetici Özeti, Personel Performans Karnesi, Darboğaz Analizi), Özel Düzen Kaydetme ve "Yazdır / PDF Al" özelliği eklendi.
+  - 15/15 kabul testi başarıyla geçti, tarayıcıda görsel olarak doğrulandı.
 
 ---
 
 ## 4. Değişiklik ve Karar Günlüğü (Changelog)
+
+### [23 Ekim 2026 - 15:05] - Admin Rapor Yetkilendirmesi & Sürükle-Bırak Rapor Oluşturucu Tamamlandı
+* **Admin Personel Yetkilendirme (`can_build_reports`):**
+  - Personel tablosuna `Proje Yetkisi` ve `Rapor Yetkisi` sütunları eklendi.
+  - Admin kullanıcılar istedikleri personele tek tıkla veya personel kartı düzenleme modalından "Rapor Yetkisi" verebilir/kaldırabilir.
+  - Yetkisiz personel sisteme girdiğinde Özel Raporlar sekmesini göremez; API seviyesinde 403 Forbidden kontrolü uygulanır.
+* **Sürükle - Bırak (Drag & Drop) Tuvali:**
+  - HTML5 Drag & Drop ve interaktif `+` butonları ile tuvale widget ekleme, genişlik değiştirme (Tam/Yarım) ve silme özellikleri eklendi.
+  - **8 Bileşen:**
+    1. 📊 Proje İlerleme & KPI Özeti
+    2. 👥 Personel Performans Tablosu (Şartname v0.3 puanı `100 * (0.70*Z + 0.30*T)`)
+    3. 📈 Görev Durum Dağılım Grafiği
+    4. ⏳ Kritik Yol & Geciken Görevler Listesi
+    5. 🔗 Bağımlılık & Darboğaz Akışı
+    6. 📝 Gecikme Gerekçeleri & Açıklama Günlüğü
+    7. 🎯 Proje Kilometre Taşları (Milestones)
+    8. ✍️ Yönetici Notu & Değerlendirme Serbest Kartı
+* **Hazır Şablonlar & PDF / Baskı Desteği:**
+  - Tek tıkla "Yönetici Özeti", "Personel Performans Karnesi", "Darboğaz Analizi" şablonları yüklenebilir.
+  - A4 baskı ve PDF formatına uygun `@media print` CSS kuralları uygulandı.
+* **15/15 Kabul Testi Geçti:** Tüm birim ve kabul testleri eksiksiz geçmektedir.
 
 ### [23 Ekim 2026 - 14:40] - OpenProject Split-Screen & Gün Bazlı Gantt Ok Bağlantıları Tamamlandı
 * **Gantt Günlük X Ekseni Takvimi (istekler/Yeni Metin Belgesi.txt & 2.jpeg):**
