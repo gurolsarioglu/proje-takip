@@ -6,9 +6,14 @@ import { DependencyService } from '../modules/dependency/dependency.service.js';
 import { DelayService } from '../modules/delay/delay.service.js';
 
 export function seedDatabase(db: Database) {
-  if (db.getTenants().length > 0) {
-    return; // Already seeded
+  // Always ensure admin@fggroup.com.tr exists
+  const existingAdmin = db.getUserByEmail('admin@fggroup.com.tr');
+  if (existingAdmin) {
+    return; // Already initialized
   }
+
+  // Clear or initialize
+  db.reset();
 
   const authService = new AuthService(db);
   const projectService = new ProjectService(db);
@@ -16,70 +21,104 @@ export function seedDatabase(db: Database) {
   const delayService = new DelayService(db);
   const taskService = new TaskService(db, dependencyService, delayService);
 
-  // Tenant 1: Acme Teknoloji
-  const tenantAcme = authService.createTenant('Acme Teknoloji A.Ş.', 'entra-acme-prod-001');
+  // 1. Ana Şirket: FG Group
+  const tenantFG = authService.createTenant('FG Group', 'entra-fggroup-prod-001');
 
-  const ali = authService.createUser(tenantAcme.id, 'Ali Yılmaz', 'ali.yilmaz@acme.com', 'entra-oid-ali');
-  const ayse = authService.createUser(tenantAcme.id, 'Ayşe Kaya', 'ayse.kaya@acme.com', 'entra-oid-ayse');
-  const mehmet = authService.createUser(tenantAcme.id, 'Mehmet Demir', 'mehmet.demir@acme.com', 'entra-oid-mehmet');
-  const zeynep = authService.createUser(tenantAcme.id, 'Zeynep Aydın', 'zeynep.aydin@acme.com', 'entra-oid-zeynep');
-  const can = authService.createUser(tenantAcme.id, 'Can Öztürk', 'can.ozturk@acme.com', 'entra-oid-can');
+  // 2. Sistem Yöneticisi (Admin) - admin@fggroup.com.tr / 123
+  const admin = authService.createUser(
+    tenantFG.id,
+    'Sistem Yöneticisi (Admin)',
+    'admin@fggroup.com.tr',
+    'entra-oid-admin',
+    {
+      phone: '+90 532 000 0001',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'ADMIN',
+      can_create_project: true,
+      department: 'Yönetim'
+    }
+  );
 
-  const authAli = { tenant_id: tenantAcme.id, user_id: ali.id, email: ali.email, name: ali.name };
-  const authAyse = { tenant_id: tenantAcme.id, user_id: ayse.id, email: ayse.email, name: ayse.name };
+  // 3. Personel Kartları (Farklı ülkeler ve dil seçimi simülasyonu)
+  const ahmet = authService.createUser(
+    tenantFG.id,
+    'Ahmet Yılmaz',
+    'ahmet@fggroup.com.tr',
+    'entra-oid-ahmet',
+    {
+      phone: '+90 533 111 2233',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: true, // Proje oluşturabilir
+      department: 'Yazılım & Teknoloji'
+    }
+  );
 
-  // Project 1
-  const proj1 = projectService.createProject(
-    authAli,
-    'Bulut Altyapı Modernizasyonu',
-    'PostgreSQL RLS, DAG Bağımlılık Motoru ve PWA Entegrasyonu',
+  const hans = authService.createUser(
+    tenantFG.id,
+    'Hans Gruber',
+    'hans@fggroup.com.tr',
+    'entra-oid-hans',
+    {
+      phone: '+49 170 1234567',
+      country: 'Almanya',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false, // Standart çalışan
+      department: 'Mühendislik'
+    }
+  );
+
+  const sarah = authService.createUser(
+    tenantFG.id,
+    'Sarah Connor',
+    'sarah@fggroup.com.tr',
+    'entra-oid-sarah',
+    {
+      phone: '+44 7911 123456',
+      country: 'İngiltere',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false, // Standart çalışan
+      department: 'Operasyon'
+    }
+  );
+
+  const authAdmin = { tenant_id: tenantFG.id, user_id: admin.id, email: admin.email, name: admin.name };
+  const authAhmet = { tenant_id: tenantFG.id, user_id: ahmet.id, email: ahmet.email, name: ahmet.name };
+
+  // 4. Örnek Proje: Dijital Dönüşüm & ERP Entegrasyonu
+  const proj = projectService.createProject(
+    authAdmin,
+    'Dijital Dönüşüm & ERP Entegrasyonu',
+    'FG Group global operasyonlarının merkezileştirilmesi',
     '2026-10-01T09:00:00Z',
-    '2026-10-31T18:00:00Z'
+    '2026-11-15T18:00:00Z'
   );
 
-  projectService.addOrUpdateMember(authAli, proj1.id, ayse.id, 'EDITOR');
-  projectService.addOrUpdateMember(authAli, proj1.id, can.id, 'VIEWER');
+  projectService.addOrUpdateMember(authAdmin, proj.id, ahmet.id, 'PROJECT_MANAGER');
+  projectService.addOrUpdateMember(authAdmin, proj.id, hans.id, 'VIEWER');
+  projectService.addOrUpdateMember(authAdmin, proj.id, sarah.id, 'VIEWER');
 
-  // Tasks for Project 1
-  const t1 = taskService.createTask(authAli, proj1.id, 'Gereksinim Analizi & Mimari Tasarım', '2026-10-01T09:00:00Z', '2026-10-05T18:00:00Z', ali.id);
-  const t2 = taskService.createTask(authAli, proj1.id, 'Veritabanı Şeması & RLS Güvenlik Politikaları', '2026-10-06T09:00:00Z', '2026-10-12T18:00:00Z', ayse.id);
-  const t3 = taskService.createTask(authAli, proj1.id, 'DAG Bağımlılık Motoru & Döngü Kontrolü', '2026-10-13T09:00:00Z', '2026-10-18T18:00:00Z', mehmet.id);
-  const t4 = taskService.createTask(authAli, proj1.id, 'Gecikme Teşhisi & Açıklama Modülü', '2026-10-19T09:00:00Z', '2026-10-23T18:00:00Z', mehmet.id);
-  const t5 = taskService.createTask(authAli, proj1.id, 'PWA & Web Push Bildirim Servisleri', '2026-10-24T09:00:00Z', '2026-10-28T18:00:00Z', zeynep.id);
-  const t6 = taskService.createTask(authAli, proj1.id, 'Kapsamlı Kabul Testleri & Canlıya Geçiş', '2026-10-29T09:00:00Z', '2026-10-31T18:00:00Z', ali.id);
+  // Görevler
+  const t1 = taskService.createTask(authAdmin, proj.id, 'Gereksinim Analizi ve Süreç Haritası', '2026-10-01T09:00:00Z', '2026-10-10T18:00:00Z', ahmet.id);
+  const t2 = taskService.createTask(authAdmin, proj.id, 'Sunucu & Veritabanı Kümesi Kurulumu', '2026-10-11T09:00:00Z', '2026-10-18T18:00:00Z', hans.id);
+  const t3 = taskService.createTask(authAdmin, proj.id, 'API Entegrasyonu ve Test Senaryoları', '2026-10-19T09:00:00Z', '2026-10-25T18:00:00Z', sarah.id);
+  const t4 = taskService.createTask(authAdmin, proj.id, 'Son Kullanıcı Kabul Testleri (UAT)', '2026-10-26T09:00:00Z', '2026-11-05T18:00:00Z', ahmet.id);
 
-  // Dependencies
-  dependencyService.addDependency(authAli, t1.id, t2.id); // t2 depends on t1
-  dependencyService.addDependency(authAli, t2.id, t3.id); // t3 depends on t2
-  dependencyService.addDependency(authAli, t3.id, t4.id); // t4 depends on t3
-  dependencyService.addDependency(authAli, t4.id, t5.id); // t5 depends on t4
-  dependencyService.addDependency(authAli, t5.id, t6.id); // t6 depends on t5
+  // Bağımlılıklar (Finish-to-Start)
+  dependencyService.addDependency(authAdmin, t1.id, t2.id);
+  dependencyService.addDependency(authAdmin, t2.id, t3.id);
+  dependencyService.addDependency(authAdmin, t3.id, t4.id);
 
-  // Complete t1 and t2
-  taskService.startTask(authAli, t1.id);
-  taskService.completeTask(authAli, t1.id);
+  // t1 tamamlandı
+  taskService.startTask(authAdmin, t1.id);
+  taskService.completeTask(authAdmin, t1.id);
 
-  taskService.startTask(authAyse, t2.id);
-  taskService.completeTask(authAyse, t2.id);
+  // t2 başladı (Hans)
+  taskService.startTask(authAdmin, t2.id);
 
-  // Start t3 (Mehmet)
-  taskService.startTask(authAli, t3.id);
-
-  // Evaluate delay on t3 (simulate current due date passed, requiring explanation)
-  delayService.evaluateTaskDelay(tenantAcme.id, t3.id, '2026-10-20T00:00:00Z');
-
-  // Tenant 2: Beta Lojistik Ltd. (For multi-tenant isolation testing)
-  const tenantBeta = authService.createTenant('Beta Lojistik Ltd.', 'entra-beta-prod-002');
-  const burak = authService.createUser(tenantBeta.id, 'Burak Demir', 'burak.demir@beta.com', 'entra-oid-burak');
-  const authBurak = { tenant_id: tenantBeta.id, user_id: burak.id, email: burak.email, name: burak.name };
-
-  projectService.createProject(
-    authBurak,
-    'Filo Takip & Telemetri Portalı',
-    'Beta Lojistik filo yönetim sistemi',
-    '2026-10-15T00:00:00Z',
-    '2026-11-15T00:00:00Z'
-  );
-
-  console.log('Sample enterprise data seeded successfully.');
+  console.log('FG Group verileri ve admin@fggroup.com.tr hesabı başarıyla yüklendi.');
 }

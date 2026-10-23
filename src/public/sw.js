@@ -1,5 +1,4 @@
-// Service Worker for Görev ve Bağımlılık Yönetim Sistemi (v0.3)
-const CACHE_NAME = 'gorev-yonetim-v0.3.0';
+const CACHE_NAME = 'fg-group-v0.3.1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -9,11 +8,6 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
   self.skipWaiting();
 });
 
@@ -29,15 +23,26 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // API istekleri asla service worker önbelleğine alınmaz (Şartname v0.3 / WEB03: Kişisel görev ve rapor yanıtları otomatik önbelleğe alınmaz)
   if (event.request.url.includes('/api/')) {
     return;
   }
 
+  // Network-first for HTML pages
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
-    })
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 

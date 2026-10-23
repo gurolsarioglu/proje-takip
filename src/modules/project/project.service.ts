@@ -20,6 +20,11 @@ export class ProjectService {
     initial_start_date: string,
     initial_due_date: string
   ): Project {
+    const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+    if (user && user.system_role !== 'ADMIN' && !user.can_create_project) {
+      throw new Error('Yetkisiz İşlem: Yeni proje oluşturma yetkiniz bulunmamaktadır. Lütfen Sistem Yöneticisi (Admin) ile iletişime geçiniz.');
+    }
+
     const project: Project = {
       id: crypto.randomUUID(),
       tenant_id: auth.tenant_id,

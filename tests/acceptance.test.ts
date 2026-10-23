@@ -23,12 +23,12 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
   const tenantA = authService.createTenant('Acme Holding', 'entra-tenant-acme-111');
   const tenantB = authService.createTenant('Beta Sanayi', 'entra-tenant-beta-222');
 
-  const managerA = authService.createUser(tenantA.id, 'Ali Yönetici', 'ali@acme.com');
-  const editorA = authService.createUser(tenantA.id, 'Ayşe Editör', 'ayse@acme.com');
-  const assigneeA = authService.createUser(tenantA.id, 'Mehmet Sorumlu', 'mehmet@acme.com');
-  const externalA = authService.createUser(tenantA.id, 'Can İzleyici', 'can@acme.com');
+  const managerA = authService.createUser(tenantA.id, 'Ali Yönetici', 'ali@acme.com', undefined, { can_create_project: true, system_role: 'ADMIN' });
+  const editorA = authService.createUser(tenantA.id, 'Ayşe Editör', 'ayse@acme.com', undefined, { can_create_project: true });
+  const assigneeA = authService.createUser(tenantA.id, 'Mehmet Sorumlu', 'mehmet@acme.com', undefined, { can_create_project: false });
+  const externalA = authService.createUser(tenantA.id, 'Can İzleyici', 'can@acme.com', undefined, { can_create_project: false });
 
-  const userB = authService.createUser(tenantB.id, 'Burak Beta', 'burak@beta.com');
+  const userB = authService.createUser(tenantB.id, 'Burak Beta', 'burak@beta.com', undefined, { can_create_project: true });
 
   const authManagerA = { tenant_id: tenantA.id, user_id: managerA.id, email: managerA.email, name: managerA.name };
   const authEditorA = { tenant_id: tenantA.id, user_id: editorA.id, email: editorA.email, name: editorA.name };
@@ -276,5 +276,30 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
 
     rep = reportingService.getProjectReport(authManagerA, pDates.id);
     assert.ok(rep.actual_finish_date !== null);
+  });
+
+  await t.test('ADMIN: Proje oluşturma izni (can_create_project) ve ülke bazlı dil seçimi', () => {
+    // 1. Yetkisiz personel proje oluşturamaz
+    assert.throws(() => {
+      projectService.createProject(authAssigneeA, 'İzinsiz Proje', 'Test', '2026-10-01T00:00:00Z', '2026-10-15T00:00:00Z');
+    }, /Yeni proje oluşturma yetkiniz bulunmamaktadır/);
+
+    // 2. Ülke bazlı dil çözümlemesi
+    assert.equal(AuthService.resolveLanguageByCountry('Türkiye'), 'tr');
+    assert.equal(AuthService.resolveLanguageByCountry('TR'), 'tr');
+    assert.equal(AuthService.resolveLanguageByCountry('Almanya'), 'de');
+    assert.equal(AuthService.resolveLanguageByCountry('Germany'), 'de');
+    assert.equal(AuthService.resolveLanguageByCountry('İngiltere'), 'en');
+    assert.equal(AuthService.resolveLanguageByCountry('USA'), 'en');
+
+    // 3. Login doğrulaması
+    const loginRes = authService.login(managerA.email, '123');
+    assert.equal(loginRes.user.email, managerA.email);
+    assert.ok(loginRes.token);
+
+    // Hatalı şifre reddedilir
+    assert.throws(() => {
+      authService.login(managerA.email, 'yanlis_sifre');
+    }, /Hatalı şifre/);
   });
 });

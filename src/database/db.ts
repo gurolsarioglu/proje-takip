@@ -110,8 +110,18 @@ export class Database {
   public getUserByEntraOid(tenant_id: UUID, entra_oid: string): User | undefined {
     return this.state.users.find(u => u.tenant_id === tenant_id && u.entra_oid === entra_oid);
   }
+  public getUserByEmail(email: string): User | undefined {
+    return this.state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  }
   public insertUser(user: User): User {
     this.state.users.push(user);
+    this.save();
+    return user;
+  }
+  public updateUser(tenant_id: UUID, id: UUID, update: Partial<User>): User | undefined {
+    const user = this.getUserById(tenant_id, id);
+    if (!user) return undefined;
+    Object.assign(user, update);
     this.save();
     return user;
   }

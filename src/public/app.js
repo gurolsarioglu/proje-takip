@@ -1,47 +1,131 @@
-// Görev ve Bağımlılık Yönetim Sistemi - İstemci Mantığı (v0.3)
+// FG Group - Sadeleştirilmiş Proje & Görev Yönetimi (OpenProject Ergonomisi)
 
 let state = {
-  tenants: [],
-  users: [],
+  currentUser: null,
+  tenant: null,
+  token: null,
   projects: [],
-  currentTenantId: null,
-  currentUserId: null,
   currentProjectId: null,
   tasks: [],
   dependencies: [],
-  bottlenecks: [],
+  personnelList: [],
   notifications: [],
-  permissions: { isManager: false, isEditor: false, isFullViewer: true }
+  currentView: 'view-my-tasks'
 };
+
+const I18N = {
+  tr: {
+    nav_my_tasks: 'Görevlerim',
+    nav_projects: 'Projeler',
+    nav_timeline: 'Zaman Çizelgesi (Gantt)',
+    nav_board: 'İş Panosu (Kanban)',
+    nav_team: 'Ekip & Personel',
+    new_project_btn: '+ Yeni Proje',
+    new_task_btn: '+ Görev Ekle',
+    my_tasks_sub: 'Size atanan görevler, durumları ve yaklaşan teslim tarihleri aşağıda listelenmiştir.',
+    projects_intro: 'Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve takvimleri.',
+    timeline_intro: 'Görevlerin başlangıç ve bitiş tarihleri, süreleri ve birbirlerini bekleme akışları.',
+    team_intro: 'Şirket personellerinin iletişim kartları, ülkeleri, dilleri ve proje açma yetkileri.',
+    legend_blocked: 'Öncül Bekliyor',
+    legend_ready: 'Başlamaya Hazır',
+    legend_progress: 'Devam Ediyor',
+    legend_done: 'Tamamlandı',
+    col_todo: 'Yapılacak / Bekliyor',
+    col_doing: 'Devam Ediyor',
+    col_done: 'Tamamlandı'
+  },
+  en: {
+    nav_my_tasks: 'My Tasks',
+    nav_projects: 'Projects',
+    nav_timeline: 'Timeline (Gantt)',
+    nav_board: 'Work Board',
+    nav_team: 'Team & Personnel',
+    new_project_btn: '+ New Project',
+    new_task_btn: '+ Add Task',
+    my_tasks_sub: 'Your assigned tasks, statuses, and upcoming deadlines are listed below.',
+    projects_intro: 'Active company projects, completion progress, and project schedules.',
+    timeline_intro: 'Task start/due dates, durations, and predecessor flow.',
+    team_intro: 'Personnel contact details, country, language, and project creation rights.',
+    legend_blocked: 'Waiting on Predecessor',
+    legend_ready: 'Ready to Start',
+    legend_progress: 'In Progress',
+    legend_done: 'Completed',
+    col_todo: 'To Do / Waiting',
+    col_doing: 'In Progress',
+    col_done: 'Completed'
+  },
+  de: {
+    nav_my_tasks: 'Meine Aufgaben',
+    nav_projects: 'Projekte',
+    nav_timeline: 'Zeitachse (Gantt)',
+    nav_board: 'Aufgaben-Board',
+    nav_team: 'Team & Personal',
+    new_project_btn: '+ Neues Projekt',
+    new_task_btn: '+ Aufgabe hinzufügen',
+    my_tasks_sub: 'Ihnen zugewiesene Aufgaben, Status und anstehende Termine.',
+    projects_intro: 'Aktive Projekte, Fortschritt und Zeitpläne im Unternehmen.',
+    timeline_intro: 'Aufgabendaten, Dauer und Abhängigkeitsabläufe im Zeitplan.',
+    team_intro: 'Mitarbeiterdaten, Länder, Sprachen und Projektrechte.',
+    legend_blocked: 'Wartet auf Vorgänger',
+    legend_ready: 'Bereit zum Start',
+    legend_progress: 'Wird bearbeitet',
+    legend_done: 'Abgeschlossen',
+    col_todo: 'Zu erledigen / Wartend',
+    col_doing: 'In Bearbeitung',
+    col_done: 'Abgeschlossen'
+  }
+};
+
+let currentLang = 'tr';
+
+function setLanguage(lang) {
+  if (!I18N[lang]) lang = 'tr';
+  currentLang = lang;
+  document.getElementById('langSelect').value = lang;
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (I18N[lang] && I18N[lang][key]) {
+      el.textContent = I18N[lang][key];
+    }
+  });
+}
 
 // ================= INITIALIZATION =================
 document.addEventListener('DOMContentLoaded', async () => {
-  initTabs();
-  initModals();
-  initPwaAndPush();
-  await loadInitialContext();
+  setupNavigation();
+  setupModals();
   setupEventListeners();
 
-  // Her 30 saniyede bir bildirimleri yenile
-  setInterval(loadNotifications, 30000);
+  const savedToken = localStorage.getItem('fg_token');
+  const savedUser = localStorage.getItem('fg_user');
+  const savedTenant = localStorage.getItem('fg_tenant');
+
+  if (savedToken && savedUser && savedTenant) {
+    state.token = savedToken;
+    state.currentUser = JSON.parse(savedUser);
+    state.tenant = JSON.parse(savedTenant);
+    onLoginSuccess(state.currentUser, state.tenant, state.token);
+  } else {
+    showLoginOverlay();
+  }
 });
 
-// Headers with Security Context
 function getHeaders() {
   const headers = { 'Content-Type': 'application/json' };
-  if (state.currentTenantId) headers['x-tenant-id'] = state.currentTenantId;
-  if (state.currentUserId) headers['x-user-id'] = state.currentUserId;
+  if (state.tenant) headers['x-tenant-id'] = state.tenant.id;
+  if (state.currentUser) headers['x-user-id'] = state.currentUser.id;
+  if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
   return headers;
 }
 
-// API Helper
 async function apiCall(endpoint, method = 'GET', body = null) {
   try {
     const opts = { method, headers: getHeaders() };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(endpoint, opts);
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Bilinmeyen sunucu hatası' }));
+      const err = await res.json().catch(() => ({ error: 'İşlem başarısız' }));
       throw new Error(err.error || `HTTP ${res.status}`);
     }
     return await res.json();
@@ -51,521 +135,598 @@ async function apiCall(endpoint, method = 'GET', body = null) {
   }
 }
 
-// ================= LOAD CONTEXT =================
-async function loadInitialContext() {
-  state.tenants = await apiCall('/api/tenants');
-  renderTenantSelect();
-
-  if (state.tenants.length > 0) {
-    state.currentTenantId = state.tenants[0].id;
-    await loadUsersForTenant();
-    await loadProjects();
-  }
+// ================= LOGIN & AUTH =================
+function showLoginOverlay() {
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('appContainer').style.display = 'none';
 }
 
-async function loadUsersForTenant() {
-  state.users = await apiCall('/api/users');
-  renderUserSelect();
-  if (state.users.length > 0 && !state.currentUserId) {
-    state.currentUserId = state.users[0].id;
+function onLoginSuccess(user, tenant, token) {
+  state.currentUser = user;
+  state.tenant = tenant;
+  state.token = token;
+
+  localStorage.setItem('fg_token', token);
+  localStorage.setItem('fg_user', JSON.stringify(user));
+  localStorage.setItem('fg_tenant', JSON.stringify(tenant));
+
+  setLanguage(user.language || 'tr');
+
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appContainer').style.display = 'flex';
+
+  document.getElementById('userNameDisplay').textContent = user.name;
+  document.getElementById('userAvatar').textContent = user.name.slice(0, 1).toUpperCase();
+  document.getElementById('welcomeUserText').textContent = `Hoş geldiniz, ${user.name}!`;
+
+  const roleTitle = user.system_role === 'ADMIN'
+    ? 'Yönetici'
+    : (user.can_create_project ? 'Proje Lideri' : 'Çalışan');
+  document.getElementById('userRoleDisplay').textContent = roleTitle;
+
+  // Admin yetki görünürlüğü
+  const adminElements = document.querySelectorAll('.admin-only');
+  adminElements.forEach(el => {
+    el.style.display = user.system_role === 'ADMIN' ? 'flex' : 'none';
+  });
+
+  // Proje oluşturma butonu
+  const newProjBtn = document.getElementById('newProjectBtn');
+  if (user.system_role === 'ADMIN' || user.can_create_project) {
+    newProjBtn.style.display = 'inline-flex';
+  } else {
+    newProjBtn.style.display = 'none';
   }
+
+  loadInitialData();
+}
+
+function logout() {
+  localStorage.clear();
+  state.currentUser = null;
+  state.token = null;
+  state.tenant = null;
+  showLoginOverlay();
+  showToast('Oturum kapatıldı.', 'info');
+}
+
+// ================= LOAD DATA =================
+async function loadInitialData() {
+  await Promise.all([
+    loadProjects(),
+    loadPersonnel()
+  ]);
 }
 
 async function loadProjects() {
   state.projects = await apiCall('/api/projects');
-  renderProjectSelect();
+  document.getElementById('projectsCount').textContent = state.projects.length;
+  renderProjectSelector();
+  renderProjectsGrid();
 
-  if (state.projects.length > 0) {
+  if (state.projects.length > 0 && !state.currentProjectId) {
     state.currentProjectId = state.projects[0].id;
-    await selectProject(state.currentProjectId);
-  } else {
-    state.currentProjectId = null;
-    clearProjectViews();
   }
-  await loadNotifications();
+
+  if (state.currentProjectId) {
+    await loadProjectTasks(state.currentProjectId);
+  }
 }
 
-async function selectProject(projectId) {
+async function loadProjectTasks(projectId) {
   state.currentProjectId = projectId;
-  const projectData = await apiCall(`/api/projects/${projectId}`);
-  state.permissions = projectData.permissions;
+  const projectSelect = document.getElementById('projectSelect');
+  if (projectSelect) projectSelect.value = projectId;
 
-  updateProjectToolbar(projectData.project);
-  await Promise.all([
-    loadTasks(),
-    loadDependencies(),
-    loadBottlenecks(),
-    loadReports()
-  ]);
+  state.tasks = await apiCall(`/api/projects/${projectId}/tasks`);
+  state.dependencies = await apiCall(`/api/projects/${projectId}/dependencies`);
+
+  renderMyTasks();
+  renderTimeline();
+  renderBoard();
 }
 
-async function loadTasks() {
-  if (!state.currentProjectId) return;
-  state.tasks = await apiCall(`/api/projects/${state.currentProjectId}/tasks`);
-  renderKanban();
-  renderDagNodes();
+async function loadPersonnel() {
+  state.personnelList = await apiCall('/api/users');
+  renderPersonnelTable();
 }
 
-async function loadDependencies() {
-  if (!state.currentProjectId) return;
-  state.dependencies = await apiCall(`/api/projects/${state.currentProjectId}/dependencies`);
-  renderDependenciesTable();
-}
+// ================= RENDER VIEWS =================
 
-async function loadBottlenecks() {
-  if (!state.currentProjectId) return;
-  state.bottlenecks = await apiCall(`/api/projects/${state.currentProjectId}/bottlenecks`);
-  renderBottlenecks();
-}
-
-async function loadNotifications() {
-  const notifs = await apiCall('/api/notifications');
-  state.notifications = notifs;
-  renderNotifications();
-}
-
-async function loadReports() {
-  if (!state.currentProjectId) return;
-  const projReport = await apiCall(`/api/projects/${state.currentProjectId}/report`);
-  renderProjectReport(projReport);
-
-  const perfReport = await apiCall(`/api/reports/performance?user_id=${state.currentUserId}&project_id=${state.currentProjectId}`);
-  renderPerformanceReport(perfReport);
-}
-
-// ================= RENDER FUNCTIONS =================
-
-function renderTenantSelect() {
-  const el = document.getElementById('tenantSelect');
-  el.innerHTML = state.tenants.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-  el.value = state.currentTenantId;
-}
-
-function renderUserSelect() {
-  const el = document.getElementById('userSelect');
-  el.innerHTML = state.users.map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`).join('');
-  el.value = state.currentUserId;
-}
-
-function renderProjectSelect() {
+function renderProjectSelector() {
   const el = document.getElementById('projectSelect');
   if (state.projects.length === 0) {
-    el.innerHTML = '<option value="">(Proje Bulunmuyor)</option>';
+    el.innerHTML = '<option value="">(Proje Yok)</option>';
     return;
   }
   el.innerHTML = state.projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
   el.value = state.currentProjectId;
 }
 
-function updateProjectToolbar(p) {
-  const summaryEl = document.getElementById('projectDatesSummary');
-  summaryEl.innerHTML = `
-    <span class="meta-pill">İlk Plan: <strong>${p.initial_start_date.slice(0, 10)} - ${p.initial_due_date.slice(0, 10)}</strong></span>
-    <span class="meta-pill">Güncel Plan: <strong>${p.current_start_date.slice(0, 10)} - ${p.current_due_date.slice(0, 10)}</strong></span>
-  `;
+// 1. GÖREVLERİM LİSTESİ (MY TASKS)
+function renderMyTasks() {
+  const container = document.getElementById('myTasksTable');
+  container.innerHTML = '';
 
-  // Görünürlük talep butonu
-  const reqBtn = document.getElementById('reqVisibilityBtn');
-  const banner = document.getElementById('assigneeNoticeBanner');
-  if (!state.permissions.isFullViewer) {
-    reqBtn.style.display = 'inline-flex';
-    banner.style.display = 'flex';
-  } else {
-    reqBtn.style.display = 'none';
-    banner.style.display = 'none';
-  }
-}
+  // Giriş yapan kullanıcının görevlerini filtrele (Admin hepsini de görebilir)
+  const myTasks = state.currentUser?.system_role === 'ADMIN'
+    ? state.tasks
+    : state.tasks.filter(t => t.assignee_id === state.currentUser?.id);
 
-function renderKanban() {
-  const cols = {
-    BLOCKED: document.getElementById('cards-blocked'),
-    READY: document.getElementById('cards-ready'),
-    IN_PROGRESS: document.getElementById('cards-inprogress'),
-    COMPLETED: document.getElementById('cards-completed')
-  };
+  document.getElementById('myTasksCount').textContent = myTasks.length;
 
-  const counts = { BLOCKED: 0, READY: 0, IN_PROGRESS: 0, COMPLETED: 0 };
-  Object.values(cols).forEach(c => c.innerHTML = '');
-
-  state.tasks.forEach(t => {
-    counts[t.work_status] = (counts[t.work_status] || 0) + 1;
-    const card = createTaskCard(t);
-    if (cols[t.work_status]) {
-      cols[t.work_status].appendChild(card);
-    }
-  });
-
-  document.getElementById('count-blocked').textContent = counts.BLOCKED;
-  document.getElementById('count-ready').textContent = counts.READY;
-  document.getElementById('count-inprogress').textContent = counts.IN_PROGRESS;
-  document.getElementById('count-completed').textContent = counts.COMPLETED;
-}
-
-function createTaskCard(t) {
-  const card = document.createElement('div');
-  card.className = `task-card card-${t.work_status.toLowerCase()}`;
-
-  const assigneeUser = state.users.find(u => u.id === t.assignee_id);
-  const isAssignee = t.assignee_id === state.currentUserId;
-  const isOverdue = t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
-
-  let depSummaryHtml = '';
-  if (t.limited_dependencies && t.limited_dependencies.length > 0) {
-    const items = t.limited_dependencies.map(d => `
-      <div class="dep-item">
-        <span>${d.relation === 'PREDECESSOR' ? '⬅️ Öncül:' : '➡️ Ardıl:'} <strong>${d.title}</strong></span>
-        <span class="dep-badge ${d.is_blocking ? 'blocking' : 'done'}">${d.work_status}</span>
-      </div>
-    `).join('');
-
-    depSummaryHtml = `
-      <div class="dep-summary-box">
-        <div class="dep-summary-title">Bağımlılık Durumu</div>
-        ${items}
+  if (myTasks.length === 0) {
+    container.innerHTML = `
+      <div style="padding:40px; text-align:center; color:#64748b;">
+        <span style="font-size:2rem;">🎉</span>
+        <h4 style="margin-top:10px; color:#f8fafc;">Şu anda bekleyen göreviniz bulunmuyor!</h4>
+        <p style="font-size:0.85rem; margin-top:4px;">Yeni bir iş atandığında burada listelenecektir.</p>
       </div>
     `;
+    return;
   }
 
-  let actionsHtml = '';
-  if (t.work_status === 'READY') {
-    actionsHtml += `<button class="action-btn primary-btn btn-sm btn-start" data-id="${t.id}">▶ Başlat</button>`;
-  }
-  if (t.work_status === 'IN_PROGRESS' || t.work_status === 'READY') {
-    actionsHtml += `<button class="action-btn secondary-btn btn-sm btn-complete" data-id="${t.id}">✓ Tamamla</button>`;
-  }
-  if (isOverdue) {
-    actionsHtml += `<button class="action-btn outline-btn btn-sm btn-explain" data-id="${t.id}" data-title="${t.title}">⚠️ Açıklama Gir</button>`;
-  }
+  myTasks.forEach(task => {
+    const isDone = task.work_status === 'COMPLETED';
+    const isOverdue = !isDone && new Date(task.current_due_date) < new Date();
+    const row = document.createElement('div');
+    row.className = 'task-list-row';
 
-  card.innerHTML = `
-    <div class="card-title">${t.title}</div>
-    <div class="card-meta-row">
-      <span class="assignee-chip">👤 ${assigneeUser ? assigneeUser.name : 'Atanmamış'}</span>
-      <span class="due-chip ${isOverdue ? 'overdue' : ''}">📅 ${t.current_due_date.slice(0, 10)}</span>
-    </div>
-    ${depSummaryHtml}
-    <div class="card-actions-bar">
-      ${actionsHtml}
-    </div>
-  `;
+    // Bağımlılık uyarısı (Öncül bekleniyor mu?)
+    let depNote = '';
+    if (task.limited_dependencies && task.limited_dependencies.length > 0) {
+      const blocking = task.limited_dependencies.find(d => d.is_blocking);
+      if (blocking) {
+        depNote = `<span class="task-dep-pill">⏳ Öncül: "${blocking.title}" tamamlanmalı</span>`;
+      }
+    }
 
-  return card;
+    const statusPillClass = {
+      BLOCKED: 'pill-status-blocked',
+      READY: 'pill-status-ready',
+      IN_PROGRESS: 'pill-status-progress',
+      COMPLETED: 'pill-status-done'
+    }[task.work_status] || 'pill-status-ready';
+
+    const statusText = {
+      BLOCKED: 'Öncül Bekliyor',
+      READY: 'Başlamaya Hazır',
+      IN_PROGRESS: 'Devam Ediyor',
+      COMPLETED: 'Tamamlandı'
+    }[task.work_status] || task.work_status;
+
+    let quickActionBtn = '';
+    if (task.work_status === 'READY') {
+      quickActionBtn = `<button class="action-btn primary-btn sm-btn btn-start-task" data-id="${task.id}">▶ Başlat</button>`;
+    } else if (isOverdue) {
+      quickActionBtn = `<button class="action-btn outline-btn sm-btn btn-explain-task" data-id="${task.id}" data-title="${task.title}">⚠️ Gecikme Bildir</button>`;
+    }
+
+    row.innerHTML = `
+      <button class="task-check-btn ${isDone ? 'checked' : ''}" data-id="${task.id}" title="${isDone ? 'Tamamlandı' : 'Tamamla'}"></button>
+      <div class="task-info-col">
+        <span class="task-main-title ${isDone ? 'done-title' : ''}">${task.title}</span>
+        ${depNote}
+      </div>
+      <div class="task-date-col ${isOverdue ? 'overdue' : ''}">
+        📅 ${task.current_due_date.slice(0, 10)} ${isOverdue ? '(Gecikti)' : ''}
+      </div>
+      <div>
+        <span class="task-status-pill ${statusPillClass}">${statusText}</span>
+      </div>
+      <div>${quickActionBtn}</div>
+    `;
+
+    container.appendChild(row);
+  });
 }
 
-function renderDagNodes() {
-  const canvas = document.getElementById('dagCanvas');
-  canvas.innerHTML = '';
+// 2. PROJELER GRID GÖRÜNÜMÜ
+function renderProjectsGrid() {
+  const container = document.getElementById('projectsCardsGrid');
+  container.innerHTML = '';
+
+  if (state.projects.length === 0) {
+    container.innerHTML = '<p style="color:#64748b;">Henüz proje bulunmuyor.</p>';
+    return;
+  }
+
+  state.projects.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    card.dataset.id = p.id;
+
+    card.innerHTML = `
+      <div class="proj-card-header">
+        <h4 class="proj-title">${p.title}</h4>
+      </div>
+      <p class="proj-desc">${p.description || 'Açıklama belirtilmemiş.'}</p>
+      
+      <div class="proj-progress-box">
+        <div class="proj-progress-meta">
+          <span>İlerleme</span>
+          <strong>${p.id === state.currentProjectId ? 'Aktif Proje' : 'Görüntüle ➔'}</strong>
+        </div>
+        <div class="proj-track">
+          <div class="proj-fill" style="width: 50%;"></div>
+        </div>
+      </div>
+
+      <div class="proj-dates-row">
+        <span>Başlangıç: ${p.current_start_date.slice(0, 10)}</span>
+        <span>Bitiş: ${p.current_due_date.slice(0, 10)}</span>
+      </div>
+    `;
+
+    card.addEventListener('click', async () => {
+      await loadProjectTasks(p.id);
+      switchView('view-my-tasks');
+    });
+
+    container.appendChild(card);
+  });
+}
+
+// 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE)
+function renderTimeline() {
+  const container = document.getElementById('timelineChart');
+  container.innerHTML = '';
+
+  const activeProj = state.projects.find(p => p.id === state.currentProjectId);
+  document.getElementById('timelineProjectName').textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
 
   if (state.tasks.length === 0) {
-    canvas.innerHTML = '<p class="empty-state">Projeye ait görev bulunmuyor.</p>';
+    container.innerHTML = '<p style="color:#64748b; padding:20px;">Bu projede gösterilecek görev yok.</p>';
     return;
   }
 
   state.tasks.forEach((t, idx) => {
-    const node = document.createElement('div');
-    node.className = `dag-node node-${t.work_status.toLowerCase()}`;
-    node.innerHTML = `
-      <div style="font-weight:700; font-size:0.85rem; margin-bottom:4px;">${t.title}</div>
-      <div style="font-size:0.75rem; color:#94a3b8;">Durum: <strong>${t.work_status}</strong></div>
-      <div style="font-size:0.72rem; color:#64748b; margin-top:4px;">Bitiş: ${t.current_due_date.slice(0, 10)}</div>
-    `;
-    canvas.appendChild(node);
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
 
-    if (idx < state.tasks.length - 1) {
-      const arrow = document.createElement('div');
-      arrow.className = 'dag-arrow';
-      arrow.innerHTML = '➔';
-      canvas.appendChild(arrow);
+    const barClass = {
+      BLOCKED: 'bar-blocked',
+      READY: 'bar-ready',
+      IN_PROGRESS: 'bar-progress',
+      COMPLETED: 'bar-done'
+    }[t.work_status] || 'bar-ready';
+
+    // Bağımlı olduğu öncül var mı?
+    const predDep = state.dependencies.find(d => d.successor_id === t.id);
+    let depLine = '';
+    if (predDep) {
+      const predTask = state.tasks.find(pt => pt.id === predDep.predecessor_id);
+      depLine = `<span class="gantt-dep-link">⬅️ "${predTask ? predTask.title : 'Öncül'}" bittikten sonra</span>`;
     }
+
+    row.innerHTML = `
+      <div class="gantt-task-name" title="${t.title}">
+        ${idx + 1}. ${t.title}
+      </div>
+      <div class="gantt-bar-area">
+        <div class="gantt-bar ${barClass}" style="width: ${40 + (idx * 8)}%;">
+          <span>${t.current_start_date.slice(5, 10)} ➔ ${t.current_due_date.slice(5, 10)}</span>
+        </div>
+        ${depLine}
+      </div>
+    `;
+
+    container.appendChild(row);
   });
 }
 
-function renderDependenciesTable() {
-  const tbody = document.querySelector('#depsTable tbody');
+// 4. İŞ PANOSU (KANBAN)
+function renderBoard() {
+  const lists = {
+    TODO: document.getElementById('bListTodo'),
+    DOING: document.getElementById('bListDoing'),
+    DONE: document.getElementById('bListDone')
+  };
+
+  const counts = { TODO: 0, DOING: 0, DONE: 0 };
+  Object.values(lists).forEach(l => l.innerHTML = '');
+
+  state.tasks.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'board-card';
+
+    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
+    const isOverdue = t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
+
+    card.innerHTML = `
+      <div style="font-weight:600; font-size:0.9rem; line-height:1.3;">${t.title}</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94a3b8;">
+        <span>👤 ${assignee ? assignee.name : 'Atanmamış'}</span>
+        <span class="${isOverdue ? 'due-chip overdue' : ''}">${t.current_due_date.slice(0, 10)}</span>
+      </div>
+    `;
+
+    if (t.work_status === 'COMPLETED') {
+      counts.DONE++;
+      lists.DONE.appendChild(card);
+    } else if (t.work_status === 'IN_PROGRESS') {
+      counts.DOING++;
+      lists.DOING.appendChild(card);
+    } else {
+      counts.TODO++;
+      lists.TODO.appendChild(card);
+    }
+  });
+
+  document.getElementById('bCountTodo').textContent = counts.TODO;
+  document.getElementById('bCountDoing').textContent = counts.DOING;
+  document.getElementById('bCountDone').textContent = counts.DONE;
+}
+
+// 5. PERSONEL TABLOSU (ADMIN)
+function renderPersonnelTable() {
+  const tbody = document.getElementById('personnelTableBody');
   tbody.innerHTML = '';
 
-  if (state.dependencies.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b;">Tanımlı bağımlılık yok.</td></tr>';
-    return;
-  }
+  const countryFlags = {
+    'Türkiye': '🇹🇷 Türkiye',
+    'Almanya': '🇩🇪 Almanya',
+    'İngiltere': '🇬🇧 İngiltere',
+    'USA': '🇺🇸 ABD'
+  };
 
-  state.dependencies.forEach(d => {
-    const pTask = state.tasks.find(t => t.id === d.predecessor_id);
-    const sTask = state.tasks.find(t => t.id === d.successor_id);
+  state.personnelList.forEach(u => {
+    const isSelf = u.id === state.currentUser?.id;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><strong>${pTask ? pTask.title : d.predecessor_id}</strong></td>
-      <td><span class="formula-pill">Finish-to-Start</span></td>
-      <td><strong>${sTask ? sTask.title : d.successor_id}</strong></td>
-      <td>${d.wait_start_time ? d.wait_start_time.slice(0, 19).replace('T', ' ') : '-'}</td>
       <td>
-        <button class="action-btn outline-btn btn-sm btn-delete-dep" data-pred="${d.predecessor_id}" data-succ="${d.successor_id}">Kaldır</button>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="profile-avatar" style="width:28px; height:28px; font-size:0.75rem;">${u.name.slice(0, 1).toUpperCase()}</div>
+          <strong>${u.name}</strong> ${isSelf ? '<span class="nav-badge neutral">Siz</span>' : ''}
+        </div>
+      </td>
+      <td>
+        <div>${u.email}</div>
+        <div style="font-size:0.75rem; color:#94a3b8;">${u.phone || '-'}</div>
+      </td>
+      <td>
+        <span>${countryFlags[u.country] || u.country} (${(u.language || 'tr').toUpperCase()})</span>
+      </td>
+      <td>${u.department || 'Genel'}</td>
+      <td>
+        <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; cursor:pointer;">
+          <input type="checkbox" class="perm-toggle" data-id="${u.id}" ${u.can_create_project ? 'checked' : ''} ${isSelf ? 'disabled' : ''}>
+          <span>${u.can_create_project ? 'Yetkili' : 'Standart'}</span>
+        </label>
+      </td>
+      <td>
+        <button class="action-btn outline-btn sm-btn btn-edit-personnel" data-id="${u.id}">Düzenle</button>
       </td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-function renderBottlenecks() {
-  const container = document.getElementById('bottlenecksList');
-  container.innerHTML = '';
-
-  if (state.bottlenecks.length === 0) {
-    container.innerHTML = `
-      <div class="card" style="text-align:center; padding:30px; grid-column: 1 / -1;">
-        <span style="font-size:2rem;">🎉</span>
-        <h3 style="margin-top:10px;">Aktif Darboğaz Bulunmuyor</h3>
-        <p style="color:#94a3b8; font-size:0.85rem;">Şu anda geciken ve ardıl görevleri engelleyen bir kök görev tespit edilmedi.</p>
-      </div>
-    `;
-    return;
-  }
-
-  state.bottlenecks.forEach(b => {
-    const victims = b.affected_tasks.map(v => `<li style="margin-left:20px;">🚨 <strong>${v.title}</strong> (BLOCKED)</li>`).join('');
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3 style="color:#fb7185;">Kök Darboğaz: "${b.bottleneck_title}"</h3>
-        <span class="column-badge" style="background:rgba(244,63,94,0.2); color:#fb7185;">Asıl Geciken Görev</span>
-      </div>
-      <p style="font-size:0.85rem; color:#cbd5e1; margin-bottom:10px;">
-        Bu görev güncel teslim tarihini aştığı için aşağıdaki ardıl görevler başlayamamakta ve mağdur olmaktadır:
-      </p>
-      <ul style="color:#94a3b8; font-size:0.85rem; margin-bottom:14px;">
-        ${victims}
-      </ul>
-      <button class="action-btn primary-btn btn-sm btn-explain" data-id="${b.bottleneck_task_id}" data-title="${b.bottleneck_title}">
-        Gecikme Gerekçesi / Açıklama Gir
-      </button>
-    `;
-    container.appendChild(card);
+// ================= NAVIGATION =================
+function setupNavigation() {
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const viewId = btn.dataset.nav;
+      switchView(viewId);
+    });
   });
 }
 
-function renderProjectReport(r) {
-  document.getElementById('repProjTitle').textContent = r.title;
-  document.getElementById('repInitialStart').textContent = r.initial_start_date ? r.initial_start_date.slice(0, 10) : '-';
-  document.getElementById('repInitialDue').textContent = r.initial_due_date ? r.initial_due_date.slice(0, 10) : '-';
-  document.getElementById('repCurrentStart').textContent = r.current_start_date ? r.current_start_date.slice(0, 10) : '-';
-  document.getElementById('repCurrentDue').textContent = r.current_due_date ? r.current_due_date.slice(0, 10) : '-';
-  document.getElementById('repActualStart').textContent = r.actual_start_date ? r.actual_start_date.slice(0, 19).replace('T', ' ') : '(Başlamadı)';
-  document.getElementById('repActualFinish').textContent = r.actual_finish_date ? r.actual_finish_date.slice(0, 19).replace('T', ' ') : '(Tamamlanmadı)';
+function switchView(viewId) {
+  state.currentView = viewId;
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
 
-  document.getElementById('repPercent').textContent = `${r.completion_rate}%`;
-  document.getElementById('repTaskCounts').textContent = `${r.completed_tasks} / ${r.total_tasks} Görev Tamamlandı`;
-  document.getElementById('repProgressFill').style.width = `${r.completion_rate}%`;
-}
+  const activeNavBtn = document.querySelector(`[data-nav="${viewId}"]`);
+  if (activeNavBtn) activeNavBtn.classList.add('active');
 
-function renderPerformanceReport(p) {
-  document.getElementById('perfScoreValue').textContent = p.performance_score !== null ? p.performance_score : '--';
-  document.getElementById('perfHCount').textContent = p.eligible_h_count;
-  document.getElementById('perfExCount').textContent = `${p.excluded_dependency_count} Görev Muaf Tutuldu`;
-  document.getElementById('perfSCount').textContent = p.eligible_s_count;
-  document.getElementById('perfZRatio').textContent = p.z_ratio !== null ? `${Math.round(p.z_ratio * 100)}%` : '--';
-  document.getElementById('perfTRatio').textContent = p.t_ratio !== null ? `${Math.round(p.t_ratio * 100)}%` : '--';
-}
+  const activeSection = document.getElementById(viewId);
+  if (activeSection) activeSection.classList.add('active');
 
-function renderNotifications() {
-  const badge = document.getElementById('notifBadge');
-  const list = document.getElementById('notifList');
+  const titles = {
+    'view-my-tasks': 'Görevlerim',
+    'view-projects': 'Projeler',
+    'view-timeline': 'Zaman Çizelgesi (Gantt)',
+    'view-board': 'İş Panosu (Kanban)',
+    'view-team': 'Ekip & Personel'
+  };
+  document.getElementById('currentViewTitle').textContent = titles[viewId] || 'Panel';
 
-  if (state.notifications.length > 0) {
-    badge.textContent = state.notifications.length;
-    badge.style.display = 'inline-block';
-
-    list.innerHTML = state.notifications.map(n => `
-      <div class="notif-card">
-        <div class="notif-title">${n.title}</div>
-        <div>${n.message}</div>
-        <div class="notif-time">${new Date(n.created_at).toLocaleString('tr-TR')}</div>
-      </div>
-    `).join('');
+  // Proje seçici göster/gizle
+  const projContainer = document.getElementById('projectSelectorContainer');
+  if (viewId === 'view-team' || viewId === 'view-projects') {
+    projContainer.style.display = 'none';
   } else {
-    badge.style.display = 'none';
-    list.innerHTML = '<p class="empty-state">Henüz bildirim bulunmuyor.</p>';
+    projContainer.style.display = 'flex';
   }
 }
 
-// ================= EVENT LISTENERS =================
+// ================= MODALS & EVENTS =================
+function setupModals() {
+  document.querySelectorAll('.modal-close, [data-close]').forEach(el => {
+    el.addEventListener('click', () => {
+      const modalId = el.dataset.close || el.closest('.modal-backdrop')?.id;
+      if (modalId) document.getElementById(modalId)?.classList.remove('open');
+    });
+  });
+}
+
 function setupEventListeners() {
-  // Tenant Switcher
-  document.getElementById('tenantSelect').addEventListener('change', async (e) => {
-    state.currentTenantId = e.target.value;
-    state.currentUserId = null;
-    await loadUsersForTenant();
-    await loadProjects();
-    showToast('Şirket / Kiracı bağlamı güncellendi.', 'info');
+  // Login Form
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value.trim();
+
+    try {
+      const res = await apiCall('/api/auth/login', 'POST', { email, password });
+      showToast('Giriş başarılı!', 'success');
+      onLoginSuccess(res.user, res.tenant, res.token);
+    } catch (err) {}
   });
 
-  // User Switcher
-  document.getElementById('userSelect').addEventListener('change', async (e) => {
-    state.currentUserId = e.target.value;
-    if (state.currentProjectId) {
-      await selectProject(state.currentProjectId);
-    }
-    showToast(`Aktif kullanıcı: ${state.users.find(u => u.id === state.currentUserId)?.name}`, 'info');
+  // Hızlı Demo Giriş Butonları
+  document.querySelectorAll('.quick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('loginEmail').value = btn.dataset.email;
+      document.getElementById('loginPassword').value = btn.dataset.pass;
+      document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+    });
   });
 
-  // Project Switcher
+  // Çıkış
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+
+  // Dil Değiştirici
+  document.getElementById('langSelect').addEventListener('change', (e) => {
+    setLanguage(e.target.value);
+  });
+
+  // Proje Seçici
   document.getElementById('projectSelect').addEventListener('change', async (e) => {
     if (e.target.value) {
-      await selectProject(e.target.value);
+      await loadProjectTasks(e.target.value);
     }
   });
 
-  // Task Buttons Delegation (Başlat, Tamamla, Açıklama)
-  document.getElementById('tab-tasks').addEventListener('click', async (e) => {
-    const startBtn = e.target.closest('.btn-start');
+  // Görev Tamamla (Check Butonu)
+  document.getElementById('myTasksTable').addEventListener('click', async (e) => {
+    const checkBtn = e.target.closest('.task-check-btn');
+    if (checkBtn) {
+      const taskId = checkBtn.dataset.id;
+      const res = await apiCall(`/api/tasks/${taskId}/complete`, 'POST');
+      showToast('Görev tamamlandı!', 'success');
+      await loadProjectTasks(state.currentProjectId);
+    }
+
+    const startBtn = e.target.closest('.btn-start-task');
     if (startBtn) {
       const taskId = startBtn.dataset.id;
       await apiCall(`/api/tasks/${taskId}/start`, 'POST');
-      showToast('Görev başlatıldı (IN_PROGRESS).', 'success');
-      await loadTasks();
-      await loadReports();
+      showToast('Görev başlatıldı.', 'success');
+      await loadProjectTasks(state.currentProjectId);
     }
 
-    const compBtn = e.target.closest('.btn-complete');
-    if (compBtn) {
-      const taskId = compBtn.dataset.id;
-      const res = await apiCall(`/api/tasks/${taskId}/complete`, 'POST');
-      showToast(`Görev tamamlandı! ${res.newlyReadyTaskIds?.length ? res.newlyReadyTaskIds.length + ' ardıl görev READY oldu.' : ''}`, 'success');
-      await loadTasks();
-      await loadBottlenecks();
-      await loadReports();
-    }
-
-    const expBtn = e.target.closest('.btn-explain');
+    const expBtn = e.target.closest('.btn-explain-task');
     if (expBtn) {
       openExplanationModal(expBtn.dataset.id, expBtn.dataset.title);
     }
   });
 
-  // Bottleneck Explanation Button
-  document.getElementById('tab-bottlenecks').addEventListener('click', (e) => {
-    const expBtn = e.target.closest('.btn-explain');
-    if (expBtn) {
-      openExplanationModal(expBtn.dataset.id, expBtn.dataset.title);
-    }
+  // Yeni Görev Modalı Aç
+  document.getElementById('newTaskBtn').addEventListener('click', () => {
+    populateTaskModalSelects();
+    document.getElementById('taskModal').classList.add('open');
   });
 
-  // Delete Dependency
-  document.querySelector('#depsTable').addEventListener('click', async (e) => {
-    const delBtn = e.target.closest('.btn-delete-dep');
-    if (delBtn) {
-      const { pred, succ } = delBtn.dataset;
-      await apiCall('/api/dependencies', 'DELETE', { predecessor_id: pred, successor_id: succ });
-      showToast('Bağımlılık kaldırıldı.', 'info');
-      await loadDependencies();
-      await loadTasks();
+  // Yeni Görev Kaydet (Öncül Bağımlılığı da Otomatik Ekler!)
+  document.getElementById('taskForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('tTitle').value.trim();
+    const assignee_id = document.getElementById('tAssignee').value || undefined;
+    const initial_start_date = new Date(document.getElementById('tStart').value).toISOString();
+    const initial_due_date = new Date(document.getElementById('tDue').value).toISOString();
+    const description = document.getElementById('tDesc').value.trim();
+    const predecessor_id = document.getElementById('tPredecessor').value;
+
+    const newTask = await apiCall('/api/tasks', 'POST', {
+      project_id: state.currentProjectId,
+      title,
+      assignee_id,
+      initial_start_date,
+      initial_due_date,
+      description
+    });
+
+    // Eğer öncül seçildiyse bağımlılığı anında bağla
+    if (predecessor_id) {
+      try {
+        await apiCall('/api/dependencies', 'POST', {
+          predecessor_id,
+          successor_id: newTask.id
+        });
+      } catch (err) {
+        showToast('Görev eklendi fakat bağımlılık döngü nedeniyle bağlanamadı.', 'warning');
+      }
     }
+
+    showToast('Görev başarıyla oluşturuldu.', 'success');
+    document.getElementById('taskModal').classList.remove('open');
+    e.target.reset();
+    await loadProjectTasks(state.currentProjectId);
   });
 
-  // Modals Open
+  // Yeni Proje Modalı
   document.getElementById('newProjectBtn').addEventListener('click', () => {
     document.getElementById('projectModal').classList.add('open');
   });
 
-  document.getElementById('newTaskBtn').addEventListener('click', () => {
-    populateAssigneeSelect();
-    document.getElementById('taskModal').classList.add('open');
-  });
-
-  const openDepModal = () => {
-    populateDepSelects();
-    document.getElementById('depModal').classList.add('open');
-  };
-  document.getElementById('addDepQuickBtn').addEventListener('click', openDepModal);
-  document.getElementById('addDepFromDagBtn').addEventListener('click', openDepModal);
-
-  // Visibility Request
-  document.getElementById('reqVisibilityBtn').addEventListener('click', async () => {
-    await apiCall(`/api/projects/${state.currentProjectId}/visibility-request`, 'POST');
-    showToast('Proje görünürlük talebiniz yöneticiye iletildi (KAB03).', 'info');
-  });
-
-  // Worker Trigger
-  document.getElementById('triggerWorkerBtn').addEventListener('click', async () => {
-    const res = await apiCall('/api/worker/run', 'POST');
-    const logEl = document.getElementById('workerLog');
-    const time = new Date().toLocaleTimeString('tr-TR');
-    logEl.innerHTML += `<div class="log-line success">[${time}] Worker taraması tamamlandı: ${res.delaysEvaluated} görev kontrol edildi, ${res.remindersSent} hatırlatma tetiklendi.</div>`;
-    showToast('Worker başarıyla çalıştırıldı.', 'success');
-    await loadNotifications();
-    await loadBottlenecks();
-  });
-
-  // Forms Submits
   document.getElementById('projectForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const body = {
-      title: document.getElementById('pTitle').value,
-      description: document.getElementById('pDesc').value,
-      initial_start_date: new Date(document.getElementById('pStart').value).toISOString(),
-      initial_due_date: new Date(document.getElementById('pDue').value).toISOString()
-    };
-    const created = await apiCall('/api/projects', 'POST', body);
-    showToast('Proje başarıyla oluşturuldu.', 'success');
+    const title = document.getElementById('pTitle').value.trim();
+    const description = document.getElementById('pDesc').value.trim();
+    const initial_start_date = new Date(document.getElementById('pStart').value).toISOString();
+    const initial_due_date = new Date(document.getElementById('pDue').value).toISOString();
+
+    const newProj = await apiCall('/api/projects', 'POST', {
+      title,
+      description,
+      initial_start_date,
+      initial_due_date
+    });
+
+    showToast('Yeni proje oluşturuldu.', 'success');
     document.getElementById('projectModal').classList.remove('open');
     e.target.reset();
     await loadProjects();
-    await selectProject(created.id);
+    await loadProjectTasks(newProj.id);
   });
 
-  document.getElementById('taskForm').addEventListener('submit', async (e) => {
+  // Yeni Personel Modalı (Admin)
+  document.getElementById('newPersonnelBtn')?.addEventListener('click', () => {
+    document.getElementById('personnelForm').reset();
+    document.getElementById('personnelModal').classList.add('open');
+  });
+
+  document.getElementById('personnelForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const body = {
-      project_id: state.currentProjectId,
-      title: document.getElementById('tTitle').value,
-      assignee_id: document.getElementById('tAssignee').value || undefined,
-      initial_start_date: new Date(document.getElementById('tStart').value).toISOString(),
-      initial_due_date: new Date(document.getElementById('tDue').value).toISOString(),
-      description: document.getElementById('tDesc').value
+      name: document.getElementById('persName').value.trim(),
+      email: document.getElementById('persEmail').value.trim(),
+      phone: document.getElementById('persPhone').value.trim(),
+      password: document.getElementById('persPassword').value.trim() || '123',
+      country: document.getElementById('persCountry').value,
+      department: document.getElementById('persDept').value.trim() || 'Genel',
+      can_create_project: document.getElementById('persCanCreateProj').checked
     };
-    await apiCall('/api/tasks', 'POST', body);
-    showToast('Görev başarıyla oluşturuldu.', 'success');
-    document.getElementById('taskModal').classList.remove('open');
-    e.target.reset();
-    await loadTasks();
-    await loadReports();
+
+    await apiCall('/api/admin/personnel', 'POST', body);
+    showToast('Personel kartı eklendi.', 'success');
+    document.getElementById('personnelModal').classList.remove('open');
+    await loadPersonnel();
   });
 
-  document.getElementById('depForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const pred = document.getElementById('depPred').value;
-    const succ = document.getElementById('depSucc').value;
-
-    try {
-      await apiCall('/api/dependencies', 'POST', { predecessor_id: pred, successor_id: succ });
-      showToast('Bağımlılık başarıyla eklendi.', 'success');
-      document.getElementById('depModal').classList.remove('open');
-      await loadDependencies();
-      await loadTasks();
-    } catch (err) {
-      document.getElementById('depWarningBox').textContent = err.message;
-      document.getElementById('depWarningBox').style.display = 'block';
+  // Personel Proje Yetki Toggle
+  document.getElementById('personnelTable')?.addEventListener('change', async (e) => {
+    const toggle = e.target.closest('.perm-toggle');
+    if (toggle) {
+      await apiCall(`/api/admin/personnel/${toggle.dataset.id}`, 'PUT', {
+        can_create_project: toggle.checked
+      });
+      showToast('Personel yetkisi güncellendi.', 'success');
     }
   });
 
+  // Gecikme Açıklama Formu
   document.getElementById('explanationForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const taskId = e.target.dataset.taskId;
-    const text = document.getElementById('expText').value;
+    const text = document.getElementById('expText').value.trim();
     await apiCall(`/api/tasks/${taskId}/explanation`, 'POST', { explanation_text: text });
-    showToast('Gecikme gerekçesi kaydedildi ve yöneticilere bildirildi.', 'success');
+    showToast('Gecikme gerekçesi kaydedildi.', 'success');
     document.getElementById('explanationModal').classList.remove('open');
     e.target.reset();
-    await loadBottlenecks();
-    await loadNotifications();
-  });
-
-  // Notification Drawer
-  document.getElementById('notifBellBtn').addEventListener('click', () => {
-    document.getElementById('notifDrawer').classList.add('open');
-  });
-  document.getElementById('closeDrawerBtn').addEventListener('click', () => {
-    document.getElementById('notifDrawer').classList.remove('open');
+    await loadProjectTasks(state.currentProjectId);
   });
 }
 
@@ -576,93 +737,16 @@ function openExplanationModal(taskId, title) {
   document.getElementById('explanationModal').classList.add('open');
 }
 
-function populateAssigneeSelect() {
-  const el = document.getElementById('tAssignee');
-  el.innerHTML = '<option value="">(Atanmamış)</option>' +
-    state.users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+function populateTaskModalSelects() {
+  const assigneeEl = document.getElementById('tAssignee');
+  assigneeEl.innerHTML = '<option value="">(Atanmamış)</option>' +
+    state.personnelList.map(p => `<option value="${p.id}">${p.name} (${p.department || 'Genel'})</option>`).join('');
+
+  const predEl = document.getElementById('tPredecessor');
+  predEl.innerHTML = '<option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>' +
+    state.tasks.map(t => `<option value="${t.id}">${t.title} (${t.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'})</option>`).join('');
 }
 
-function populateDepSelects() {
-  const pred = document.getElementById('depPred');
-  const succ = document.getElementById('depSucc');
-  const options = state.tasks.map(t => `<option value="${t.id}">${t.title} (${t.work_status})</option>`).join('');
-  pred.innerHTML = options;
-  succ.innerHTML = options;
-  document.getElementById('depWarningBox').style.display = 'none';
-}
-
-// ================= TABS & MODALS =================
-function initTabs() {
-  document.querySelectorAll('.tab-button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-      btn.classList.add('active');
-      const target = document.getElementById(btn.dataset.tab);
-      if (target) target.classList.add('active');
-    });
-  });
-}
-
-function initModals() {
-  document.querySelectorAll('.modal-close, [data-close]').forEach(el => {
-    el.addEventListener('click', () => {
-      const modalId = el.dataset.close || el.closest('.modal-backdrop')?.id;
-      if (modalId) {
-        document.getElementById(modalId)?.classList.remove('open');
-      }
-    });
-  });
-}
-
-// ================= PWA & WEB PUSH (WEB01-WEB05) =================
-function initPwaAndPush() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(reg => {
-      console.log('PWA Service Worker kayıtlı:', reg.scope);
-    }).catch(err => {
-      console.warn('PWA Service Worker kayıt hatası:', err);
-    });
-  }
-
-  const pushBtn = document.getElementById('pwaPushBtn');
-  const pushText = document.getElementById('pwaPushStatusText');
-
-  if (!('Notification' in window)) {
-    pushText.textContent = 'Push Desteklenmiyor';
-    return;
-  }
-
-  if (Notification.permission === 'granted') {
-    pushText.textContent = 'Push Açık';
-    pushBtn.classList.add('active');
-  }
-
-  pushBtn.addEventListener('click', async () => {
-    if (Notification.permission !== 'granted') {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        pushText.textContent = 'Push Açık';
-        pushBtn.classList.add('active');
-        showToast('Web Push bildirimleri başarıyla etkinleştirildi.', 'success');
-
-        // Sunucuya abonelik simülasyonu kaydet
-        await apiCall('/api/notifications/push-subscribe', 'POST', {
-          endpoint: `https://push.services.mozilla.com/v1/mock-${Date.now()}`,
-          p256dh: 'mock-key',
-          auth: 'mock-auth'
-        });
-      } else {
-        showToast('Bildirim izni verilmedi.', 'warning');
-      }
-    } else {
-      showToast('Web Push zaten etkin.', 'info');
-    }
-  });
-}
-
-// ================= TOAST =================
 function showToast(message, type = 'info') {
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');
@@ -673,14 +757,5 @@ function showToast(message, type = 'info') {
   setTimeout(() => {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
-  }, 4000);
-}
-
-function clearProjectViews() {
-  document.getElementById('cards-blocked').innerHTML = '';
-  document.getElementById('cards-ready').innerHTML = '';
-  document.getElementById('cards-inprogress').innerHTML = '';
-  document.getElementById('cards-completed').innerHTML = '';
-  document.getElementById('dagCanvas').innerHTML = '';
-  document.getElementById('projectDatesSummary').innerHTML = '';
+  }, 3500);
 }

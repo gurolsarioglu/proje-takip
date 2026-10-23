@@ -58,7 +58,20 @@ app.use(express.static(publicDir));
 
 // --- API Endpoints ---
 
-// 1. Auth & Context
+// 1. Auth & Login
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'E-posta ve şifre zorunludur.' });
+    }
+    const result = authService.login(email, password);
+    res.json(result);
+  } catch (err: any) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
 app.get('/api/tenants', (req, res) => {
   res.json(db.getTenants());
 });
@@ -72,7 +85,71 @@ app.get('/api/current-context', (req, res) => {
   const auth = getAuthContext(req);
   const tenant = db.getTenantById(auth.tenant_id);
   const user = db.getUserById(auth.tenant_id, auth.user_id);
-  res.json({ auth, tenant, user });
+  if (user) {
+    const { password, ...safeUser } = user;
+    res.json({ auth, tenant, user: safeUser });
+  } else {
+    res.json({ auth, tenant, user: null });
+  }
+});
+
+// Admin Personel Kartı Yönetimi
+app.get('/api/admin/personnel', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const caller = db.getUserById(auth.tenant_id, auth.user_id);
+    if (caller?.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yetkisiz Erişim: Personel kartlarını yalnızca Sistem Yöneticisi görebilir.' });
+    }
+    const users = authService.listUsers(auth.tenant_id);
+    res.json(users);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/personnel', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const caller = db.getUserById(auth.tenant_id, auth.user_id);
+    if (caller?.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yetkisiz İşlem: Yeni personel kartı yalnızca Sistem Yöneticisi tarafından oluşturulabilir.' });
+    }
+
+    const { name, email, phone, country, password, can_create_project, department, system_role } = req.body;
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Ad Soyad ve E-posta alanları zorunludur.' });
+    }
+
+    const existing = db.getUserByEmail(email);
+    if (existing) {
+      return res.status(400).json({ error: 'Bu e-posta adresine sahip bir personel zaten mevcut.' });
+    }
+
+    const newUser = authService.createUser(auth.tenant_id, name, email, undefined, {
+      phone,
+      country: country || 'Türkiye',
+      password: password || '123',
+      can_create_project: !!can_create_project,
+      department: department || 'Genel',
+      system_role: system_role || 'USER'
+    });
+
+    const { password: _, ...safeUser } = newUser;
+    res.status(201).json(safeUser);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/personnel/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const updated = authService.updateUser(auth, req.params.id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
 });
 
 // 2. Projects

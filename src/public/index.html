@@ -3,404 +3,334 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="Microsoft 365 Entegreli Çok Kiracılı Görev ve Bağımlılık Yönetim Sistemi - Şartname Sürüm 0.3">
-  <meta name="theme-color" content="#0b0f19">
-  <title>Görev ve Bağımlılık Yönetim Sistemi (v0.3)</title>
+  <meta name="description" content="FG Group - Sadeleştirilmiş Proje & Görev Yönetimi">
+  <meta name="theme-color" content="#0f172a">
+  <title>FG Group - Proje & Görev Yönetimi</title>
   
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <!-- Üst Başlık ve Oturum Barı -->
-  <header class="app-header">
-    <div class="header-brand">
-      <div class="logo-box">
-        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="18" cy="5" r="3"></circle>
-          <circle cx="6" cy="12" r="3"></circle>
-          <circle cx="18" cy="19" r="3"></circle>
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-        </svg>
-      </div>
-      <div class="brand-text">
-        <h1 class="brand-title">Görev & Bağımlılık Yönetimi</h1>
-        <div class="brand-badge-container">
-          <span class="version-badge">v0.3</span>
-          <span class="m365-badge" title="Microsoft 365 Entra ID Entegrasyonu">
-            <span class="status-dot"></span> Microsoft 365
-          </span>
-        </div>
-      </div>
-    </div>
 
-    <!-- Kiracı ve Kullanıcı Seçici (Rol Simülasyonu) -->
-    <div class="header-controls">
-      <div class="control-group">
-        <label for="tenantSelect" class="control-label">Şirket / Kiracı</label>
-        <select id="tenantSelect" class="styled-select" aria-label="Aktif Şirket"></select>
-      </div>
-
-      <div class="control-group">
-        <label for="userSelect" class="control-label">Aktif Kullanıcı & Rol</label>
-        <select id="userSelect" class="styled-select" aria-label="Aktif Kullanıcı"></select>
-      </div>
-
-      <!-- Bildirim ve PWA Butonları -->
-      <div class="header-actions">
-        <button id="notifBellBtn" class="icon-button" title="Site İçi Bildirimler" aria-label="Bildirimler">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+  <!-- ================= GİRİŞ (LOGIN) EKRANI ================= -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="logo-box large-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="logo-svg">
+            <rect x="3" y="4" width="18" height="18" rx="3"></rect>
+            <path d="M9 9h6M9 13h6M9 17h4"></path>
           </svg>
-          <span id="notifBadge" class="badge-counter" style="display:none;">0</span>
+        </div>
+        <h1 class="login-title">FG Group</h1>
+        <p class="login-subtitle">Proje ve Görev Takip Sistemi</p>
+      </div>
+
+      <form id="loginForm" class="login-form">
+        <div class="form-group">
+          <label for="loginEmail" data-i18n="login_email">E-posta Adresi</label>
+          <input type="email" id="loginEmail" required class="styled-input" placeholder="admin@fggroup.com.tr" value="admin@fggroup.com.tr">
+        </div>
+
+        <div class="form-group">
+          <label for="loginPassword" data-i18n="login_password">Şifre</label>
+          <input type="password" id="loginPassword" required class="styled-input" placeholder="••••••" value="123">
+        </div>
+
+        <button type="submit" class="action-btn primary-btn login-btn" data-i18n="login_submit">
+          Giriş Yap
         </button>
 
-        <button id="pwaPushBtn" class="action-btn outline-btn" title="Web Push Bildirimlerini Aç/Kapat">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
-            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
-          </svg>
-          <span id="pwaPushStatusText">Web Push</span>
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Proje Seçim ve Özet Bilgi Çubuğu -->
-  <section class="project-toolbar">
-    <div class="toolbar-left">
-      <div class="project-selector-wrapper">
-        <label for="projectSelect" class="toolbar-label">Aktif Proje:</label>
-        <select id="projectSelect" class="styled-select project-dropdown"></select>
-      </div>
-      <button id="newProjectBtn" class="action-btn primary-btn">+ Yeni Proje</button>
-      <button id="reqVisibilityBtn" class="action-btn secondary-btn" style="display:none;">Proje Görünürlüğü Talep Et</button>
-    </div>
-
-    <div class="toolbar-right">
-      <div id="projectDatesSummary" class="project-meta-pills">
-        <!-- JS ile dolacak -->
-      </div>
-    </div>
-  </section>
-
-  <!-- Navigasyon Sekmeleri -->
-  <nav class="app-tabs">
-    <button class="tab-button active" data-tab="tab-tasks">
-      <span class="tab-icon">📋</span> Görev Panosu
-    </button>
-    <button class="tab-button" data-tab="tab-dag">
-      <span class="tab-icon">🕸️</span> DAG Bağımlılık Grafiği
-    </button>
-    <button class="tab-button" data-tab="tab-bottlenecks">
-      <span class="tab-icon">⚠️</span> Darboğaz & Teşhis
-    </button>
-    <button class="tab-button" data-tab="tab-reports">
-      <span class="tab-icon">📊</span> Raporlar & Performans
-    </button>
-    <button class="tab-button" data-tab="tab-system">
-      <span class="tab-icon">⚙️</span> Sistem & Worker
-    </button>
-  </nav>
-
-  <!-- Ana İçerik Alanı -->
-  <main class="app-main">
-    <!-- TAB 1: Görev Panosu -->
-    <section id="tab-tasks" class="tab-content active">
-      <div class="tab-header-actions">
-        <div class="header-info">
-          <h2>Proje Görevleri</h2>
-          <p class="subtitle" id="boardSubtitle">Öncül ve ardıl ilişkileri, çalışma durumları ve gecikme takibi</p>
-        </div>
-        <div class="action-buttons">
-          <button id="newTaskBtn" class="action-btn primary-btn">+ Yeni Görev Ekle</button>
-          <button id="addDepQuickBtn" class="action-btn secondary-btn">🔗 Bağımlılık Bağla</button>
-        </div>
-      </div>
-
-      <!-- Sorumlu Bilgilendirme Notu (KAB02) -->
-      <div id="assigneeNoticeBanner" class="alert-banner" style="display:none;">
-        <span class="alert-icon">ℹ️</span>
-        <div class="alert-text">
-          <strong>Sınırlı Görev Sorumlusu Görünümü:</strong> Bu projede tam üyelik izniniz bulunmadığı için yalnızca size atanan görevleri ve bu görevlerin doğrudan öncül/ardıl durum özetlerini görüyorsunuz.
-        </div>
-      </div>
-
-      <!-- Kanban Sütunları -->
-      <div class="kanban-grid">
-        <!-- BLOCKED -->
-        <div class="kanban-column" id="col-blocked">
-          <div class="column-header blocked-header">
-            <span class="column-title">BLOCKED</span>
-            <span class="column-badge" id="count-blocked">0</span>
+        <!-- Hızlı Test Girişleri -->
+        <div class="quick-login-section">
+          <span class="quick-login-label">Hızlı Demo Girişleri:</span>
+          <div class="quick-login-buttons">
+            <button type="button" class="quick-btn" data-email="admin@fggroup.com.tr" data-pass="123">
+              👑 <strong>Sistem Yöneticisi</strong> (admin@fggroup.com.tr)
+            </button>
+            <button type="button" class="quick-btn" data-email="ahmet@fggroup.com.tr" data-pass="123">
+              🇹🇷 <strong>Ahmet Yılmaz</strong> (Proje Yöneticisi)
+            </button>
+            <button type="button" class="quick-btn" data-email="hans@fggroup.com.tr" data-pass="123">
+              🇩🇪 <strong>Hans Gruber</strong> (Almanya - Çalışan)
+            </button>
+            <button type="button" class="quick-btn" data-email="sarah@fggroup.com.tr" data-pass="123">
+              🇬🇧 <strong>Sarah Connor</strong> (İngiltere - Çalışan)
+            </button>
           </div>
-          <p class="column-desc">Öncül görevlerin bitmesini bekliyor</p>
-          <div class="column-cards" id="cards-blocked"></div>
-        </div>
-
-        <!-- READY -->
-        <div class="kanban-column" id="col-ready">
-          <div class="column-header ready-header">
-            <span class="column-title">READY</span>
-            <span class="column-badge" id="count-ready">0</span>
-          </div>
-          <p class="column-desc">Tüm öncülleri tamamlandı, hazır</p>
-          <div class="column-cards" id="cards-ready"></div>
-        </div>
-
-        <!-- IN_PROGRESS -->
-        <div class="kanban-column" id="col-inprogress">
-          <div class="column-header inprogress-header">
-            <span class="column-title">IN_PROGRESS</span>
-            <span class="column-badge" id="count-inprogress">0</span>
-          </div>
-          <p class="column-desc">Sorumlu çalışmayı yürütüyor</p>
-          <div class="column-cards" id="cards-inprogress"></div>
-        </div>
-
-        <!-- COMPLETED -->
-        <div class="kanban-column" id="col-completed">
-          <div class="column-header completed-header">
-            <span class="column-title">COMPLETED</span>
-            <span class="column-badge" id="count-completed">0</span>
-          </div>
-          <p class="column-desc">Tamamlandı</p>
-          <div class="column-cards" id="cards-completed"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 2: DAG Bağımlılık Grafiği -->
-    <section id="tab-dag" class="tab-content">
-      <div class="tab-header-actions">
-        <div class="header-info">
-          <h2>DAG Bağımlılık Görselleştirici (Directed Acyclic Graph)</h2>
-          <p class="subtitle">Döngü kontrollü öncül-ardıl (Finish-to-Start) ilişkileri</p>
-        </div>
-        <button id="addDepFromDagBtn" class="action-btn primary-btn">+ Yeni Bağımlılık Oluştur</button>
-      </div>
-
-      <div class="dag-container card">
-        <div class="dag-legend">
-          <span class="legend-item"><span class="node-pill pill-blocked"></span> BLOCKED</span>
-          <span class="legend-item"><span class="node-pill pill-ready"></span> READY</span>
-          <span class="legend-item"><span class="node-pill pill-inprogress"></span> IN_PROGRESS</span>
-          <span class="legend-item"><span class="node-pill pill-completed"></span> COMPLETED</span>
-        </div>
-        
-        <div id="dagCanvas" class="dag-canvas">
-          <!-- Dinamik SVG veya DOM düğümleri render edilecek -->
-        </div>
-
-        <div class="dag-table-wrapper">
-          <h3>Mevcut Bağımlılık Sözleşmeleri</h3>
-          <table class="styled-table" id="depsTable">
-            <thead>
-              <tr>
-                <th>Öncül Görev (Predecessor)</th>
-                <th>İlişki</th>
-                <th>Ardıl Görev (Successor)</th>
-                <th>Bekleme Başlangıcı</th>
-                <th>İşlem</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 3: Darboğaz & Kök Neden Teşhisi -->
-    <section id="tab-bottlenecks" class="tab-content">
-      <div class="tab-header-actions">
-        <div class="header-info">
-          <h2>Darboğaz ve Kök Neden Teşhisi</h2>
-          <p class="subtitle">Geciken kök görevler (primary offenders) ve bağımlılıktan etkilenen görevler (victims)</p>
-        </div>
-        <button id="runDiagnosticBtn" class="action-btn outline-btn">🔄 Analizi Yenile</button>
-      </div>
-
-      <div id="bottlenecksList" class="bottlenecks-grid">
-        <!-- JS ile dolacak -->
-      </div>
-    </section>
-
-    <!-- TAB 4: Raporlar & Performans -->
-    <section id="tab-reports" class="tab-content">
-      <div class="tab-header-actions">
-        <div class="header-info">
-          <h2>Plan Karşılaştırması ve Kullanıcı Performans Puanı</h2>
-          <p class="subtitle">İlk Plan, Güncel Plan ve Gerçekleşen Karşılaştırması (RAP01-RAP07)</p>
-        </div>
-      </div>
-
-      <div class="reports-grid">
-        <!-- Proje Plan Karşılaştırma Kartı -->
-        <div class="card report-card">
-          <div class="card-header">
-            <h3>Proje Zaman Çizelgesi Karşılaştırması</h3>
-            <span class="card-badge" id="repProjTitle">Proje</span>
-          </div>
-
-          <div class="timeline-comparison-grid">
-            <div class="timeline-col">
-              <span class="timeline-label">İlk Kaydedilen Plan (Baseline)</span>
-              <div class="timeline-val" id="repInitialStart">-</div>
-              <div class="timeline-val" id="repInitialDue">-</div>
-            </div>
-            <div class="timeline-col">
-              <span class="timeline-label">Güncel Plan (Revize)</span>
-              <div class="timeline-val" id="repCurrentStart">-</div>
-              <div class="timeline-val" id="repCurrentDue">-</div>
-            </div>
-            <div class="timeline-col highlight-col">
-              <span class="timeline-label">Gerçekleşen (Türetilen)</span>
-              <div class="timeline-val" id="repActualStart">-</div>
-              <div class="timeline-val" id="repActualFinish">-</div>
-            </div>
-          </div>
-
-          <div class="completion-bar-wrapper">
-            <div class="completion-meta">
-              <span>Tamamlanma Oranı: <strong id="repPercent">0%</strong></span>
-              <span id="repTaskCounts">0 / 0 Görev</span>
-            </div>
-            <div class="progress-track">
-              <div class="progress-fill" id="repProgressFill" style="width: 0%;"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Kullanıcı Performans Puanı Kartı -->
-        <div class="card report-card">
-          <div class="card-header">
-            <h3>Kullanıcı Performans Puanı (Şartname v0.3 Formülü)</h3>
-            <span class="formula-pill">Puan = 100 × (0.70 × Z + 0.30 × T)</span>
-          </div>
-
-          <div class="perf-score-display">
-            <div class="score-number-box">
-              <div class="score-big" id="perfScoreValue">--</div>
-              <span class="score-subtext">Performans Skoru</span>
-            </div>
-
-            <div class="perf-metrics-list">
-              <div class="metric-row">
-                <span>İlk Planı Dönemde Olan Vadesi Gelmiş Görevler (H Kümesi):</span>
-                <strong id="perfHCount">0</strong>
-              </div>
-              <div class="metric-row excluded-row">
-                <span>Bütünüyle Bağımlılıktan Geciktiği Kanıtlanan (Muaf):</span>
-                <strong id="perfExCount">0</strong>
-              </div>
-              <div class="metric-row">
-                <span>Puanlamaya Dahil Görevler (S Kümesi):</span>
-                <strong id="perfSCount">0</strong>
-              </div>
-              <div class="metric-row">
-                <span>Z (İlk Plan Vadesinde Zamanında Bitirme Oranı):</span>
-                <strong id="perfZRatio">--</strong>
-              </div>
-              <div class="metric-row">
-                <span>T (Veri Kesim Zamanına Kadar Tamamlama Oranı):</span>
-                <strong id="perfTRatio">--</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB 5: Sistem & Worker -->
-    <section id="tab-system" class="tab-content">
-      <div class="tab-header-actions">
-        <div class="header-info">
-          <h2>Arka Plan İşleyicisi ve M365 Bildirim Simülatörü</h2>
-          <p class="subtitle">24 Saat Hatırlatması, Günlük Gecikme Açıklama Taraması ve M365 Graph E-posta</p>
-        </div>
-        <button id="triggerWorkerBtn" class="action-btn primary-btn">⚡ Worker'ı Şimdi Çalıştır</button>
-      </div>
-
-      <div class="card">
-        <h3>Arka Plan Zamanlayıcı Durumu</h3>
-        <p>Sistem, Node.js ve Redis tabanlı asenkron worker mimarisiyle arka planda her 60 saniyede bir otomatik gecikme denetimi ve hatırlatma gönderimi gerçekleştirir.</p>
-        
-        <div class="worker-log-box" id="workerLog">
-          <div class="log-line info">[Sistem] Arka plan işleyici başlatıldı. Dinlemede...</div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- ================= MODALLAR ================= -->
-
-  <!-- 1. Yeni Proje Modalı -->
-  <div id="projectModal" class="modal-backdrop">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Yeni Proje Oluştur</h3>
-        <button class="modal-close" data-close="projectModal">&times;</button>
-      </div>
-      <form id="projectForm" class="modal-body">
-        <div class="form-group">
-          <label for="pTitle">Proje Başlığı *</label>
-          <input type="text" id="pTitle" required class="styled-input" placeholder="Örn: E-Dönüşüm Altyapısı">
-        </div>
-        <div class="form-group">
-          <label for="pDesc">Açıklama</label>
-          <textarea id="pDesc" class="styled-textarea" rows="2" placeholder="Projenin amacı ve kapsamı"></textarea>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="pStart">İlk Plan Başlangıç *</label>
-            <input type="date" id="pStart" required class="styled-input">
-          </div>
-          <div class="form-group">
-            <label for="pDue">İlk Plan Bitiş *</label>
-            <input type="date" id="pDue" required class="styled-input">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="action-btn secondary-btn" data-close="projectModal">İptal</button>
-          <button type="submit" class="action-btn primary-btn">Proje Oluştur</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- 2. Yeni Görev Modalı -->
+  <!-- ================= ANA PANEL (SIDEBAR + MAIN) ================= -->
+  <div id="appContainer" class="app-layout" style="display:none;">
+    
+    <!-- SOL KENAR ÇUBUĞU (SIDEBAR) -->
+    <aside class="app-sidebar">
+      <!-- Logo & Şirket -->
+      <div class="sidebar-brand">
+        <div class="logo-box sm-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" class="logo-svg">
+            <rect x="3" y="4" width="18" height="18" rx="3"></rect>
+            <path d="M9 9h6M9 13h6M9 17h4"></path>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <span class="brand-name">FG Group</span>
+          <span class="brand-sub">Yönetim Paneli</span>
+        </div>
+      </div>
+
+      <!-- Navigasyon Menüsü -->
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Çalışma Alanı</div>
+        <button class="nav-item active" data-nav="view-my-tasks">
+          <span class="nav-icon">📋</span>
+          <span class="nav-text" data-i18n="nav_my_tasks">Görevlerim</span>
+          <span class="nav-badge" id="myTasksCount">0</span>
+        </button>
+
+        <button class="nav-item" data-nav="view-projects">
+          <span class="nav-icon">📁</span>
+          <span class="nav-text" data-i18n="nav_projects">Projeler</span>
+          <span class="nav-badge neutral" id="projectsCount">0</span>
+        </button>
+
+        <button class="nav-item" data-nav="view-timeline">
+          <span class="nav-icon">📅</span>
+          <span class="nav-text" data-i18n="nav_timeline">Zaman Çizelgesi (Gantt)</span>
+        </button>
+
+        <button class="nav-item" data-nav="view-board">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text" data-i18n="nav_board">İş Panosu (Kanban)</span>
+        </button>
+
+        <div class="nav-section-title admin-only" id="adminNavTitle">Yönetim</div>
+        <button class="nav-item admin-only" id="navTeamBtn" data-nav="view-team">
+          <span class="nav-icon">👥</span>
+          <span class="nav-text" data-i18n="nav_team">Ekip & Personel</span>
+        </button>
+      </nav>
+
+      <!-- Alt Profil ve Dil Alanı -->
+      <div class="sidebar-footer">
+        <div class="lang-selector-mini">
+          <span class="lang-globe">🌐</span>
+          <select id="langSelect" class="lang-select-bare">
+            <option value="tr">🇹🇷 Türkçe</option>
+            <option value="en">🇬🇧 English</option>
+            <option value="de">🇩🇪 Deutsch</option>
+          </select>
+        </div>
+
+        <div class="user-profile-row">
+          <div class="profile-avatar" id="userAvatar">A</div>
+          <div class="profile-details">
+            <span class="profile-name" id="userNameDisplay">Admin</span>
+            <span class="profile-role-badge" id="userRoleDisplay">Yönetici</span>
+          </div>
+          <button id="logoutBtn" class="logout-icon-btn" title="Çıkış Yap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- SAĞ ANA İÇERİK (MAIN CONTENT) -->
+    <main class="app-main-area">
+      <!-- Üst Toolbar -->
+      <header class="main-topbar">
+        <div class="topbar-left">
+          <h2 class="view-title" id="currentViewTitle">Görevlerim</h2>
+          
+          <!-- Proje Filtresi (Projeli görünümlerde çıkar) -->
+          <div class="project-pill-select" id="projectSelectorContainer">
+            <span class="pill-label">Proje:</span>
+            <select id="projectSelect" class="styled-select sm-select"></select>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Butonlar -->
+          <button id="newProjectBtn" class="action-btn secondary-btn" style="display:none;" data-i18n="new_project_btn">
+            + Yeni Proje
+          </button>
+          <button id="newTaskBtn" class="action-btn primary-btn" data-i18n="new_task_btn">
+            + Görev Ekle
+          </button>
+
+          <!-- Bildirim Zili -->
+          <button id="notifBellBtn" class="icon-button" title="Bildirimler">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span id="notifBadge" class="badge-counter" style="display:none;">0</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- ================= GÖRÜNÜM 1: GÖREVLERİM (MY TASKS) ================= -->
+      <section id="view-my-tasks" class="view-section active">
+        <div class="welcome-banner">
+          <div>
+            <h3 class="welcome-heading" id="welcomeUserText">Hoş geldiniz!</h3>
+            <p class="welcome-sub" data-i18n="my_tasks_sub">Size atanan görevler, durumları ve yaklaşan teslim tarihleri aşağıda listelenmiştir.</p>
+          </div>
+        </div>
+
+        <div class="card clean-card">
+          <div class="task-list-table" id="myTasksTable">
+            <!-- JS ile satırlar gelecek -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM 2: PROJELER (PROJECTS OVERVIEW) ================= -->
+      <section id="view-projects" class="view-section">
+        <div class="section-intro">
+          <p class="intro-desc" data-i18n="projects_intro">Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve takvimleri.</p>
+        </div>
+
+        <div class="projects-grid" id="projectsCardsGrid">
+          <!-- Proje kartları gelecek -->
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM 3: ZAMAN ÇİZELGESİ (GANTT / TIMELINE) ================= -->
+      <section id="view-timeline" class="view-section">
+        <div class="section-intro">
+          <p class="intro-desc" data-i18n="timeline_intro">Görevlerin başlangıç ve bitiş tarihleri, süreleri ve birbirlerini bekleme akışları.</p>
+        </div>
+
+        <div class="card clean-card timeline-card">
+          <div class="timeline-header-bar">
+            <span class="timeline-meta" id="timelineProjectName">Proje Çizelgesi</span>
+            <div class="timeline-legend">
+              <span class="legend-dot dot-blocked"></span> <span data-i18n="legend_blocked">Öncül Bekliyor</span>
+              <span class="legend-dot dot-ready"></span> <span data-i18n="legend_ready">Başlamaya Hazır</span>
+              <span class="legend-dot dot-progress"></span> <span data-i18n="legend_progress">Devam Ediyor</span>
+              <span class="legend-dot dot-done"></span> <span data-i18n="legend_done">Tamamlandı</span>
+            </div>
+          </div>
+
+          <!-- Görsel Gantt / Akış Çizelgesi -->
+          <div class="timeline-chart-container" id="timelineChart">
+            <!-- Dinamik Gantt Çubukları -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM 4: İŞ PANOSU (KANBAN) ================= -->
+      <section id="view-board" class="view-section">
+        <div class="board-columns-grid">
+          <!-- Yapılacak / Bekliyor -->
+          <div class="board-column">
+            <div class="board-col-header col-todo">
+              <span class="col-title" data-i18n="col_todo">Yapılacak / Bekliyor</span>
+              <span class="col-count" id="bCountTodo">0</span>
+            </div>
+            <div class="board-cards-list" id="bListTodo"></div>
+          </div>
+
+          <!-- Devam Ediyor -->
+          <div class="board-column">
+            <div class="board-col-header col-doing">
+              <span class="col-title" data-i18n="col_doing">Devam Ediyor</span>
+              <span class="col-count" id="bCountDoing">0</span>
+            </div>
+            <div class="board-cards-list" id="bListDoing"></div>
+          </div>
+
+          <!-- Tamamlandı -->
+          <div class="board-column">
+            <div class="board-col-header col-done">
+              <span class="col-title" data-i18n="col_done">Tamamlandı</span>
+              <span class="col-count" id="bCountDone">0</span>
+            </div>
+            <div class="board-cards-list" id="bListDone"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM 5: EKİP & PERSONEL (ADMIN) ================= -->
+      <section id="view-team" class="view-section">
+        <div class="section-intro-actions">
+          <p class="intro-desc" data-i18n="team_intro">Şirket personellerinin iletişim kartları, ülkeleri, dilleri ve proje açma yetkileri.</p>
+          <button id="newPersonnelBtn" class="action-btn primary-btn sm-btn">+ Yeni Personel Ekle</button>
+        </div>
+
+        <div class="card clean-card">
+          <table class="styled-table" id="personnelTable">
+            <thead>
+              <tr>
+                <th>Personel</th>
+                <th>İletişim</th>
+                <th>Ülke / Dil</th>
+                <th>Departman</th>
+                <th>Proje Açma İzni</th>
+                <th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="personnelTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================= MODALLAR ================= -->
+
+  <!-- 1. Yeni Görev Ekle Modalı (Sadeleştirilmiş ve Öncül Seçimli) -->
   <div id="taskModal" class="modal-backdrop">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Yeni Görev Ekle</h3>
+        <h3 data-i18n="modal_task_title">Yeni Görev Ekle</h3>
         <button class="modal-close" data-close="taskModal">&times;</button>
       </div>
       <form id="taskForm" class="modal-body">
         <div class="form-group">
-          <label for="tTitle">Görev Başlığı *</label>
-          <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: API Gateway Yapılandırması">
+          <label for="tTitle">Görev Adı *</label>
+          <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: Arayüz Tasarımı ve Onay">
         </div>
-        <div class="form-group">
-          <label for="tAssignee">Görev Sorumlusu</label>
-          <select id="tAssignee" class="styled-select"></select>
-        </div>
+
         <div class="form-row">
           <div class="form-group">
-            <label for="tStart">İlk Plan Başlangıç *</label>
+            <label for="tAssignee">Sorumlu Personel</label>
+            <select id="tAssignee" class="styled-select"></select>
+          </div>
+          <div class="form-group">
+            <label for="tPredecessor">Neyi Bekliyor? (Öncül Görev)</label>
+            <select id="tPredecessor" class="styled-select">
+              <option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tStart">Başlangıç Tarihi *</label>
             <input type="date" id="tStart" required class="styled-input">
           </div>
           <div class="form-group">
-            <label for="tDue">İlk Plan Bitiş *</label>
+            <label for="tDue">Teslim / Bitiş Tarihi *</label>
             <input type="date" id="tDue" required class="styled-input">
           </div>
         </div>
+
         <div class="form-group">
-          <label for="tDesc">Açıklama</label>
-          <textarea id="tDesc" class="styled-textarea" rows="2"></textarea>
+          <label for="tDesc">Kısa Açıklama</label>
+          <textarea id="tDesc" class="styled-textarea" rows="2" placeholder="Görevle ilgili önemli notlar..."></textarea>
         </div>
+
         <div class="modal-footer">
           <button type="button" class="action-btn secondary-btn" data-close="taskModal">İptal</button>
           <button type="submit" class="action-btn primary-btn">Görevi Kaydet</button>
@@ -409,27 +339,96 @@
     </div>
   </div>
 
-  <!-- 3. Bağımlılık Ekleme Modalı (Döngü Korumalı) -->
-  <div id="depModal" class="modal-backdrop">
+  <!-- 2. Yeni Proje Oluştur Modalı -->
+  <div id="projectModal" class="modal-backdrop">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Yeni Bağımlılık Tanımla (DAG)</h3>
-        <button class="modal-close" data-close="depModal">&times;</button>
+        <h3>Yeni Proje Oluştur</h3>
+        <button class="modal-close" data-close="projectModal">&times;</button>
       </div>
-      <form id="depForm" class="modal-body">
-        <p class="modal-desc">Finish-to-Start kuralı: Seçilen öncül görev tamamlanmadan ardıl görev başlayamaz.</p>
+      <form id="projectForm" class="modal-body">
         <div class="form-group">
-          <label for="depPred">Öncül Görev (Predecessor - Önce Bitecek)</label>
-          <select id="depPred" required class="styled-select"></select>
+          <label for="pTitle">Proje Adı *</label>
+          <input type="text" id="pTitle" required class="styled-input" placeholder="Örn: 2026 Mobil Uygulama">
         </div>
         <div class="form-group">
-          <label for="depSucc">Ardıl Görev (Successor - Bekleyen İş)</label>
-          <select id="depSucc" required class="styled-select"></select>
+          <label for="pDesc">Açıklama</label>
+          <textarea id="pDesc" class="styled-textarea" rows="2" placeholder="Projenin temel hedefleri"></textarea>
         </div>
-        <div id="depWarningBox" class="alert-banner warning" style="display:none;"></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="pStart">Başlangıç Tarihi *</label>
+            <input type="date" id="pStart" required class="styled-input">
+          </div>
+          <div class="form-group">
+            <label for="pDue">Hedef Bitiş Tarihi *</label>
+            <input type="date" id="pDue" required class="styled-input">
+          </div>
+        </div>
         <div class="modal-footer">
-          <button type="button" class="action-btn secondary-btn" data-close="depModal">İptal</button>
-          <button type="submit" class="action-btn primary-btn">Bağımlılık Ekle</button>
+          <button type="button" class="action-btn secondary-btn" data-close="projectModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Projeyi Başlat</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Yeni Personel Kartı Modalı (Admin) -->
+  <div id="personnelModal" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Yeni Personel Kartı Ekle</h3>
+        <button class="modal-close" data-close="personnelModal">&times;</button>
+      </div>
+      <form id="personnelForm" class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="persName">Adı Soyadı *</label>
+            <input type="text" id="persName" required class="styled-input" placeholder="Örn: Can Demir">
+          </div>
+          <div class="form-group">
+            <label for="persPhone">Cep Telefonu</label>
+            <input type="text" id="persPhone" class="styled-input" placeholder="+90 532 ...">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="persEmail">E-posta Adresi *</label>
+            <input type="email" id="persEmail" required class="styled-input" placeholder="can@fggroup.com.tr">
+          </div>
+          <div class="form-group">
+            <label for="persPassword">Giriş Şifresi *</label>
+            <input type="text" id="persPassword" required class="styled-input" value="123">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="persCountry">Bulunduğu Ülke *</label>
+            <select id="persCountry" class="styled-select">
+              <option value="Türkiye">🇹🇷 Türkiye (Türkçe)</option>
+              <option value="Almanya">🇩🇪 Almanya (Deutsch)</option>
+              <option value="İngiltere">🇬🇧 İngiltere (English)</option>
+              <option value="USA">🇺🇸 ABD (English)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="persDept">Departman</label>
+            <input type="text" id="persDept" class="styled-input" placeholder="Yazılım, Satış vb.">
+          </div>
+        </div>
+
+        <div class="form-group permission-box">
+          <label class="checkbox-label">
+            <input type="checkbox" id="persCanCreateProj">
+            <span><strong>Proje Açma İzni:</strong> Bu personel yeni proje oluşturabilir ve diğer personele görev atayabilir.</span>
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="action-btn secondary-btn" data-close="personnelModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Personeli Kaydet</button>
         </div>
       </form>
     </div>
@@ -439,22 +438,21 @@
   <div id="explanationModal" class="modal-backdrop">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>Gecikme Gerekçesi / Açıklama Girişi</h3>
+        <h3>Gecikme Açıklaması Gir</h3>
         <button class="modal-close" data-close="explanationModal">&times;</button>
       </div>
       <form id="explanationForm" class="modal-body">
         <div class="form-group">
-          <label id="expTaskTitleLabel">Görev:</label>
+          <label>Görev:</label>
           <p id="expTaskTitle" class="highlight-text"></p>
         </div>
         <div class="form-group">
           <label for="expText">Gecikme Nedeni ve Alınan Önlem *</label>
-          <textarea id="expText" required class="styled-textarea" rows="4" placeholder="Gecikmenin gerekçesini detaylıca açıklayınız..."></textarea>
+          <textarea id="expText" required class="styled-textarea" rows="3" placeholder="Gecikmenin nedenini kısaca açıklayınız..."></textarea>
         </div>
-        <p class="notice-text">Açıklama kaydedildiğinde ilgili proje yöneticilerine bildirim iletilecektir.</p>
         <div class="modal-footer">
           <button type="button" class="action-btn secondary-btn" data-close="explanationModal">İptal</button>
-          <button type="submit" class="action-btn primary-btn">Açıklamayı Kaydet</button>
+          <button type="submit" class="action-btn primary-btn">Açıklamayı Gönder</button>
         </div>
       </form>
     </div>
@@ -464,16 +462,13 @@
   <div id="notifDrawer" class="drawer-backdrop">
     <div class="drawer-panel">
       <div class="drawer-header">
-        <h3>Bildirim Merkezi</h3>
+        <h3>Bildirimler</h3>
         <button class="modal-close" id="closeDrawerBtn">&times;</button>
       </div>
-      <div class="drawer-content" id="notifList">
-        <p class="empty-state">Bildirim bulunmuyor.</p>
-      </div>
+      <div class="drawer-content" id="notifList"></div>
     </div>
   </div>
 
-  <!-- Toaster Bildirim Balonu -->
   <div id="toastContainer" class="toast-container"></div>
 
   <script src="/app.js"></script>

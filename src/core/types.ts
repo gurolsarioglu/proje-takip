@@ -35,13 +35,45 @@ export interface Tenant {
   created_at: string;
 }
 
+export type SystemRole = 'ADMIN' | 'USER';
+export type AppLanguage = 'tr' | 'en' | 'de';
+
 export interface User {
   id: UUID;
   tenant_id: UUID;
   entra_oid: string;
   name: string;
   email: string;
+  phone?: string;
+  country: string;
+  language: AppLanguage;
+  password?: string;
+  system_role: SystemRole;
+  can_create_project: boolean;
+  department?: string;
   created_at: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  user: Omit<User, 'password'>;
+  tenant: Tenant;
+  token: string;
+}
+
+export interface PersonnelCardDTO {
+  name: string;
+  email: string;
+  phone?: string;
+  country: string;
+  password?: string;
+  system_role?: SystemRole;
+  can_create_project?: boolean;
+  department?: string;
 }
 
 // 2. Proje ve Yetki
