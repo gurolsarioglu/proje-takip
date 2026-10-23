@@ -26,6 +26,8 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    * Personel Kartı alanları: Ad Soyad, E-posta, Cep Telefonu, Bulunduğu Ülke, Dil, Şifre, Proje Açma Yetkisi (`can_create_project`).
 6. **Ülkeye Göre Otomatik Dil Seçimi (i18n):**
    * Personelin ülkesine göre arayüz dili (TR, EN, DE) otomatik eşleşir.
+7. **Otomatik GitHub Senkronizasyonu:**
+   * Yapılan her değişiklik, geliştirme ve mimari adım sonunda kullanıcıya sormadan `git commit` edilecek ve `https://github.com/gurolsarioglu/proje-takip.git` reposuna `git push` yapılacaktır.
 
 ---
 
