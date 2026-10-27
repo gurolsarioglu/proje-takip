@@ -488,6 +488,32 @@ app.post('/api/tasks/:id/complete', (req, res) => {
   }
 });
 
+app.post('/api/tasks/:id/status', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { status } = req.body;
+    if (!status || !['TODO', 'IN_PROGRESS', 'COMPLETED'].includes(status)) {
+      return res.status(400).json({ error: 'Geçersiz veya eksik hedef durum (TODO, IN_PROGRESS, COMPLETED bekleniyor).' });
+    }
+
+    const result = taskService.updateStatus(auth, req.params.id, status as any);
+
+    // KAB05: Eğer yeni READY olan görevler varsa bildirim oluştur
+    if (result.newlyReadyTaskIds && result.newlyReadyTaskIds.length > 0) {
+      for (const readyId of result.newlyReadyTaskIds) {
+        const t = db.getTaskById(auth.tenant_id, readyId);
+        if (t && t.assignee_id) {
+          notificationService.notifyTaskReady(auth.tenant_id, t.id, t.assignee_id, t.title);
+        }
+      }
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // 4. Dependencies
 app.get('/api/projects/:id/dependencies', (req, res) => {
   try {

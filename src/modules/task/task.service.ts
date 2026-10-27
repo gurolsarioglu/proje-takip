@@ -205,6 +205,47 @@ export class TaskService {
     return this.db.getTaskById(auth.tenant_id, task_id);
   }
 
+  public updateStatus(
+    auth: AuthContext,
+    task_id: UUID,
+    targetStatus: 'TODO' | 'IN_PROGRESS' | 'COMPLETED'
+  ): { task: Task; newlyReadyTaskIds?: UUID[] } {
+    const task = this.db.getTaskById(auth.tenant_id, task_id);
+    if (!task) throw new Error('Görev bulunamadı.');
+
+    if (targetStatus === 'COMPLETED') {
+      return this.completeTask(auth, task_id);
+    }
+
+    if (targetStatus === 'IN_PROGRESS') {
+      const readiness = this.dependencyService.checkReadiness(auth.tenant_id, task_id);
+      if (!readiness.is_ready) {
+        throw new Error('Görev Başlatılamaz: Öncül görevler tamamlanmadığı için görev BLOCKED durumundadır.');
+      }
+      const updated = this.db.updateTask(auth.tenant_id, task_id, {
+        work_status: 'IN_PROGRESS',
+        progress: task.progress && task.progress > 0 ? (task.progress === 100 ? 50 : task.progress) : 25,
+        actual_start_date: task.actual_start_date || new Date().toISOString(),
+        actual_completion_date: undefined
+      });
+      return { task: updated! };
+    }
+
+    if (targetStatus === 'TODO') {
+      // Öncüller kontrol edilir: Eğer öncülü varsa ve bitmemişse BLOCKED, yoksa READY olur
+      const readiness = this.dependencyService.checkReadiness(auth.tenant_id, task_id);
+      const newWorkStatus = readiness.is_ready ? 'READY' : 'BLOCKED';
+      const updated = this.db.updateTask(auth.tenant_id, task_id, {
+        work_status: newWorkStatus,
+        progress: 0,
+        actual_completion_date: undefined
+      });
+      return { task: updated! };
+    }
+
+    throw new Error('Geçersiz hedef durum.');
+  }
+
   public listTasks(auth: AuthContext, project_id: UUID): Task[] {
     return this.db.getTasks(auth.tenant_id, project_id);
   }

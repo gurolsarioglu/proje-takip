@@ -365,4 +365,61 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const completedTodo = microsoftTodoService.updateTodoStatus(authAssigneeA, personalTodo.id, true);
     assert.equal(completedTodo.is_completed, true);
   });
+
+  test('KANBAN DRAG & DROP: Durum güncelleme ve BLOCKED bağımlılık koruması', () => {
+    // 1. İki görev oluşturalım: Öncül (Task 1) -> Ardıl (Task 2)
+    const task1 = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Kanban Öncül Görev',
+      '2026-10-01T09:00:00Z',
+      '2026-10-05T18:00:00Z',
+      assigneeA.id
+    );
+
+    const task2 = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Kanban Ardıl Görev',
+      '2026-10-06T09:00:00Z',
+      '2026-10-10T18:00:00Z',
+      assigneeA.id
+    );
+
+    dependencyService.addDependency(authManagerA, task1.id, task2.id);
+
+    // Task 2, Task 1'e bağımlı olduğu için BLOCKED olmalı
+    const t2Before = taskService.getTask(authManagerA, task2.id)!;
+    assert.equal(t2Before.work_status, 'BLOCKED');
+
+    // 2. BLOCKED görevi doğrudan IN_PROGRESS veya COMPLETED sütununa sürükleme reddedilmelidir!
+    assert.throws(
+      () => taskService.updateStatus(authManagerA, task2.id, 'IN_PROGRESS'),
+      /BLOCKED durumundadır/
+    );
+    assert.throws(
+      () => taskService.updateStatus(authManagerA, task2.id, 'COMPLETED'),
+      /BLOCKED görev doğrudan tamamlanamaz/
+    );
+
+    // 3. Task 1'i IN_PROGRESS sütununa sürükleme (Başlatma)
+    const res1 = taskService.updateStatus(authManagerA, task1.id, 'IN_PROGRESS');
+    assert.equal(res1.task.work_status, 'IN_PROGRESS');
+    assert.equal(res1.task.progress, 25);
+
+    // 4. Task 1'i COMPLETED sütununa sürükleme (Tamamlama) -> Task 2 ardıl olarak READY olmalıdır
+    const resDone = taskService.updateStatus(authManagerA, task1.id, 'COMPLETED');
+    assert.equal(resDone.task.work_status, 'COMPLETED');
+    assert.equal(resDone.task.progress, 100);
+    assert.ok(resDone.newlyReadyTaskIds?.includes(task2.id));
+
+    // 5. Şimdi Task 2 serbest kaldı (READY), IN_PROGRESS sütununa taşınabilir
+    const res2 = taskService.updateStatus(authManagerA, task2.id, 'IN_PROGRESS');
+    assert.equal(res2.task.work_status, 'IN_PROGRESS');
+
+    // 6. Task 2'yi TODO sütununa geri sürükleme
+    const resTodo = taskService.updateStatus(authManagerA, task2.id, 'TODO');
+    assert.equal(resTodo.task.work_status, 'READY'); // Öncülü bittiği için hazır durumda kalır
+  });
 });
+

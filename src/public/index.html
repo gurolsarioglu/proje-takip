@@ -321,32 +321,58 @@
 
       <!-- ================= GÖRÜNÜM 4: İŞ PANOSU (KANBAN) ================= -->
       <section id="view-board" class="view-section">
+        <!-- Kanban Üst Araç Çubuğu -->
+        <div class="kanban-toolbar card">
+          <div class="kanban-toolbar-left">
+            <div class="kanban-search-box">
+              <span class="kanban-search-icon">🔍</span>
+              <input type="text" id="kanbanSearchInput" class="kanban-input" placeholder="Panoda görev, kişi veya etiket ara..." />
+            </div>
+            <div class="kanban-hint-pill">
+              <span class="hint-icon">💡</span>
+              <span class="hint-text">Kartları fareyle sütunlar arasında sürükleyip bırakarak durumları canlı güncelleyebilirsiniz.</span>
+            </div>
+          </div>
+          <div class="kanban-toolbar-right">
+            <button id="kanbanNewTaskBtn" class="action-btn primary-btn sm-btn">+ Hızlı Görev Ekle</button>
+          </div>
+        </div>
+
         <div class="board-columns-grid">
           <!-- Yapılacak / Bekliyor -->
-          <div class="board-column">
+          <div class="board-column" data-status="TODO" id="bColTodo">
             <div class="board-col-header col-todo">
-              <span class="col-title" data-i18n="col_todo">Yapılacak / Bekliyor</span>
+              <div class="col-header-left">
+                <span class="status-indicator-dot dot-todo"></span>
+                <span class="col-title" data-i18n="col_todo">Yapılacak / Bekliyor</span>
+              </div>
               <span class="col-count" id="bCountTodo">0</span>
             </div>
-            <div class="board-cards-list" id="bListTodo"></div>
+            <div class="board-cards-list" id="bListTodo" data-status="TODO"></div>
           </div>
 
           <!-- Devam Ediyor -->
-          <div class="board-column">
+          <div class="board-column" data-status="IN_PROGRESS" id="bColDoing">
             <div class="board-col-header col-doing">
-              <span class="col-title" data-i18n="col_doing">Devam Ediyor</span>
+              <div class="col-header-left">
+                <span class="status-indicator-dot dot-doing"></span>
+                <span class="col-title" data-i18n="col_doing">Devam Ediyor</span>
+              </div>
               <span class="col-count" id="bCountDoing">0</span>
             </div>
-            <div class="board-cards-list" id="bListDoing"></div>
+            <div class="board-cards-list" id="bListDoing" data-status="IN_PROGRESS"></div>
           </div>
 
           <!-- Tamamlandı -->
-          <div class="board-column">
+          <div class="board-column" data-status="COMPLETED" id="bColDone">
             <div class="board-col-header col-done">
-              <span class="col-title" data-i18n="col_done">Tamamlandı</span>
+              <div class="col-header-left">
+                <span class="status-indicator-dot dot-done"></span>
+                <span class="col-title" data-i18n="col_done">Tamamlandı</span>
+              </div>
               <span class="col-count" id="bCountDone">0</span>
             </div>
-            <div class="board-cards-list" id="bListDone"></div>
+            <div class="board-cards-list" id="bListDone" data-status="COMPLETED"></div>
           </div>
         </div>
       </section>

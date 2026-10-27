@@ -1268,6 +1268,16 @@ function drawDependencyArrows(svg, container) {
   });
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // 4. İŞ PANOSU (KANBAN)
 function renderBoard() {
   const lists = {
@@ -1276,30 +1286,85 @@ function renderBoard() {
     DONE: document.getElementById('bListDone')
   };
 
+  if (!lists.TODO || !lists.DOING || !lists.DONE) return;
+
   const counts = { TODO: 0, DOING: 0, DONE: 0 };
   Object.values(lists).forEach(l => l.innerHTML = '');
 
-  state.tasks.forEach(t => {
+  const q = (state.kanbanSearchQuery || '').toLowerCase();
+  const filteredTasks = state.tasks.filter(t => {
+    if (!q) return true;
+    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
+    const text = `${t.title} ${assignee?.name || ''} ${t.type} ${t.priority}`.toLowerCase();
+    return text.includes(q);
+  });
+
+  filteredTasks.forEach(t => {
     const card = document.createElement('div');
-    card.className = 'board-card';
+    const isBlocked = t.work_status === 'BLOCKED';
+    card.className = `board-card ${isBlocked ? 'is-blocked' : ''}`;
+    card.setAttribute('draggable', 'true');
+    card.setAttribute('data-task-id', t.id);
+    card.setAttribute('data-status', t.work_status);
 
     const assignee = state.personnelList.find(p => p.id === t.assignee_id);
     const isOverdue = t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
     const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
+    const typeLabel = t.type === 'MILESTONE' ? 'Kilometre Taşı' : (t.type === 'BUG' ? 'Hata' : 'Görev');
+    const typeClass = t.type === 'MILESTONE' ? 'milestone' : (t.type === 'BUG' ? 'bug' : '');
+
+    const priorityLabel = t.priority === 'HIGH' ? '🔥 Yüksek' : (t.priority === 'LOW' ? 'Düşük' : 'Normal');
+    const priorityClass = t.priority === 'HIGH' ? 'high' : '';
+
+    const initials = assignee ? assignee.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
+    const dueDateText = t.current_due_date ? t.current_due_date.slice(0, 10).split('-').reverse().join('.') : '';
+    const progressVal = typeof t.progress === 'number' ? t.progress : (t.work_status === 'COMPLETED' ? 100 : 0);
 
     card.innerHTML = `
-      <div style="font-weight:600; font-size:0.9rem; line-height:1.3; display:flex; align-items:flex-start; gap:6px;">
-        <span>${typeIcon}</span>
-        <span>${t.title}</span>
+      <div class="board-card-header">
+        <span class="board-card-type ${typeClass}">${typeIcon} ${typeLabel}</span>
+        <span class="board-card-priority ${priorityClass}">${priorityLabel}</span>
       </div>
-      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94a3b8; margin-top:6px;">
-        <span>👤 ${assignee ? assignee.name : 'Atanmamış'}</span>
-        <span class="${isOverdue ? 'due-chip overdue' : ''}">${t.current_due_date.slice(0, 10)}</span>
+      <div class="board-card-title">${escapeHtml(t.title)}</div>
+      ${isBlocked ? `
+        <div class="board-card-blocked-pill" title="Öncül görevler bitmeden başlatılamaz">
+          🔒 Öncül Bekliyor (BLOCKED)
+        </div>
+      ` : ''}
+      <div class="board-card-progress-bar">
+        <div class="board-card-progress-fill ${t.work_status === 'COMPLETED' ? 'fill-done' : ''}" style="width: ${progressVal}%;"></div>
+      </div>
+      <div class="board-card-footer">
+        <div class="board-card-assignee" title="${assignee ? assignee.name : 'Atanmamış'}">
+          <div class="assignee-avatar-sm">${initials}</div>
+          <span class="assignee-name-sm" style="font-size:0.75rem; font-weight:500; color:#334155;">${assignee ? assignee.name : 'Atanmamış'}</span>
+        </div>
+        <div class="board-card-due ${isOverdue ? 'overdue' : ''}">
+          <span title="Bitiş Tarihi">📅 ${dueDateText}</span>
+          <span class="board-card-pct">%${progressVal}</span>
+        </div>
       </div>
     `;
 
+    // Sürükleme Başlangıcı
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', t.id);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('is-dragging');
+    });
+
+    // Sürükleme Bitişi
+    card.addEventListener('dragend', () => {
+      card.classList.remove('is-dragging');
+      document.querySelectorAll('.board-column').forEach(col => col.classList.remove('drag-over'));
+    });
+
     // Tıklanınca sağ çekmeceyi aç
-    card.addEventListener('click', () => openTaskDrawer(t.id));
+    card.addEventListener('click', (e) => {
+      if (!card.classList.contains('is-dragging')) {
+        openTaskDrawer(t.id);
+      }
+    });
 
     if (t.work_status === 'COMPLETED') {
       counts.DONE++;
@@ -1313,9 +1378,82 @@ function renderBoard() {
     }
   });
 
+  // Boş Sütun Göstergeleri
+  Object.keys(lists).forEach(k => {
+    if (lists[k].children.length === 0) {
+      lists[k].innerHTML = `<div class="board-empty-placeholder"><span>Bu sütunda henüz görev yok</span></div>`;
+    }
+  });
+
   document.getElementById('bCountTodo').textContent = counts.TODO;
   document.getElementById('bCountDoing').textContent = counts.DOING;
   document.getElementById('bCountDone').textContent = counts.DONE;
+
+  // Sütun drop listener'larını bağla
+  setupKanbanDropListeners();
+}
+
+let kanbanDropListenersSetup = false;
+function setupKanbanDropListeners() {
+  if (kanbanDropListenersSetup) return;
+  kanbanDropListenersSetup = true;
+
+  const cols = document.querySelectorAll('.board-column');
+  cols.forEach(col => {
+    col.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      col.classList.add('drag-over');
+    });
+
+    col.addEventListener('dragleave', (e) => {
+      if (!col.contains(e.relatedTarget)) {
+        col.classList.remove('drag-over');
+      }
+    });
+
+    col.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+
+      const taskId = e.dataTransfer.getData('text/plain');
+      if (!taskId) return;
+
+      const targetStatus = col.getAttribute('data-status'); // 'TODO' | 'IN_PROGRESS' | 'COMPLETED'
+      const task = state.tasks.find(x => x.id === taskId);
+      if (!task) return;
+
+      // Zaten aynı durumdaysa işlem yapma
+      if (targetStatus === 'COMPLETED' && task.work_status === 'COMPLETED') return;
+      if (targetStatus === 'IN_PROGRESS' && task.work_status === 'IN_PROGRESS') return;
+      if (targetStatus === 'TODO' && (task.work_status === 'READY' || task.work_status === 'BLOCKED')) return;
+
+      // BLOCKED Kontrolü (DAG Kuralı: KAB04/KAB05/KAB06)
+      if (task.work_status === 'BLOCKED' && (targetStatus === 'IN_PROGRESS' || targetStatus === 'COMPLETED')) {
+        showToast('⚠️ Görev Başlatılamaz: Öncül görevler tamamlanmadığı için bu görev BLOCKED durumundadır!', 'error');
+        const cardEl = document.querySelector(`.board-card[data-task-id="${taskId}"]`);
+        if (cardEl) {
+          cardEl.classList.add('shake-card');
+          setTimeout(() => cardEl.classList.remove('shake-card'), 600);
+        }
+        return;
+      }
+
+      try {
+        const targetTitle = targetStatus === 'COMPLETED' ? 'Tamamlandı' : (targetStatus === 'IN_PROGRESS' ? 'Devam Ediyor' : 'Yapılacak');
+        await apiCall(`/api/tasks/${taskId}/status`, 'POST', { status: targetStatus });
+        showToast(`✅ Görev durumu güncellendi: ${targetTitle}`, 'success');
+        await loadProjectTasks(state.currentProjectId);
+      } catch (err) {
+        showToast(err.message, 'error');
+        const cardEl = document.querySelector(`.board-card[data-task-id="${taskId}"]`);
+        if (cardEl) {
+          cardEl.classList.add('shake-card');
+          setTimeout(() => cardEl.classList.remove('shake-card'), 600);
+        }
+      }
+    });
+  });
 }
 
 // ================= OPENPROJECT SPLIT SCREEN DRAWER =================
@@ -1786,6 +1924,24 @@ function setupEventListeners() {
     populateTaskModalSelects();
     document.getElementById('taskModal').classList.add('open');
   });
+
+  // Kanban Yeni Görev Modalı
+  const kanbanNewBtn = document.getElementById('kanbanNewTaskBtn');
+  if (kanbanNewBtn) {
+    kanbanNewBtn.addEventListener('click', () => {
+      populateTaskModalSelects();
+      document.getElementById('taskModal').classList.add('open');
+    });
+  }
+
+  // Kanban Canlı Filtre / Arama
+  const kanbanSearchInput = document.getElementById('kanbanSearchInput');
+  if (kanbanSearchInput) {
+    kanbanSearchInput.addEventListener('input', (e) => {
+      state.kanbanSearchQuery = e.target.value;
+      renderBoard();
+    });
+  }
 
   // Yeni Görev Kaydet (Öncül Bağımlılığı da Otomatik Ekler!)
   document.getElementById('taskForm').addEventListener('submit', async (e) => {

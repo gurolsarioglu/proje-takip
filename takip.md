@@ -69,10 +69,12 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - **Ok İşareti ile Bağımlılık Bağlantısı (Resim 2 Örneği):** Öncül görevden ardıl göreve giden kavisli SVG ok çizgisi ile görevler birbirine bağlandı (başlangıç noktası ve altın ok ucu).
   - **Gantt İçi Görev Kartları:** İlerleme yüzdesi, durum rozeti ve görev türü etiketleriyle modern görünüm sağlandı.
 - [x] **Adım 8:** Tarayıcı Testleri ve Canlı Onay:
-  - Tarayıcı alt ajanı ile Zaman Çizelgesi, SVG ok bağlantıları, gün ızgarası ve Split-Screen sağ çekmecesi canlı ekranda test edilip fotoğraflandı.
-- [ ] **Adım 10:** Microsoft To Do & Outlook Canlı Entegrasyonu *(Kullanıcı Kararı: İleri bir tarihte Azure App Registration ile değerlendirilmek üzere beklemeye alındı)*:
-  - Kullanıcı kararıyla bu entegrasyon şu aşamada durduruldu ve menüden gizlendi.
-  - Kod altyapısı ve veri modelleri korundu; ileride Azure Portal üzerinden yetkilendirme sağlandığında kolayca devreye alınabilecek şekilde arşivlendi.
+- [x] **Adım 11:** İnteraktif Kanban Panosu (Sürükle-Bırak, Canlı Arama ve DAG Bağımlılık Koruması):
+  - HTML5 Drag & Drop ile kartları sütunlar (Yapılacak ➔ Devam Ediyor ➔ Tamamlandı) arasında sürükleyip bırakarak canlı durum güncelleme.
+  - Şartname v0.3 DAG Bağımlılık Koruması: Öncülleri tamamlanmamış `BLOCKED` görevlerin `IN_PROGRESS` veya `COMPLETED` sütununa taşınması engellendi; kart sallama animasyonu ve net uyarı mesajı gösterildi.
+  - Anlık Görev & Kişi Arama: Kanban üst barındaki canlı arama kutusu ile filtreleme.
+  - 17/17 Birim & Kabul Testi eksiksiz geçti (`npm test`).
+  - Tarayıcı alt ajanı ile canlı test edilip ekran görüntüsü alındı.
 
 ---
 
