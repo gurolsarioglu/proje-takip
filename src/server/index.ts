@@ -95,6 +95,19 @@ app.get('/api/current-context', (req, res) => {
   }
 });
 
+app.put('/api/profile/theme', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { theme } = req.body;
+    if (theme && (theme === 'light' || theme === 'dark')) {
+      db.updateUser(auth.tenant_id, auth.user_id, { theme });
+    }
+    res.json({ success: true, theme });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Admin Personel Kartı Yönetimi
 app.get('/api/admin/personnel', (req, res) => {
   try {

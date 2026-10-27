@@ -13,15 +13,38 @@ import {
 export class AuthService {
   constructor(private db: Database) {}
 
-  public static resolveLanguageByCountry(country?: string): AppLanguage {
-    if (!country) return 'tr';
+  public static normalizeCountry(country?: string): string {
+    if (!country) return 'Türkiye';
     const c = country.trim().toLowerCase();
-    if (c === 'tr' || c.includes('türk') || c.includes('turk') || c.includes('t?rk') || c === 'turkey') {
-      return 'tr';
+    if (
+      c === 'tr' ||
+      c.includes('türk') ||
+      c.includes('turk') ||
+      c.includes('trk') ||
+      c.includes('t\ufffdrk') ||
+      c.includes('trkiye') ||
+      c.includes('turkiye') ||
+      c === 'turkey'
+    ) {
+      return 'Türkiye';
     }
     if (c === 'de' || c.includes('alman') || c.includes('german') || c.includes('deutsch')) {
-      return 'de';
+      return 'Almanya';
     }
+    if (c === 'en' || c === 'uk' || c === 'gb' || c.includes('ingil') || c.includes('england') || c.includes('britain')) {
+      return 'İngiltere';
+    }
+    if (c === 'us' || c === 'usa' || c.includes('abd') || c.includes('america') || c.includes('united states')) {
+      return 'USA';
+    }
+    return country.trim();
+  }
+
+  public static resolveLanguageByCountry(country?: string): AppLanguage {
+    if (!country) return 'tr';
+    const normalized = AuthService.normalizeCountry(country);
+    if (normalized === 'Türkiye') return 'tr';
+    if (normalized === 'Almanya') return 'de';
     return 'en';
   }
 
@@ -47,7 +70,7 @@ export class AuthService {
       throw new Error(`Kiracı bulunamadı: ${tenant_id}`);
     }
 
-    const country = options?.country || 'Türkiye';
+    const country = AuthService.normalizeCountry(options?.country);
     const language = AuthService.resolveLanguageByCountry(country);
 
     const user: User = {
@@ -111,7 +134,8 @@ export class AuthService {
 
     const patch: Partial<User> = { ...updates };
     if (updates.country) {
-      patch.language = AuthService.resolveLanguageByCountry(updates.country);
+      patch.country = AuthService.normalizeCountry(updates.country);
+      patch.language = AuthService.resolveLanguageByCountry(patch.country);
     }
 
     const updated = this.db.updateUser(auth.tenant_id, user_id, patch);

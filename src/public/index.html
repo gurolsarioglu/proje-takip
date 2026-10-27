@@ -12,6 +12,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <script>
+    (function() {
+      try {
+        const savedTheme = localStorage.getItem('fggroup_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 
@@ -132,22 +140,28 @@
 
       <!-- Alt Profil ve Dil Alanı -->
       <div class="sidebar-footer">
-        <div class="lang-selector-mini">
-          <span class="lang-globe">🌐</span>
-          <select id="langSelect" class="lang-select-bare">
-            <option value="tr">🇹🇷 Türkçe</option>
-            <option value="en">🇬🇧 English</option>
-            <option value="de">🇩🇪 Deutsch</option>
-          </select>
+        <div class="footer-meta-row">
+          <div class="lang-selector-mini">
+            <span class="lang-globe">🌐</span>
+            <select id="langSelect" class="lang-select-bare">
+              <option value="tr">🇹🇷 TR</option>
+              <option value="en">🇬🇧 EN</option>
+              <option value="de">🇩🇪 DE</option>
+            </select>
+          </div>
+          <button id="sidebarThemeToggleBtn" class="theme-toggle-pill" title="Temayı Değiştir (Açık / Koyu)">
+            <span class="theme-mode-icon" id="themeMiniIcon">☀️</span>
+            <span class="theme-mode-text" id="themeMiniText">Açık</span>
+          </button>
         </div>
 
-        <div class="user-profile-row">
+        <div class="user-profile-row" id="userProfileBtn" title="Kullanıcı Profili ve Tema Ayarları" style="cursor:pointer;">
           <div class="profile-avatar" id="userAvatar">A</div>
           <div class="profile-details">
             <span class="profile-name" id="userNameDisplay">Admin</span>
             <span class="profile-role-badge" id="userRoleDisplay">Yönetici</span>
           </div>
-          <button id="logoutBtn" class="logout-icon-btn" title="Çıkış Yap">
+          <button id="logoutBtn" class="logout-icon-btn" title="Çıkış Yap" onclick="event.stopPropagation()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path>
             </svg>
@@ -177,6 +191,11 @@
           </button>
           <button id="newTaskBtn" class="action-btn primary-btn" data-i18n="new_task_btn">
             + Görev Ekle
+          </button>
+
+          <!-- Hızlı Tema Değiştirici -->
+          <button id="topbarThemeToggleBtn" class="icon-button" title="Temayı Değiştir (Açık / Koyu)">
+            <span id="topbarThemeIcon">☀️</span>
           </button>
 
           <!-- Bildirim Zili -->
@@ -232,26 +251,70 @@
         </div>
       </section>
 
-      <!-- ================= GÖRÜNÜM 3: ZAMAN ÇİZELGESİ (GANTT / TIMELINE) ================= -->
+      <!-- ================= GÖRÜNÜM 3: ZAMAN ÇİZELGESİ (GANTT / TIMELINE - OPENPROJECT MODELİ) ================= -->
       <section id="view-timeline" class="view-section">
-        <div class="section-intro">
-          <p class="intro-desc" data-i18n="timeline_intro">Görevlerin başlangıç ve bitiş tarihleri, süreleri ve birbirlerini bekleme akışları.</p>
-        </div>
+        <div class="card clean-card timeline-card op-gantt-card">
+          <!-- Üst Araç Çubuğu (Toolbar) -->
+          <div class="gantt-toolbar">
+            <div class="gantt-toolbar-left">
+              <span class="timeline-meta" id="timelineProjectName">Proje Çizelgesi</span>
+              <div class="gantt-search-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="ganttSearchInput" class="gantt-search-input" placeholder="Görevlerde ara...">
+              </div>
+            </div>
 
-        <div class="card clean-card timeline-card">
-          <div class="timeline-header-bar">
-            <span class="timeline-meta" id="timelineProjectName">Proje Çizelgesi</span>
-            <div class="timeline-legend">
-              <span class="legend-dot dot-blocked"></span> <span data-i18n="legend_blocked">Öncül Bekliyor</span>
-              <span class="legend-dot dot-ready"></span> <span data-i18n="legend_ready">Başlamaya Hazır</span>
-              <span class="legend-dot dot-progress"></span> <span data-i18n="legend_progress">Devam Ediyor</span>
-              <span class="legend-dot dot-done"></span> <span data-i18n="legend_done">Tamamlandı</span>
+            <div class="gantt-toolbar-right">
+              <!-- Zoom Seviyeleri (Günlük, Haftalık, Aylık, Yıllık) -->
+              <div class="gantt-zoom-group" id="ganttZoomGroup" role="group" aria-label="Zaman Ölçeği">
+                <button type="button" class="zoom-btn active" data-zoom="day" title="Günlük Detaylı Görünüm" data-i18n="zoom_day">Günlük</button>
+                <button type="button" class="zoom-btn" data-zoom="week" title="Haftalık Görünüm" data-i18n="zoom_week">Haftalık</button>
+                <button type="button" class="zoom-btn" data-zoom="month" title="Aylık Görünüm" data-i18n="zoom_month">Aylık</button>
+                <button type="button" class="zoom-btn" data-zoom="year" title="Yıllık (Çeyrekler) Görünümü" data-i18n="zoom_year">Yıllık</button>
+              </div>
+
+              <button type="button" class="gantt-tool-btn" id="ganttTodayBtn" title="Bugünün Tarihine Odaklan">
+                <span class="btn-icon">📍</span> <span data-i18n="gantt_today">Bugün</span>
+              </button>
+              <button type="button" class="gantt-tool-btn" id="ganttToggleTableBtn" title="Sol Tabloyu Göster / Gizle">
+                <span class="btn-icon">◫</span> <span id="ganttToggleTableLabel" data-i18n="gantt_toggle_table">Tabloyu Gizle</span>
+              </button>
+              <div class="timeline-legend">
+                <span class="legend-item"><span class="legend-dot dot-blocked"></span> <span data-i18n="legend_blocked">Öncül Bekliyor</span></span>
+                <span class="legend-item"><span class="legend-dot dot-ready"></span> <span data-i18n="legend_ready">Başlamaya Hazır</span></span>
+                <span class="legend-item"><span class="legend-dot dot-progress"></span> <span data-i18n="legend_progress">Devam Ediyor</span></span>
+                <span class="legend-item"><span class="legend-dot dot-done"></span> <span data-i18n="legend_done">Tamamlandı</span></span>
+              </div>
             </div>
           </div>
 
-          <!-- Görsel Gantt / Akış Çizelgesi -->
-          <div class="timeline-chart-container" id="timelineChart">
-            <!-- Dinamik Gantt Çubukları -->
+          <!-- Split Gantt Kapsayıcısı (Sol Tablo + Sağ Zaman Çizelgesi) -->
+          <div class="op-gantt-wrapper" id="opGanttWrapper">
+            <!-- Sol: İş Paketi / Görev Tablosu -->
+            <div class="op-gantt-table-pane" id="opGanttTablePane">
+              <div class="op-gantt-table-header">
+                <div class="g-col g-col-id">#</div>
+                <div class="g-col g-col-title">İş Paketi / Görev</div>
+                <div class="g-col g-col-status">Durum</div>
+                <div class="g-col g-col-assignee">Atanan</div>
+                <div class="g-col g-col-dates">Tarih Aralığı</div>
+              </div>
+              <div class="op-gantt-table-body" id="opGanttTableBody">
+                <!-- Dinamik sol satırlar -->
+              </div>
+            </div>
+
+            <!-- Ayırıcı (Splitter) -->
+            <div class="op-gantt-splitter" id="opGanttSplitter" title="Sürükleyerek genişliği ayarlayın">
+              <div class="splitter-grip"></div>
+            </div>
+
+            <!-- Sağ: Zaman Çizelgesi (Gantt Çizelgesi) -->
+            <div class="op-gantt-chart-pane" id="opGanttChartPane">
+              <div class="timeline-chart-container" id="timelineChart">
+                <!-- Dinamik Takvim Cetveli ve Zaman Çubukları -->
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -802,6 +865,79 @@
             <button type="submit" class="action-btn primary-btn">Kaydet & Doğrula</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4.2. Kullanıcı Profili ve Tema Ayarları Modalı -->
+  <div id="userProfileModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3>👤 Kullanıcı Profili & Tercihler</h3>
+        <button class="modal-close" data-close="userProfileModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Profil Kartı Özeti -->
+        <div class="profile-summary-card">
+          <div class="profile-avatar large-avatar" id="modalUserAvatar">A</div>
+          <div class="profile-summary-text">
+            <h4 id="modalUserName">Sistem Yöneticisi</h4>
+            <p id="modalUserEmail">admin@fggroup.com.tr</p>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+              <span class="profile-badge-pill" id="modalUserRole">Admin</span>
+              <span class="profile-badge-pill neutral" id="modalUserDept">Yönetim</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tema Tercihi Seçimi -->
+        <div class="form-group" style="margin-top: 20px;">
+          <label style="font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">🎨 Arayüz Teması</label>
+          <div class="theme-selection-grid">
+            <div class="theme-choice-card" id="themeCardLight" data-set-theme="light">
+              <div class="theme-preview light-preview">
+                <div class="preview-header"></div>
+                <div class="preview-content">
+                  <div class="preview-line"></div>
+                  <div class="preview-line sm"></div>
+                </div>
+              </div>
+              <div class="theme-choice-label">
+                <strong>☀️ Açık Tema</strong>
+                <span>Ferah, aydınlık ve beyaz zemin</span>
+              </div>
+            </div>
+
+            <div class="theme-choice-card" id="themeCardDark" data-set-theme="dark">
+              <div class="theme-preview dark-preview">
+                <div class="preview-header"></div>
+                <div class="preview-content">
+                  <div class="preview-line"></div>
+                  <div class="preview-line sm"></div>
+                </div>
+              </div>
+              <div class="theme-choice-label">
+                <strong>🌙 Koyu Tema</strong>
+                <span>Göz yormayan şık gece modu</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dil Seçimi -->
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="modalLangSelect" style="font-weight: 600; font-size: 0.85rem;">🌐 Dil Seçimi</label>
+          <select id="modalLangSelect" class="styled-select" style="margin-top: 4px;">
+            <option value="tr">🇹🇷 Türkçe (TR)</option>
+            <option value="en">🇬🇧 English (EN)</option>
+            <option value="de">🇩🇪 Deutsch (DE)</option>
+          </select>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 24px;">
+          <button type="button" class="action-btn secondary-btn" data-close="userProfileModal">Kapat</button>
+          <button type="button" id="saveProfilePreferencesBtn" class="action-btn primary-btn">Tercihleri Uygula</button>
+        </div>
       </div>
     </div>
   </div>

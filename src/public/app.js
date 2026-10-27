@@ -35,7 +35,13 @@ const I18N = {
     legend_done: 'Tamamlandı',
     col_todo: 'Yapılacak / Bekliyor',
     col_doing: 'Devam Ediyor',
-    col_done: 'Tamamlandı'
+    col_done: 'Tamamlandı',
+    gantt_today: 'Bugün',
+    gantt_toggle_table: 'Tabloyu Gizle',
+    zoom_day: 'Günlük',
+    zoom_week: 'Haftalık',
+    zoom_month: 'Aylık',
+    zoom_year: 'Yıllık'
   },
   en: {
     nav_my_tasks: 'My Tasks',
@@ -55,7 +61,13 @@ const I18N = {
     legend_done: 'Completed',
     col_todo: 'To Do / Waiting',
     col_doing: 'In Progress',
-    col_done: 'Completed'
+    col_done: 'Completed',
+    gantt_today: 'Today',
+    gantt_toggle_table: 'Toggle Table',
+    zoom_day: 'Daily',
+    zoom_week: 'Weekly',
+    zoom_month: 'Monthly',
+    zoom_year: 'Yearly'
   },
   de: {
     nav_my_tasks: 'Meine Aufgaben',
@@ -75,7 +87,13 @@ const I18N = {
     legend_done: 'Abgeschlossen',
     col_todo: 'Zu erledigen / Wartend',
     col_doing: 'In Bearbeitung',
-    col_done: 'Abgeschlossen'
+    col_done: 'Abgeschlossen',
+    gantt_today: 'Heute',
+    gantt_toggle_table: 'Tabelle umschalten',
+    zoom_day: 'Täglich',
+    zoom_week: 'Wöchentlich',
+    zoom_month: 'Monatlich',
+    zoom_year: 'Jährlich'
   }
 };
 
@@ -113,6 +131,79 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLoginOverlay();
   }
 });
+
+// ================= TEMA YÖNETİMİ (LIGHT / DARK THEME) =================
+function getActiveTheme() {
+  return localStorage.getItem('fggroup_theme') || state.currentUser?.theme || 'light';
+}
+
+function applyTheme(theme) {
+  const t = (theme === 'dark') ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('fggroup_theme', t);
+
+  // Üst bar ikonunu güncelle
+  const topbarIcon = document.getElementById('topbarThemeIcon');
+  if (topbarIcon) {
+    topbarIcon.textContent = t === 'dark' ? '🌙' : '☀️';
+  }
+
+  // Sol alt mini toggle güncelle
+  const miniIcon = document.getElementById('themeMiniIcon');
+  const miniText = document.getElementById('themeMiniText');
+  if (miniIcon) miniIcon.textContent = t === 'dark' ? '🌙' : '☀️';
+  if (miniText) miniText.textContent = t === 'dark' ? 'Koyu' : 'Açık';
+
+  // Profil modalındaki kartları güncelle
+  document.querySelectorAll('#userProfileModal .theme-choice-card').forEach(card => {
+    if (card.dataset.setTheme === t) {
+      card.classList.add('active');
+    } else {
+      card.classList.remove('active');
+    }
+  });
+}
+
+function toggleTheme() {
+  const current = getActiveTheme();
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  if (state.currentUser) {
+    state.currentUser.theme = next;
+    apiCall('/api/profile/theme', 'PUT', { theme: next }).catch(() => {});
+  }
+  showToast(next === 'dark' ? '🌙 Koyu tema aktif edildi.' : '☀️ Açık tema aktif edildi.', 'info');
+}
+
+function openUserProfileModal() {
+  const u = state.currentUser;
+  if (!u) return;
+
+  const avatar = document.getElementById('modalUserAvatar');
+  const name = document.getElementById('modalUserName');
+  const email = document.getElementById('modalUserEmail');
+  const role = document.getElementById('modalUserRole');
+  const dept = document.getElementById('modalUserDept');
+  const langSelect = document.getElementById('modalLangSelect');
+
+  if (avatar) avatar.textContent = u.name.slice(0, 1).toUpperCase();
+  if (name) name.textContent = u.name;
+  if (email) email.textContent = u.email;
+  if (role) role.textContent = u.system_role === 'ADMIN' ? 'Sistem Yöneticisi (Admin)' : 'Personel';
+  if (dept) dept.textContent = u.department || 'Genel';
+  if (langSelect) langSelect.value = state.currentLang || u.language || 'tr';
+
+  const currentTheme = getActiveTheme();
+  document.querySelectorAll('#userProfileModal .theme-choice-card').forEach(card => {
+    if (card.dataset.setTheme === currentTheme) {
+      card.classList.add('active');
+    } else {
+      card.classList.remove('active');
+    }
+  });
+
+  document.getElementById('userProfileModal')?.classList.add('open');
+}
 
 function getHeaders() {
   const headers = { 'Content-Type': 'application/json' };
@@ -154,6 +245,7 @@ function onLoginSuccess(user, tenant, token) {
   localStorage.setItem('fg_tenant', JSON.stringify(tenant));
 
   setLanguage(user.language || 'tr');
+  applyTheme(user.theme || getActiveTheme());
 
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('appContainer').style.display = 'flex';
@@ -420,24 +512,452 @@ function formatDateTR(isoStr) {
   return `${day}.${month}.${year}`;
 }
 
-// 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE) - RESİM 2 VE İSTEKLER ŞARTNAMESİ
+// 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE) - OPENPROJECT MODELİ BÖLÜNMÜŞ (SPLIT) EKRAN & ÇOKLU ZOOM (GÜNLÜK, HAFTALIK, AYLIK, YILLIK)
+let ganttFilterQuery = '';
+let ganttListenersInitialized = false;
+let ganttZoomLevel = 'day'; // 'day' | 'week' | 'month' | 'year'
+
+function setupGanttInteractions() {
+  if (ganttListenersInitialized) return;
+  ganttListenersInitialized = true;
+
+  // 1. Zoom Seviyesi Seçici (Günlük, Haftalık, Aylık, Yıllık)
+  document.querySelectorAll('#ganttZoomGroup .zoom-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const zoom = btn.dataset.zoom;
+      if (zoom && zoom !== ganttZoomLevel) {
+        ganttZoomLevel = zoom;
+        document.querySelectorAll('#ganttZoomGroup .zoom-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderTimeline();
+      }
+    });
+  });
+
+  // 2. Arama Filtresi
+  const searchInput = document.getElementById('ganttSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      ganttFilterQuery = e.target.value.trim().toLowerCase();
+      renderTimeline();
+    });
+  }
+
+  // 3. Bugün Butonu
+  const todayBtn = document.getElementById('ganttTodayBtn');
+  if (todayBtn) {
+    todayBtn.addEventListener('click', () => {
+      const chartPane = document.getElementById('opGanttChartPane');
+      const todayLine = chartPane?.querySelector('.gantt-today-line');
+      if (todayLine && chartPane) {
+        const left = todayLine.offsetLeft - (chartPane.clientWidth / 2);
+        chartPane.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+      } else {
+        const todayEl = chartPane?.querySelector('.gantt-day-col.today');
+        if (todayEl && chartPane) {
+          const left = todayEl.offsetLeft - (chartPane.clientWidth / 2);
+          chartPane.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+        }
+      }
+    });
+  }
+
+  // 4. Sol Tabloyu Gizle / Göster Butonu
+  const toggleBtn = document.getElementById('ganttToggleTableBtn');
+  const toggleLabel = document.getElementById('ganttToggleTableLabel');
+  const wrapper = document.getElementById('opGanttWrapper');
+  if (toggleBtn && wrapper) {
+    toggleBtn.addEventListener('click', () => {
+      wrapper.classList.toggle('table-collapsed');
+      const isCollapsed = wrapper.classList.contains('table-collapsed');
+      if (toggleLabel) {
+        toggleLabel.textContent = isCollapsed ? (I18N[currentLang]?.zoom_day ? 'Tabloyu Göster' : 'Tabloyu Göster') : 'Tabloyu Gizle';
+      }
+      setTimeout(() => {
+        const svg = document.getElementById('ganttSvgOverlay');
+        const container = document.getElementById('ganttRowsContainer');
+        if (svg && container) drawDependencyArrows(svg, container);
+      }, 250);
+    });
+  }
+
+  // 5. Splitter Boyutlandırma (Drag-to-resize)
+  const splitter = document.getElementById('opGanttSplitter');
+  const tablePane = document.getElementById('opGanttTablePane');
+  if (splitter && tablePane && wrapper) {
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    splitter.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = tablePane.offsetWidth;
+      splitter.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startX;
+      const newWidth = Math.min(750, Math.max(260, startWidth + deltaX));
+      tablePane.style.width = `${newWidth}px`;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        splitter.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        const svg = document.getElementById('ganttSvgOverlay');
+        const container = document.getElementById('ganttRowsContainer');
+        if (svg && container) drawDependencyArrows(svg, container);
+      }
+    });
+  }
+}
+
+// Zaman Ölçeği Hesaplayıcı (Günlük, Haftalık, Aylık, Yıllık)
+function calculateGanttScale(minTime, maxTime, zoomLevel) {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const monthNamesTR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  const monthShortNamesTR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  const dayNamesShortTR = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+  const now = new Date();
+  const todayTime = now.getTime();
+
+  let timelineWidth = 0;
+  let topHeaderHtml = '';
+  let subHeaderHtml = '';
+  let gridLinesHtml = '';
+  let todayOffsetPx = -1;
+  let dateToPx = (time) => 0;
+
+  if (zoomLevel === 'day') {
+    // 1. GÜNLÜK GÖRÜNÜM
+    const COL_WIDTH = 44;
+    const startDate = new Date(minTime);
+    startDate.setDate(startDate.getDate() - 2);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(maxTime);
+    endDate.setDate(endDate.getDate() + 6);
+    endDate.setHours(0, 0, 0, 0);
+
+    const totalDays = Math.max(16, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
+    timelineWidth = totalDays * COL_WIDTH;
+
+    const days = [];
+    const monthSpans = [];
+    let currentMonthName = '';
+    let currentMonthSpan = 0;
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(startDate.getTime() + i * MS_PER_DAY);
+      const dayNum = d.getDate();
+      const dayOfWeek = d.getDay();
+      const monthIndex = d.getMonth();
+      const year = d.getFullYear();
+      const mName = `${monthNamesTR[monthIndex]} ${year}`;
+      const dateKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      const isToday = dateKey === todayStr;
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+      if (isToday) {
+        todayOffsetPx = i * COL_WIDTH + (COL_WIDTH / 2);
+      }
+
+      days.push({ dayNum, dayName: dayNamesShortTR[dayOfWeek], isToday, isWeekend, date: d });
+
+      if (mName !== currentMonthName) {
+        if (currentMonthName) monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
+        currentMonthName = mName;
+        currentMonthSpan = 1;
+      } else {
+        currentMonthSpan++;
+      }
+    }
+    if (currentMonthSpan > 0) monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
+
+    topHeaderHtml = monthSpans.map(m => `
+      <div class="gantt-month-header" style="width: ${m.count * COL_WIDTH}px;">${m.name}</div>
+    `).join('');
+
+    subHeaderHtml = days.map(d => `
+      <div class="gantt-day-col ${d.isWeekend ? 'weekend' : ''} ${d.isToday ? 'today' : ''}" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;" title="${formatDateTR(d.date)}">
+        <span>${d.dayNum}</span>
+        <span class="day-dow">${d.dayName}</span>
+      </div>
+    `).join('');
+
+    gridLinesHtml = days.map(d => `
+      <div class="gantt-grid-line ${d.isWeekend ? 'weekend' : ''}" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;"></div>
+    `).join('');
+
+    dateToPx = (time) => {
+      const offsetDays = (time - startDate.getTime()) / MS_PER_DAY;
+      return offsetDays * COL_WIDTH;
+    };
+  } else if (zoomLevel === 'week') {
+    // 2. HAFTALIK GÖRÜNÜM
+    const COL_WIDTH = 68;
+    const MS_PER_WEEK = 7 * MS_PER_DAY;
+
+    const startDate = new Date(minTime);
+    const day = (startDate.getDay() + 6) % 7;
+    startDate.setDate(startDate.getDate() - day - 7);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(maxTime);
+    const dayEnd = (endDate.getDay() + 6) % 7;
+    endDate.setDate(endDate.getDate() + (6 - dayEnd) + 14);
+    endDate.setHours(23, 59, 59, 999);
+
+    const totalWeeks = Math.max(8, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_WEEK));
+    timelineWidth = totalWeeks * COL_WIDTH;
+
+    const weeks = [];
+    const monthSpans = [];
+    let currentMonthName = '';
+    let currentMonthSpan = 0;
+
+    for (let w = 0; w < totalWeeks; w++) {
+      const wStart = new Date(startDate.getTime() + w * MS_PER_WEEK);
+      const wEnd = new Date(wStart.getTime() + 6 * MS_PER_DAY);
+      const midWeek = new Date(wStart.getTime() + 3 * MS_PER_DAY);
+      const mName = `${monthNamesTR[midWeek.getMonth()]} ${midWeek.getFullYear()}`;
+      const isCurrentWeek = todayTime >= wStart.getTime() && todayTime <= wEnd.getTime();
+      const weekLabel = `${wStart.getDate()}-${wEnd.getDate()} ${monthShortNamesTR[wEnd.getMonth()]}`;
+
+      weeks.push({ weekLabel, isCurrentWeek, wStart, wEnd });
+
+      if (mName !== currentMonthName) {
+        if (currentMonthName) monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
+        currentMonthName = mName;
+        currentMonthSpan = 1;
+      } else {
+        currentMonthSpan++;
+      }
+    }
+    if (currentMonthSpan > 0) monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
+
+    topHeaderHtml = monthSpans.map(m => `
+      <div class="gantt-month-header" style="width: ${m.count * COL_WIDTH}px;">${m.name}</div>
+    `).join('');
+
+    subHeaderHtml = weeks.map(w => `
+      <div class="gantt-day-col ${w.isCurrentWeek ? 'today' : ''}" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px; font-size:0.68rem;" title="${formatDateTR(w.wStart)} - ${formatDateTR(w.wEnd)}">
+        <span>${w.weekLabel}</span>
+      </div>
+    `).join('');
+
+    gridLinesHtml = weeks.map(() => `
+      <div class="gantt-grid-line" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;"></div>
+    `).join('');
+
+    dateToPx = (time) => {
+      const offsetWeeks = (time - startDate.getTime()) / MS_PER_WEEK;
+      return offsetWeeks * COL_WIDTH;
+    };
+
+    if (todayTime >= startDate.getTime() && todayTime <= endDate.getTime()) {
+      todayOffsetPx = dateToPx(todayTime);
+    }
+  } else if (zoomLevel === 'month') {
+    // 3. AYLIK GÖRÜNÜM
+    const COL_WIDTH = 84;
+    const startD = new Date(minTime);
+    startD.setMonth(startD.getMonth() - 1);
+    startD.setDate(1);
+    startD.setHours(0, 0, 0, 0);
+
+    const endD = new Date(maxTime);
+    endD.setMonth(endD.getMonth() + 3);
+    endD.setDate(0);
+    endD.setHours(23, 59, 59, 999);
+
+    const startYear = startD.getFullYear();
+    const startMonth = startD.getMonth();
+    const endYear = endD.getFullYear();
+    const endMonth = endD.getMonth();
+
+    const totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
+    timelineWidth = Math.max(totalMonths, 8) * COL_WIDTH;
+
+    const months = [];
+    const yearSpans = [];
+    let currentYearName = '';
+    let currentYearSpan = 0;
+
+    for (let m = 0; m < totalMonths; m++) {
+      const curYear = startYear + Math.floor((startMonth + m) / 12);
+      const curMonthIdx = (startMonth + m) % 12;
+      const yName = `${curYear}`;
+      const isCurMonth = now.getFullYear() === curYear && now.getMonth() === curMonthIdx;
+
+      months.push({
+        name: monthShortNamesTR[curMonthIdx],
+        year: curYear,
+        monthIdx: curMonthIdx,
+        isCurMonth
+      });
+
+      if (yName !== currentYearName) {
+        if (currentYearName) yearSpans.push({ name: currentYearName, count: currentYearSpan });
+        currentYearName = yName;
+        currentYearSpan = 1;
+      } else {
+        currentYearSpan++;
+      }
+    }
+    if (currentYearSpan > 0) yearSpans.push({ name: currentYearName, count: currentYearSpan });
+
+    topHeaderHtml = yearSpans.map(y => `
+      <div class="gantt-month-header" style="width: ${y.count * COL_WIDTH}px;">${y.name} Yılı</div>
+    `).join('');
+
+    subHeaderHtml = months.map(m => `
+      <div class="gantt-day-col ${m.isCurMonth ? 'today' : ''}" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;" title="${m.name} ${m.year}">
+        <span style="font-weight:600;">${m.name}</span>
+      </div>
+    `).join('');
+
+    gridLinesHtml = months.map(() => `
+      <div class="gantt-grid-line" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;"></div>
+    `).join('');
+
+    dateToPx = (time) => {
+      const d = new Date(time);
+      const mIdx = (d.getFullYear() - startYear) * 12 + (d.getMonth() - startMonth);
+      const daysInM = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const frac = Math.min(1, Math.max(0, (d.getDate() - 1) / daysInM));
+      return (mIdx + frac) * COL_WIDTH;
+    };
+
+    if (todayTime >= startD.getTime() && todayTime <= endD.getTime()) {
+      todayOffsetPx = dateToPx(todayTime);
+    }
+  } else if (zoomLevel === 'year') {
+    // 4. YILLIK GÖRÜNÜM (Çeyrekler Q1..Q4)
+    const COL_WIDTH = 76;
+    const minD = new Date(minTime);
+    const maxD = new Date(maxTime);
+
+    const startYear = minD.getFullYear() - 1;
+    const endYear = maxD.getFullYear() + 1;
+    const totalYears = (endYear - startYear) + 1;
+    const totalQuarters = totalYears * 4;
+    timelineWidth = totalQuarters * COL_WIDTH;
+
+    const quarters = [];
+    const yearSpans = [];
+
+    const quarterNamesTR = ['Ç1 (Oca-Mar)', 'Ç2 (Nis-Haz)', 'Ç3 (Tem-Eyl)', 'Ç4 (Eki-Ara)'];
+    const quarterLabelsTR = ['Ç1', 'Ç2', 'Ç3', 'Ç4'];
+
+    for (let y = 0; y < totalYears; y++) {
+      const year = startYear + y;
+      yearSpans.push({ name: `${year}`, count: 4 });
+
+      for (let q = 0; q < 4; q++) {
+        const isCurrentQ = now.getFullYear() === year && Math.floor(now.getMonth() / 3) === q;
+        quarters.push({
+          label: quarterLabelsTR[q],
+          fullName: `${quarterNamesTR[q]} ${year}`,
+          isCurrentQ,
+          year,
+          quarter: q
+        });
+      }
+    }
+
+    topHeaderHtml = yearSpans.map(y => `
+      <div class="gantt-month-header" style="width: ${y.count * COL_WIDTH}px;">${y.name} Yılı</div>
+    `).join('');
+
+    subHeaderHtml = quarters.map(q => `
+      <div class="gantt-day-col ${q.isCurrentQ ? 'today' : ''}" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;" title="${q.fullName}">
+        <span style="font-weight:700;">${q.label}</span>
+      </div>
+    `).join('');
+
+    gridLinesHtml = quarters.map(() => `
+      <div class="gantt-grid-line" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;"></div>
+    `).join('');
+
+    dateToPx = (time) => {
+      const d = new Date(time);
+      const qIdx = (d.getFullYear() - startYear) * 4 + Math.floor(d.getMonth() / 3);
+      const qStartMonth = Math.floor(d.getMonth() / 3) * 3;
+      const qStartDate = new Date(d.getFullYear(), qStartMonth, 1).getTime();
+      const qEndDate = new Date(d.getFullYear(), qStartMonth + 3, 0, 23, 59, 59).getTime();
+      const frac = Math.min(1, Math.max(0, (time - qStartDate) / (qEndDate - qStartDate)));
+      return (qIdx + frac) * COL_WIDTH;
+    };
+
+    const startYearTime = new Date(startYear, 0, 1).getTime();
+    const endYearTime = new Date(endYear, 11, 31, 23, 59, 59).getTime();
+    if (todayTime >= startYearTime && todayTime <= endYearTime) {
+      todayOffsetPx = dateToPx(todayTime);
+    }
+  }
+
+  return {
+    timelineWidth,
+    topHeaderHtml,
+    subHeaderHtml,
+    gridLinesHtml,
+    todayOffsetPx,
+    dateToPx
+  };
+}
+
 function renderTimeline() {
-  const container = document.getElementById('timelineChart');
-  container.innerHTML = '';
+  setupGanttInteractions();
+
+  // Aktif Zoom Butonu Durumunu Güncelle
+  document.querySelectorAll('#ganttZoomGroup .zoom-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.zoom === ganttZoomLevel);
+  });
+
+  const chartContainer = document.getElementById('timelineChart');
+  const tableBody = document.getElementById('opGanttTableBody');
+  const chartPane = document.getElementById('opGanttChartPane');
+
+  if (!chartContainer || !tableBody) return;
+
+  chartContainer.innerHTML = '';
+  tableBody.innerHTML = '';
 
   const activeProj = state.projects.find(p => p.id === state.currentProjectId);
-  document.getElementById('timelineProjectName').textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
+  const titleEl = document.getElementById('timelineProjectName');
+  if (titleEl) {
+    titleEl.textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
+  }
 
-  if (state.tasks.length === 0) {
-    container.innerHTML = '<p style="color:#64748b; padding:20px;">Bu projede gösterilecek görev yok.</p>';
+  // Arama / Filtreleme
+  const tasksToRender = state.tasks.filter(t => {
+    if (!ganttFilterQuery) return true;
+    const titleMatch = (t.title || '').toLowerCase().includes(ganttFilterQuery);
+    const descMatch = (t.description || '').toLowerCase().includes(ganttFilterQuery);
+    const statusMatch = (t.work_status || '').toLowerCase().includes(ganttFilterQuery);
+    return titleMatch || descMatch || statusMatch;
+  });
+
+  if (tasksToRender.length === 0) {
+    tableBody.innerHTML = '<div style="padding:24px; color:#64748b; font-size:0.85rem; text-align:center;">Kayıtlı veya filtreyle eşleşen görev yok.</div>';
+    chartContainer.innerHTML = '<div style="padding:24px; color:#64748b; font-size:0.85rem; text-align:center;">Zaman çizelgesinde gösterilecek görev yok.</div>';
     return;
   }
 
-  // 1. Tarih Aralığı Hesaplama (En erken başlangıçtan en geç bitişe + marj)
+  // 1. Tarih Aralığı Hesaplama
   let minTime = Infinity;
   let maxTime = -Infinity;
 
-  state.tasks.forEach(t => {
+  tasksToRender.forEach(t => {
     const s = new Date(t.current_start_date).getTime();
     const d = new Date(t.current_due_date).getTime();
     if (s < minTime) minTime = s;
@@ -449,106 +969,128 @@ function renderTimeline() {
     maxTime = Date.now() + 30 * 24 * 60 * 60 * 1000;
   }
 
-  // Başlangıcı 2 gün geriye, bitişi 5 gün ileriye al
-  const startDate = new Date(minTime);
-  startDate.setDate(startDate.getDate() - 2);
-  startDate.setHours(0, 0, 0, 0);
+  // 2. Çoklu Zoom Seviyesine Göre Ölçek ve Başlıklar
+  const scale = calculateGanttScale(minTime, maxTime, ganttZoomLevel);
 
-  const endDate = new Date(maxTime);
-  endDate.setDate(endDate.getDate() + 5);
-  endDate.setHours(0, 0, 0, 0);
+  // 3. SOL PANELİ DOLDUR (İş Paketi Tablosu)
+  tasksToRender.forEach((t, idx) => {
+    const row = document.createElement('div');
+    row.className = 'g-table-row';
+    row.dataset.id = t.id;
 
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  const totalDays = Math.max(16, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
-  const COL_WIDTH = 44; // Gün sütunu genişliği (px)
-  const timelineWidth = totalDays * COL_WIDTH;
+    const shortId = idx + 1;
+    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
+    const prog = t.work_status === 'COMPLETED' ? 100 : (t.progress || 0);
 
-  // 2. Takvim Günleri & Aylar Dizisi
-  const days = [];
-  const monthSpans = [];
-  let currentMonthName = '';
-  let currentMonthSpan = 0;
+    const statusText = {
+      BLOCKED: 'Öncül Bekliyor',
+      READY: 'Başlamaya Hazır',
+      IN_PROGRESS: 'Devam Ediyor',
+      COMPLETED: 'Tamamlandı'
+    }[t.work_status] || t.work_status;
 
-  const monthNamesTR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    const chipClass = {
+      BLOCKED: 'chip-blocked',
+      READY: 'chip-ready',
+      IN_PROGRESS: 'chip-progress',
+      COMPLETED: 'chip-done'
+    }[t.work_status] || 'chip-ready';
 
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // Atanan Kişi
+    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
+    const assigneeInitials = assignee ? assignee.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : '?';
+    const assigneeName = assignee ? assignee.name : 'Atanmadı';
 
-  for (let i = 0; i < totalDays; i++) {
-    const d = new Date(startDate.getTime() + i * MS_PER_DAY);
-    const dayNum = d.getDate();
-    const monthIndex = d.getMonth();
-    const year = d.getFullYear();
-    const mName = `${monthNamesTR[monthIndex]} ${year}`;
+    row.innerHTML = `
+      <div class="g-col g-col-id">#${shortId}</div>
+      <div class="g-col g-col-title" title="${t.title}">
+        <span class="g-type-icon">${typeIcon}</span>
+        <span class="g-title-text">${t.title}</span>
+        <span class="g-progress-pill">${prog}%</span>
+      </div>
+      <div class="g-col g-col-status">
+        <span class="g-status-chip ${chipClass}">${statusText}</span>
+      </div>
+      <div class="g-col g-col-assignee" title="${assigneeName}">
+        <div class="g-assignee-info">
+          <div class="g-assignee-avatar">${assigneeInitials}</div>
+          <span class="g-assignee-name">${assigneeName}</span>
+        </div>
+      </div>
+      <div class="g-col g-col-dates">
+        ${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}
+      </div>
+    `;
 
-    const dateKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-    const isToday = dateKey === todayStr;
+    // Tıklanınca görev çekmecesini aç
+    row.addEventListener('click', () => openTaskDrawer(t.id));
 
-    days.push({ dayNum, isToday, date: d });
+    // Senkronize Hover
+    row.addEventListener('mouseenter', () => {
+      row.classList.add('row-highlighted');
+      const track = document.getElementById(`gantt-track-${t.id}`);
+      if (track) track.classList.add('row-highlighted');
+    });
+    row.addEventListener('mouseleave', () => {
+      row.classList.remove('row-highlighted');
+      const track = document.getElementById(`gantt-track-${t.id}`);
+      if (track) track.classList.remove('row-highlighted');
+    });
 
-    if (mName !== currentMonthName) {
-      if (currentMonthName) {
-        monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
-      }
-      currentMonthName = mName;
-      currentMonthSpan = 1;
-    } else {
-      currentMonthSpan++;
-    }
-  }
-  if (currentMonthSpan > 0) {
-    monthSpans.push({ name: currentMonthName, count: currentMonthSpan });
-  }
+    tableBody.appendChild(row);
+  });
 
-  // 3. HTML İskeleti Oluşturma (Scrollable wrapper, Header, Grid Lines, Task Rows, SVG Overlay)
+  // 4. SAĞ PANELİ DOLDUR (Zaman Çizelgesi Izgarası ve Çubukları)
   const scrollWrap = document.createElement('div');
   scrollWrap.className = 'timeline-scroll-wrap';
+  scrollWrap.style.width = `${scale.timelineWidth}px`;
 
-  // Üst Başlık (Aylar + Günler)
+  // Üst Başlık (Aylar/Yıllar + Günler/Haftalar/Aylar/Çeyrekler)
   const header = document.createElement('div');
   header.className = 'gantt-grid-header';
-  header.style.width = `${timelineWidth}px`;
+  header.style.width = `${scale.timelineWidth}px`;
 
-  // Aylar satırı
-  const monthsRow = document.createElement('div');
-  monthsRow.className = 'gantt-months-track';
-  monthsRow.innerHTML = monthSpans.map(m => `
-    <div class="gantt-month-header" style="width: ${m.count * COL_WIDTH}px;">
-      ${m.name}
-    </div>
-  `).join('');
+  // Üst Takvim Şeridi
+  const topRow = document.createElement('div');
+  topRow.className = 'gantt-months-track';
+  topRow.innerHTML = scale.topHeaderHtml;
 
-  // Günler satırı
-  const daysRow = document.createElement('div');
-  daysRow.className = 'gantt-days-track';
-  daysRow.innerHTML = days.map(d => `
-    <div class="gantt-day-col ${d.isToday ? 'today' : ''}" title="${d.dayNum}">
-      ${d.dayNum}
-    </div>
-  `).join('');
+  // Alt Takvim Şeridi
+  const subRow = document.createElement('div');
+  subRow.className = 'gantt-days-track';
+  subRow.innerHTML = scale.subHeaderHtml;
 
-  header.appendChild(monthsRow);
-  header.appendChild(daysRow);
+  header.appendChild(topRow);
+  header.appendChild(subRow);
   scrollWrap.appendChild(header);
 
   // Görev Satırları ve Izgara Gövdesi
   const rowsContainer = document.createElement('div');
   rowsContainer.className = 'gantt-rows-container';
   rowsContainer.id = 'ganttRowsContainer';
-  rowsContainer.style.width = `${timelineWidth}px`;
+  rowsContainer.style.width = `${scale.timelineWidth}px`;
 
   // Arka Plan Dikey Izgara Çizgileri
   const gridLines = document.createElement('div');
   gridLines.className = 'gantt-grid-lines';
-  gridLines.style.width = `${timelineWidth}px`;
-  gridLines.innerHTML = days.map(() => `<div class="gantt-grid-line"></div>`).join('');
+  gridLines.style.width = `${scale.timelineWidth}px`;
+  gridLines.innerHTML = scale.gridLinesHtml;
   rowsContainer.appendChild(gridLines);
+
+  // Dikey 'Bugün' Çizgisi
+  if (scale.todayOffsetPx >= 0) {
+    const todayLine = document.createElement('div');
+    todayLine.className = 'gantt-today-line';
+    todayLine.style.left = `${scale.todayOffsetPx}px`;
+    todayLine.innerHTML = `<span class="gantt-today-badge">Bugün</span>`;
+    rowsContainer.appendChild(todayLine);
+  }
 
   // SVG Bağlantı Çizgileri Katmanı
   const svgOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svgOverlay.setAttribute('class', 'gantt-svg-overlay');
   svgOverlay.setAttribute('id', 'ganttSvgOverlay');
-  svgOverlay.setAttribute('width', timelineWidth);
+  svgOverlay.setAttribute('width', scale.timelineWidth);
   svgOverlay.setAttribute('height', '100%');
   svgOverlay.innerHTML = `
     <defs>
@@ -559,20 +1101,21 @@ function renderTimeline() {
   `;
   rowsContainer.appendChild(svgOverlay);
 
-  // Her görev için bir satır ve kart (Resim 2 Stili)
-  state.tasks.forEach((t) => {
+  // Her görev için bir satır (tam 48px yükseklikte)
+  tasksToRender.forEach((t) => {
     const track = document.createElement('div');
     track.className = 'gantt-row-track';
-    track.style.width = `${timelineWidth}px`;
+    track.id = `gantt-track-${t.id}`;
+    track.dataset.id = t.id;
+    track.style.width = `${scale.timelineWidth}px`;
 
     const tStart = new Date(t.current_start_date).getTime();
     const tDue = new Date(t.current_due_date).getTime();
 
-    const startOffsetDays = Math.max(0, (tStart - startDate.getTime()) / MS_PER_DAY);
-    const durationDays = Math.max(1, (tDue - tStart) / MS_PER_DAY + 1);
-
-    const leftPx = Math.round(startOffsetDays * COL_WIDTH);
-    const minWidthPx = Math.max(280, Math.round(durationDays * COL_WIDTH));
+    const leftPx = Math.round(scale.dateToPx(tStart));
+    const rightPx = Math.round(scale.dateToPx(tDue));
+    const minBarWidth = ganttZoomLevel === 'year' ? 24 : (ganttZoomLevel === 'month' ? 36 : 60);
+    const widthPx = Math.max(minBarWidth, rightPx - leftPx);
 
     const barClass = {
       BLOCKED: 'bar-blocked',
@@ -581,56 +1124,103 @@ function renderTimeline() {
       COMPLETED: 'bar-done'
     }[t.work_status] || 'bar-ready';
 
-    const chipClass = {
-      BLOCKED: 'chip-blocked',
-      READY: 'chip-ready',
-      IN_PROGRESS: 'chip-progress',
-      COMPLETED: 'chip-done'
-    }[t.work_status] || 'chip-ready';
-
-    const statusText = {
-      BLOCKED: 'Öncül Bekliyor',
-      READY: 'Başlamaya Hazır',
-      IN_PROGRESS: 'Devam Ediyor',
-      COMPLETED: 'Tamamlandı'
-    }[t.work_status] || t.work_status;
-
-    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
     const prog = t.work_status === 'COMPLETED' ? 100 : (t.progress || 0);
 
-    const pill = document.createElement('div');
-    pill.className = `gantt-pill-bar ${barClass}`;
-    pill.id = `gantt-bar-${t.id}`;
-    pill.style.left = `${leftPx}px`;
-    pill.style.minWidth = `${minWidthPx}px`;
-    pill.dataset.id = t.id;
+    // KİLOMETRE TAŞI MI YOKSA NORMAL GÖREV Mİ?
+    if (t.type === 'MILESTONE') {
+      const mLeftPx = Math.round(scale.dateToPx(tDue));
 
-    // Resim 1 & 2 gereksinimi: tarihler içerde gg.aa.yyyy formatında yazılıyor!
-    pill.innerHTML = `
-      <span class="pill-icon">${typeIcon}</span>
-      <span class="pill-title">${t.title}</span>
-      <span class="pill-progress">${prog}%</span>
-      <span class="pill-dates">${formatDateTR(t.current_start_date)} ➔ ${formatDateTR(t.current_due_date)}</span>
-      <span class="pill-status-chip ${chipClass}">● ${statusText}</span>
-    `;
+      const marker = document.createElement('div');
+      marker.className = `gantt-milestone-marker ${t.work_status === 'COMPLETED' ? 'done' : ''}`;
+      marker.id = `gantt-bar-${t.id}`;
+      marker.style.left = `${mLeftPx}px`;
+      marker.dataset.id = t.id;
 
-    pill.addEventListener('click', () => openTaskDrawer(t.id));
+      marker.innerHTML = `
+        <div class="milestone-diamond" title="Kilometre Taşı: ${t.title}"></div>
+        <span class="milestone-label">${t.title} (${formatDateTR(t.current_due_date)})</span>
+      `;
+      marker.addEventListener('click', () => openTaskDrawer(t.id));
+      track.appendChild(marker);
+    } else {
+      // Normal Görev Barı
+      const pill = document.createElement('div');
+      pill.className = `gantt-pill-bar ${barClass}`;
+      pill.id = `gantt-bar-${t.id}`;
+      pill.style.left = `${leftPx}px`;
+      pill.style.width = `${widthPx}px`;
+      pill.dataset.id = t.id;
 
-    track.appendChild(pill);
+      const typeIcon = t.type === 'BUG' ? '🐞' : '📌';
+
+      pill.innerHTML = `
+        <div class="pill-progress-fill" style="width: ${prog}%;"></div>
+        <div class="pill-content">
+          <span class="pill-icon">${typeIcon}</span>
+          <span class="pill-title">${t.title}</span>
+          <span class="pill-progress">${prog}%</span>
+          <span class="pill-dates">${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}</span>
+        </div>
+      `;
+
+      pill.addEventListener('click', () => openTaskDrawer(t.id));
+      track.appendChild(pill);
+    }
+
+    // Senkronize Hover
+    track.addEventListener('mouseenter', () => {
+      track.classList.add('row-highlighted');
+      const row = tableBody.querySelector(`.g-table-row[data-id="${t.id}"]`);
+      if (row) row.classList.add('row-highlighted');
+    });
+    track.addEventListener('mouseleave', () => {
+      track.classList.remove('row-highlighted');
+      const row = tableBody.querySelector(`.g-table-row[data-id="${t.id}"]`);
+      if (row) row.classList.remove('row-highlighted');
+    });
+
     rowsContainer.appendChild(track);
   });
 
   scrollWrap.appendChild(rowsContainer);
-  container.appendChild(scrollWrap);
+  chartContainer.appendChild(scrollWrap);
 
-  // 4. Bağımlılık Oklarını Çiz (Resim 2 gibi altın kavisli oklar)
+  // 5. ÇİFT TARAFLI DİKEY KAYDIRMA SENKRONİZASYONU (Vertical Scroll Sync)
+  let isSyncing = false;
+  tableBody.onscroll = () => {
+    if (!isSyncing && chartPane) {
+      isSyncing = true;
+      chartPane.scrollTop = tableBody.scrollTop;
+      requestAnimationFrame(() => { isSyncing = false; });
+    }
+  };
+  chartPane.onscroll = () => {
+    if (!isSyncing && tableBody) {
+      isSyncing = true;
+      tableBody.scrollTop = chartPane.scrollTop;
+      requestAnimationFrame(() => { isSyncing = false; });
+    }
+  };
+
+  // 6. Bağımlılık Oklarını Çiz (SVG Overlay)
   setTimeout(() => {
     drawDependencyArrows(svgOverlay, rowsContainer);
   }, 60);
+
+  // İlk açılışta bugüne hafif odaklan
+  if (scale.todayOffsetPx > 200) {
+    setTimeout(() => {
+      chartPane.scrollLeft = Math.max(0, scale.todayOffsetPx - (chartPane.clientWidth / 2) + 20);
+    }, 120);
+  }
 }
 
 function drawDependencyArrows(svg, container) {
   if (!svg || !container) return;
+
+  // Önceki çizgileri temizle (defs hariç)
+  const oldElements = svg.querySelectorAll('circle, path:not([marker-id])');
+  oldElements.forEach(el => el.remove());
 
   state.dependencies.forEach(dep => {
     const predEl = document.getElementById(`gantt-bar-${dep.predecessor_id}`);
@@ -642,24 +1232,22 @@ function drawDependencyArrows(svg, container) {
       if (!predTrack || !succTrack) return;
 
       const x1 = predEl.offsetLeft + predEl.offsetWidth;
-      const y1 = predTrack.offsetTop + predEl.offsetTop + (predEl.offsetHeight / 2);
+      const y1 = predTrack.offsetTop + (predTrack.offsetHeight / 2);
 
       const x2 = succEl.offsetLeft;
-      const y2 = succTrack.offsetTop + succEl.offsetTop + (succEl.offsetHeight / 2);
+      const y2 = succTrack.offsetTop + (succTrack.offsetHeight / 2);
 
-      const dx = Math.max(30, Math.abs(x2 - x1) * 0.45);
+      const dx = Math.max(25, Math.abs(x2 - x1) * 0.45);
       let d;
 
-      if (x2 >= x1 + 10) {
-        // İleriye doğru akıcı S-eğrisi (Resim 2)
+      if (x2 >= x1 + 8) {
         d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
       } else {
-        // Geriye veya dikey döngüsel kavis
         const midY = (y1 + y2) / 2;
-        d = `M ${x1} ${y1} C ${x1 + 45} ${y1}, ${x1 + 45} ${midY}, ${(x1 + x2)/2} ${midY} S ${x2 - 45} ${y2}, ${x2} ${y2}`;
+        d = `M ${x1} ${y1} C ${x1 + 35} ${y1}, ${x1 + 35} ${midY}, ${(x1 + x2)/2} ${midY} S ${x2 - 35} ${y2}, ${x2} ${y2}`;
       }
 
-      // Başlangıç noktası yuvarlağı (Resim 2 stili)
+      // Başlangıç noktası yuvarlağı
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       dot.setAttribute('cx', x1);
       dot.setAttribute('cy', y1);
@@ -672,7 +1260,7 @@ function drawDependencyArrows(svg, container) {
       path.setAttribute('d', d);
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', '#f59e0b');
-      path.setAttribute('stroke-width', '2.4');
+      path.setAttribute('stroke-width', '2.2');
       path.setAttribute('stroke-linecap', 'round');
       path.setAttribute('marker-end', 'url(#gantt-arrow-gold)');
       svg.appendChild(path);
@@ -903,10 +1491,29 @@ function renderPersonnelTable() {
 
   const countryFlags = {
     'Türkiye': '🇹🇷 Türkiye',
+    'Turkiye': '🇹🇷 Türkiye',
     'Almanya': '🇩🇪 Almanya',
     'İngiltere': '🇬🇧 İngiltere',
-    'USA': '🇺🇸 ABD'
+    'Ingiltere': '🇬🇧 İngiltere',
+    'USA': '🇺🇸 ABD',
+    'ABD': '🇺🇸 ABD'
   };
+
+  function getCountryDisplay(rawCountry) {
+    if (!rawCountry) return '🇹🇷 Türkiye';
+    let cleaned = rawCountry.replace(/\ufffd/g, 'ü').trim();
+    if (cleaned.toLowerCase().includes('turk') || cleaned.toLowerCase().includes('türk') || cleaned.toLowerCase().includes('trkiye')) {
+      cleaned = 'Türkiye';
+    }
+    return countryFlags[cleaned] || countryFlags[rawCountry] || cleaned;
+  }
+
+  function getLangDisplay(u) {
+    const c = (u.country || '').replace(/\ufffd/g, 'ü').trim().toLowerCase();
+    if (c.includes('türk') || c.includes('turk') || c.includes('trkiye') || c === 'tr') return 'TR';
+    if (c.includes('alman') || c.includes('german') || c.includes('deutsch')) return 'DE';
+    return (u.language || 'tr').toUpperCase();
+  }
 
   state.personnelList.forEach(u => {
     const isSelf = u.id === state.currentUser?.id;
@@ -923,7 +1530,7 @@ function renderPersonnelTable() {
         <div style="font-size:0.75rem; color:#94a3b8;">${u.phone || '-'}</div>
       </td>
       <td>
-        <span>${countryFlags[u.country] || u.country} (${(u.language || 'tr').toUpperCase()})</span>
+        <span>${getCountryDisplay(u.country)} (${getLangDisplay(u)})</span>
       </td>
       <td>${u.department || 'Genel'}</td>
       <td>
@@ -1033,10 +1640,45 @@ function setupEventListeners() {
   });
 
   // Çıkış
-  document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('logoutBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    logout();
+  });
+
+  // Tema Değiştirme Butonları (Hızlı Geçiş)
+  document.getElementById('topbarThemeToggleBtn')?.addEventListener('click', toggleTheme);
+  document.getElementById('sidebarThemeToggleBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTheme();
+  });
+
+  // Profil & Tema Ayarları Modalı
+  document.getElementById('userProfileBtn')?.addEventListener('click', openUserProfileModal);
+
+  // Profil Modalı Tema Kartı Seçimi
+  document.querySelectorAll('#userProfileModal .theme-choice-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const selectedTheme = card.dataset.setTheme;
+      applyTheme(selectedTheme);
+      if (state.currentUser) {
+        state.currentUser.theme = selectedTheme;
+        apiCall('/api/profile/theme', 'PUT', { theme: selectedTheme }).catch(() => {});
+      }
+    });
+  });
+
+  // Profil Modalı Tercihleri Uygula
+  document.getElementById('saveProfilePreferencesBtn')?.addEventListener('click', () => {
+    const langSelect = document.getElementById('modalLangSelect');
+    if (langSelect && langSelect.value !== state.currentLang) {
+      setLanguage(langSelect.value);
+    }
+    document.getElementById('userProfileModal')?.classList.remove('open');
+    showToast('Profil ve tema tercihleri uygulandı.', 'success');
+  });
 
   // Dil Değiştirici
-  document.getElementById('langSelect').addEventListener('change', (e) => {
+  document.getElementById('langSelect')?.addEventListener('change', (e) => {
     setLanguage(e.target.value);
   });
 
@@ -1201,10 +1843,39 @@ function setupEventListeners() {
     await loadProjectTasks(newProj.id);
   });
 
+  let editingPersonnelId = null;
+
   // Yeni Personel Modalı (Admin)
   document.getElementById('newPersonnelBtn')?.addEventListener('click', () => {
+    editingPersonnelId = null;
     document.getElementById('personnelForm').reset();
+    const modalTitle = document.querySelector('#personnelModal .modal-header h3');
+    if (modalTitle) modalTitle.textContent = 'Yeni Personel Kartı Ekle';
     document.getElementById('personnelModal').classList.add('open');
+  });
+
+  // Personel Düzenle Butonu Tıklaması
+  document.getElementById('personnelTable')?.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.btn-edit-personnel');
+    if (editBtn) {
+      const id = editBtn.dataset.id;
+      const u = state.personnelList.find(p => p.id === id);
+      if (!u) return;
+      editingPersonnelId = id;
+      document.getElementById('persName').value = u.name || '';
+      document.getElementById('persEmail').value = u.email || '';
+      document.getElementById('persPhone').value = u.phone || '';
+      document.getElementById('persPassword').value = u.password || '123';
+      const normCountry = (u.country || '').replace(/\ufffd/g, 'ü');
+      document.getElementById('persCountry').value = (normCountry.includes('Türk') || normCountry.includes('Trk')) ? 'Türkiye' : (u.country || 'Türkiye');
+      document.getElementById('persDept').value = u.department || '';
+      document.getElementById('persCanCreateProj').checked = !!u.can_create_project;
+      const repToggle = document.getElementById('persCanBuildReports');
+      if (repToggle) repToggle.checked = !!u.can_build_reports;
+      const modalTitle = document.querySelector('#personnelModal .modal-header h3');
+      if (modalTitle) modalTitle.textContent = 'Personel Bilgilerini Düzenle';
+      document.getElementById('personnelModal').classList.add('open');
+    }
   });
 
   document.getElementById('personnelForm')?.addEventListener('submit', async (e) => {
@@ -1220,8 +1891,14 @@ function setupEventListeners() {
       can_build_reports: document.getElementById('persCanBuildReports')?.checked || false
     };
 
-    await apiCall('/api/admin/personnel', 'POST', body);
-    showToast('Personel kartı eklendi.', 'success');
+    if (editingPersonnelId) {
+      await apiCall(`/api/admin/personnel/${editingPersonnelId}`, 'PUT', body);
+      showToast('Personel bilgileri güncellendi.', 'success');
+      editingPersonnelId = null;
+    } else {
+      await apiCall('/api/admin/personnel', 'POST', body);
+      showToast('Personel kartı eklendi.', 'success');
+    }
     document.getElementById('personnelModal').classList.remove('open');
     await loadPersonnel();
   });
@@ -2059,6 +2736,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
   }
+
+  // İlk tema başlatması
+  applyTheme(getActiveTheme());
 });
+
+// Anında tema uygula
+applyTheme(getActiveTheme());
+
 
 

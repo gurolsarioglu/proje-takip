@@ -52,6 +52,7 @@ export interface User {
   can_create_project: boolean;
   can_build_reports: boolean;
   department?: string;
+  theme?: 'light' | 'dark';
   created_at: string;
 }
 
@@ -76,6 +77,7 @@ export interface PersonnelCardDTO {
   can_create_project?: boolean;
   can_build_reports?: boolean;
   department?: string;
+  theme?: 'light' | 'dark';
 }
 
 export interface CustomReportLayout {

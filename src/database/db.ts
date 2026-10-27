@@ -53,6 +53,22 @@ export class Database {
         if (!Array.isArray(this.state.microsoft_todos)) {
           this.state.microsoft_todos = [];
         }
+        if (Array.isArray(this.state.users)) {
+          this.state.users = this.state.users.map(u => {
+            let updated = false;
+            let country = u.country;
+            let language = u.language;
+            if (country && (country.includes('\ufffd') || country.includes('Trkiye') || country.toLowerCase() === 'turkiye')) {
+              country = 'Türkiye';
+              updated = true;
+            }
+            if (country === 'Türkiye' && (!language || language === 'en')) {
+              language = 'tr';
+              updated = true;
+            }
+            return updated ? { ...u, country, language } : u;
+          });
+        }
       } catch (e) {
         console.warn('Failed to load DB file, initializing clean state.', e);
       }
