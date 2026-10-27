@@ -351,6 +351,27 @@ app.post('/api/tasks', (req, res) => {
   }
 });
 
+// Toplu Görev İçe Aktarma (CSV / Excel Import)
+app.post('/api/projects/:id/tasks/bulk', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const projectId = req.params.id;
+    if (!projectService.canEditTasks(auth, projectId)) {
+      return res.status(403).json({ error: 'Bu projeye görev ekleme yetkiniz yok.' });
+    }
+
+    const { tasks } = req.body;
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      return res.status(400).json({ error: 'Yüklenecek görev listesi boş veya geçersiz formatta.' });
+    }
+
+    const result = taskService.bulkCreateTasks(auth, projectId, tasks);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // OpenProject Split Screen: Görev Detay Paneli (Sağ Çekmece)
 app.get('/api/tasks/:id/details', (req, res) => {
   try {

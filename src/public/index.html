@@ -185,7 +185,33 @@
         </div>
 
         <div class="topbar-right">
-          <!-- Butonlar -->
+          <!-- İçe / Dışa Aktarma Butonları -->
+          <button id="importTasksBtn" class="action-btn outline-btn" title="Excel veya CSV dosyasından toplu görev yükleyin">
+            📥 İçe Aktar (CSV)
+          </button>
+
+          <div class="dropdown-wrapper" id="exportDropdownWrapper">
+            <button id="exportMenuBtn" class="action-btn outline-btn" title="Proje verilerini dışa aktarın">
+              📤 Dışa Aktar ▾
+            </button>
+            <div class="dropdown-menu" id="exportDropdownMenu">
+              <button type="button" class="dropdown-item" id="exportExcelBtn">
+                <span class="dropdown-icon">📊</span>
+                <span class="dropdown-text"><strong>Excel (CSV) İndir</strong><small>Türkçe karakter uyumlu (.csv)</small></span>
+              </button>
+              <button type="button" class="dropdown-item" id="exportJsonBtn">
+                <span class="dropdown-icon">💾</span>
+                <span class="dropdown-text"><strong>JSON Proje Yedeği</strong><small>Tüm görev ve bağımlılıklar</small></span>
+              </button>
+              <div class="dropdown-divider"></div>
+              <button type="button" class="dropdown-item" id="printReportBtn">
+                <span class="dropdown-icon">🖨️</span>
+                <span class="dropdown-text"><strong>Sayfayı Yazdır / PDF</strong><small>A4 formatında temiz çıktı</small></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Proje ve Görev Butonları -->
           <button id="newProjectBtn" class="action-btn secondary-btn" style="display:none;" data-i18n="new_project_btn">
             + Yeni Proje
           </button>
@@ -968,7 +994,81 @@
     </div>
   </div>
 
-  <!-- 5. Bildirimler Çekmecesi -->
+  <!-- 6. Toplu Görev İçe Aktar Modalı (CSV / Excel) -->
+  <div id="importModal" class="modal-backdrop">
+    <div class="modal-content modal-lg" style="max-width: 820px;">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <span class="modal-badge">TOPLU İŞLEM</span>
+          <h3>CSV / Excel ile Görev İçe Aktar</h3>
+        </div>
+        <button class="modal-close" data-close="importModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="import-intro-text">
+          Hazırladığınız CSV dosyasını seçerek veya bu alana sürükleyip bırakarak aktif projeye birden fazla görevi tek seferde yükleyebilirsiniz.
+        </p>
+
+        <!-- Örnek Şablon Kutusu -->
+        <div class="import-template-banner">
+          <div class="template-info">
+            <span class="template-icon">📄</span>
+            <div>
+              <strong>Örnek Şablon Dosyası:</strong>
+              <p>Doğru sütun başlıkları ve örnek verileri içeren CSV dosyasını indirip doğrudan Excel'de düzenleyebilirsiniz.</p>
+            </div>
+          </div>
+          <button type="button" id="downloadCsvTemplateBtn" class="action-btn outline-btn sm-btn">
+            📥 Örnek Şablonu İndir (.csv)
+          </button>
+        </div>
+
+        <!-- Sürükle Bırak / Dosya Yükleme Alanı -->
+        <div class="csv-upload-dropzone" id="csvDropzone">
+          <input type="file" id="csvFileInput" accept=".csv, text/csv, application/vnd.ms-excel" style="display:none;" />
+          <div class="dropzone-content">
+            <span class="dropzone-icon">📊</span>
+            <h4>CSV Dosyanızı Buraya Sürükleyip Bırakın</h4>
+            <p>veya bilgisayarınızdan seçmek için <strong class="link-text">dosya seçin</strong></p>
+            <span class="dropzone-file-hint">Desteklenen format: .csv (Türkçe karakter ve UTF-8 uyumlu, noktalı virgül veya virgül ayrımı)</span>
+          </div>
+        </div>
+
+        <!-- CSV Önizleme Tablosu -->
+        <div id="csvPreviewContainer" style="display:none; margin-top:16px;">
+          <div class="preview-header-row">
+            <h4>📋 Yüklenecek Görevler Önizlemesi (<span id="csvParsedCount">0</span> Görev Bulundu)</h4>
+            <button type="button" id="clearCsvFileBtn" class="text-button-danger sm-text">Temizle</button>
+          </div>
+          <div class="preview-table-wrapper">
+            <table class="styled-table mini-table" id="csvPreviewTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Görev Başlığı</th>
+                  <th>Tür</th>
+                  <th>Öncelik</th>
+                  <th>Sorumlu</th>
+                  <th>Başlangıç</th>
+                  <th>Bitiş Hedefi</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody id="csvPreviewTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="action-btn secondary-btn" data-close="importModal">Kapat</button>
+        <button type="button" id="confirmImportBtn" class="action-btn primary-btn" disabled>
+          🚀 Görevleri Projeye Aktar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Bildirimler Çekmecesi -->
   <div id="notifDrawer" class="drawer-backdrop">
     <div class="drawer-panel">
       <div class="drawer-header">

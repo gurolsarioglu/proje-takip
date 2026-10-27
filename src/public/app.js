@@ -2098,6 +2098,383 @@ function setupEventListeners() {
     e.target.reset();
     await loadProjectTasks(state.currentProjectId);
   });
+
+  // İçe ve Dışa Aktarma (Excel, CSV, JSON, Yazdır) Dinleyicileri
+  setupImportExportListeners();
+}
+
+// ==============================================================
+// 5.1. İÇE VE DIŞA AKTARMA (EXCEL / CSV / JSON / YAZDIR)
+// ==============================================================
+
+let parsedImportTasks = [];
+
+function setupImportExportListeners() {
+  // Dışa Aktar Dropdown Açma / Kapama
+  const exportBtn = document.getElementById('exportMenuBtn');
+  const exportWrapper = document.getElementById('exportDropdownWrapper');
+
+  if (exportBtn && exportWrapper) {
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportWrapper.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!exportWrapper.contains(e.target)) {
+        exportWrapper.classList.remove('open');
+      }
+    });
+  }
+
+  // 1. Excel (CSV) Dışa Aktar
+  document.getElementById('exportExcelBtn')?.addEventListener('click', () => {
+    exportWrapper?.classList.remove('open');
+    exportProjectToCsv();
+  });
+
+  // 2. JSON Dışa Aktar
+  document.getElementById('exportJsonBtn')?.addEventListener('click', () => {
+    exportWrapper?.classList.remove('open');
+    exportProjectToJson();
+  });
+
+  // 3. Yazdır / PDF
+  document.getElementById('printReportBtn')?.addEventListener('click', () => {
+    exportWrapper?.classList.remove('open');
+    window.print();
+  });
+
+  // 4. İçe Aktar Modalı Aç
+  document.getElementById('importTasksBtn')?.addEventListener('click', () => {
+    resetCsvImportModal();
+    document.getElementById('importModal')?.classList.add('open');
+  });
+
+  // 5. Örnek CSV Şablonu İndir
+  document.getElementById('downloadCsvTemplateBtn')?.addEventListener('click', () => {
+    downloadCsvTemplate();
+  });
+
+  // 6. CSV Dosya Seçimi & Sürükle Bırak (Dropzone)
+  const dropzone = document.getElementById('csvDropzone');
+  const fileInput = document.getElementById('csvFileInput');
+
+  if (dropzone && fileInput) {
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('drag-active');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('drag-active');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-active');
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleCsvFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleCsvFile(e.target.files[0]);
+      }
+    });
+  }
+
+  // 7. CSV Seçimini Temizle
+  document.getElementById('clearCsvFileBtn')?.addEventListener('click', () => {
+    resetCsvImportModal();
+  });
+
+  // 8. İçe Aktarımı Onayla ve Gönder
+  document.getElementById('confirmImportBtn')?.addEventListener('click', async () => {
+    if (!state.currentProjectId) {
+      showToast('Lütfen önce bir proje seçin.', 'error');
+      return;
+    }
+
+    if (!parsedImportTasks || parsedImportTasks.length === 0) {
+      showToast('Yüklenecek görev bulunamadı.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('confirmImportBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Yükleniyor...';
+
+    try {
+      const res = await apiCall(`/api/projects/${state.currentProjectId}/tasks/bulk`, 'POST', {
+        tasks: parsedImportTasks
+      });
+
+      showToast(`🎉 ${res.count} görev başarıyla projeye aktarıldı!`, 'success');
+      document.getElementById('importModal')?.classList.remove('open');
+      resetCsvImportModal();
+      await loadProjectTasks(state.currentProjectId);
+    } catch (err) {
+      showToast('İçe aktarma hatası: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🚀 Görevleri Projeye Aktar';
+    }
+  });
+}
+
+function resetCsvImportModal() {
+  parsedImportTasks = [];
+  const fileInput = document.getElementById('csvFileInput');
+  if (fileInput) fileInput.value = '';
+  const preview = document.getElementById('csvPreviewContainer');
+  if (preview) preview.style.display = 'none';
+  const tableBody = document.getElementById('csvPreviewTableBody');
+  if (tableBody) tableBody.innerHTML = '';
+  const confirmBtn = document.getElementById('confirmImportBtn');
+  if (confirmBtn) confirmBtn.disabled = true;
+}
+
+// CSV Dosyasını Oku ve Ayrıştır
+function handleCsvFile(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    parseAndPreviewCsv(text);
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseAndPreviewCsv(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (lines.length < 2) {
+    showToast('CSV dosyasında en az bir başlık satırı ve bir veri satırı bulunmalıdır.', 'error');
+    return;
+  }
+
+  // Ayırıcı Tespiti: Noktalı virgül (;) veya virgül (,)
+  const firstLine = lines[0];
+  const delimiter = firstLine.includes(';') ? ';' : ',';
+
+  // CSV Satır Bölücü (Tırnak içindeki ayırıcıları korur)
+  function splitCsvRow(row, delim) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      if (char === '"' || char === "'") {
+        inQuotes = !inQuotes;
+      } else if (char === delim && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result.map(s => s.replace(/^["']|["']$/g, '').trim());
+  }
+
+  const rawHeaders = splitCsvRow(lines[0], delimiter).map(h => h.toLowerCase());
+
+  // Sütun Eşleştirici
+  const colMap = {
+    title: rawHeaders.findIndex(h => h.includes('başlık') || h.includes('baslik') || h.includes('title') || h.includes('görev') || h.includes('gorev') || h.includes('ad')),
+    type: rawHeaders.findIndex(h => h.includes('tür') || h.includes('tur') || h.includes('type')),
+    priority: rawHeaders.findIndex(h => h.includes('öncelik') || h.includes('oncelik') || h.includes('priority')),
+    assignee: rawHeaders.findIndex(h => h.includes('sorumlu') || h.includes('assignee') || h.includes('kişi') || h.includes('kisi') || h.includes('eposta') || h.includes('email')),
+    start: rawHeaders.findIndex(h => h.includes('başlangıç') || h.includes('baslangic') || h.includes('start')),
+    due: rawHeaders.findIndex(h => h.includes('bitiş') || h.includes('bitis') || h.includes('due') || h.includes('teslim') || h.includes('hedef')),
+    description: rawHeaders.findIndex(h => h.includes('açıklama') || h.includes('aciklama') || h.includes('desc') || h.includes('not'))
+  };
+
+  if (colMap.title === -1) {
+    showToast("CSV dosyasında 'Görev Başlığı' sütunu bulunamadı. Lütfen örnek şablonu kullanın.", 'error');
+    return;
+  }
+
+  const now = new Date();
+  parsedImportTasks = [];
+  const tbody = document.getElementById('csvPreviewTableBody');
+  if (tbody) tbody.innerHTML = '';
+
+  for (let i = 1; i < lines.length; i++) {
+    const row = splitCsvRow(lines[i], delimiter);
+    const title = row[colMap.title] || '';
+    if (!title) continue;
+
+    let type = 'TASK';
+    if (colMap.type !== -1 && row[colMap.type]) {
+      const tVal = row[colMap.type].toUpperCase();
+      if (tVal.includes('MILESTONE') || tVal.includes('KİLOMETRE') || tVal.includes('TAŞ')) type = 'MILESTONE';
+      else if (tVal.includes('BUG') || tVal.includes('HATA')) type = 'BUG';
+    }
+
+    let priority = 'NORMAL';
+    if (colMap.priority !== -1 && row[colMap.priority]) {
+      const pVal = row[colMap.priority].toUpperCase();
+      if (pVal.includes('HIGH') || pVal.includes('YÜKSEK')) priority = 'HIGH';
+      else if (pVal.includes('LOW') || pVal.includes('DÜŞÜK')) priority = 'LOW';
+    }
+
+    const assigneeStr = colMap.assignee !== -1 ? row[colMap.assignee] : '';
+    const startStr = colMap.start !== -1 ? row[colMap.start] : '';
+    const dueStr = colMap.due !== -1 ? row[colMap.due] : '';
+    const descStr = colMap.description !== -1 ? row[colMap.description] : '';
+
+    const taskObj = {
+      title,
+      type,
+      priority,
+      assignee_email_or_name: assigneeStr,
+      initial_start_date: startStr ? new Date(startStr).toISOString() : now.toISOString(),
+      initial_due_date: dueStr ? new Date(dueStr).toISOString() : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      description: descStr
+    };
+
+    parsedImportTasks.push(taskObj);
+
+    // Tablo Satırı Oluştur
+    if (tbody) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${parsedImportTasks.length}</td>
+        <td><strong>${escapeHtml(taskObj.title)}</strong></td>
+        <td><span class="op-type-badge ${type.toLowerCase()}">${type === 'MILESTONE' ? '🏁 Taş' : (type === 'BUG' ? '🐞 Hata' : '📌 Görev')}</span></td>
+        <td><span class="op-priority-badge ${priority === 'HIGH' ? 'high' : ''}">${priority === 'HIGH' ? '🔥 Yüksek' : 'Normal'}</span></td>
+        <td>${escapeHtml(assigneeStr || 'Atanmamış')}</td>
+        <td>${taskObj.initial_start_date.slice(0, 10)}</td>
+        <td>${taskObj.initial_due_date.slice(0, 10)}</td>
+        <td><span class="badge-status-ready">✅ Hazır</span></td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById('csvParsedCount').textContent = parsedImportTasks.length;
+  document.getElementById('csvPreviewContainer').style.display = 'block';
+  document.getElementById('confirmImportBtn').disabled = parsedImportTasks.length === 0;
+  showToast(`✅ ${parsedImportTasks.length} adet görev başarıyla okundu ve listelendi.`, 'info');
+}
+
+// Örnek CSV Şablonu İndirme
+function downloadCsvTemplate() {
+  const headers = ['Görev Başlığı', 'Tür', 'Öncelik', 'Sorumlu', 'Başlangıç Tarihi', 'Bitiş Tarihi', 'Açıklama'];
+  const sampleRows = [
+    ['Arayüz Wireframe ve Tasarım Hazırlığı', 'TASK', 'HIGH', 'ahmet@fggroup.com.tr', '2026-11-01', '2026-11-05', 'Figma tasarımları oluşturulacak'],
+    ['Kullanıcı Onayı ve Tasarım Kilometre Taşı', 'MILESTONE', 'HIGH', 'admin@fggroup.com.tr', '2026-11-06', '2026-11-06', 'Müşteri sunumu ve onay'],
+    ['Giriş Butonu Hizalama Düzeltmesi', 'BUG', 'NORMAL', 'hans@fggroup.com.tr', '2026-11-07', '2026-11-08', 'CSS responsive kayma sorunu']
+  ];
+
+  const csvContent = '\uFEFF' + [
+    headers.join(';'),
+    ...sampleRows.map(row => row.map(val => `"${val.replace(/"/g, '""')}"`).join(';'))
+  ].join('\r\n');
+
+  downloadFileBlob(csvContent, 'ornek_gorev_sablonu.csv', 'text/csv;charset=utf-8;');
+  showToast('📄 Örnek CSV şablonu indirildi.', 'success');
+}
+
+// Projeyi Excel CSV Olarak Dışa Aktarma (UTF-8 BOM ile Türkçe Karakter Garantili)
+function exportProjectToCsv() {
+  if (!state.tasks || state.tasks.length === 0) {
+    showToast('Dışa aktarılacak görev bulunamadı.', 'error');
+    return;
+  }
+
+  const currentProj = state.projects.find(p => p.id === state.currentProjectId);
+  const projTitle = currentProj ? currentProj.title.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Proje';
+
+  const headers = [
+    'ID',
+    'Görev Başlığı',
+    'Tür',
+    'Öncelik',
+    'Çalışma Durumu',
+    'İlerleme (%)',
+    'Sorumlu Kişi',
+    'Sorumlu E-Posta',
+    'Başlangıç Hedefi',
+    'Bitiş Hedefi',
+    'Gerçek Başlangıç',
+    'Gerçek Bitiş',
+    'Açıklama'
+  ];
+
+  const rows = state.tasks.map(t => {
+    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
+    const statusText = {
+      BLOCKED: 'Öncül Bekliyor (BLOCKED)',
+      READY: 'Başlamaya Hazır (READY)',
+      IN_PROGRESS: 'Devam Ediyor (IN_PROGRESS)',
+      COMPLETED: 'Tamamlandı (COMPLETED)'
+    }[t.work_status] || t.work_status;
+
+    return [
+      t.id.slice(0, 8),
+      t.title,
+      t.type,
+      t.priority,
+      statusText,
+      t.progress || 0,
+      assignee ? assignee.name : 'Atanmamış',
+      assignee ? assignee.email : '',
+      t.current_start_date ? t.current_start_date.slice(0, 10) : '',
+      t.current_due_date ? t.current_due_date.slice(0, 10) : '',
+      t.actual_start_date ? t.actual_start_date.slice(0, 10) : '',
+      t.actual_completion_date ? t.actual_completion_date.slice(0, 10) : '',
+      t.description || ''
+    ];
+  });
+
+  const csvContent = '\uFEFF' + [
+    headers.join(';'),
+    ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';'))
+  ].join('\r\n');
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  downloadFileBlob(csvContent, `${projTitle}_Gorevleri_${dateStr}.csv`, 'text/csv;charset=utf-8;');
+  showToast('📊 Excel (CSV) dosyası başarıyla indirildi.', 'success');
+}
+
+// Projeyi Tam JSON Olarak Dışa Aktarma
+function exportProjectToJson() {
+  const currentProj = state.projects.find(p => p.id === state.currentProjectId);
+  const projTitle = currentProj ? currentProj.title.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Proje';
+
+  const exportPayload = {
+    exported_at: new Date().toISOString(),
+    system: 'FG Group Görev ve Bağımlılık Yönetim Sistemi v0.3',
+    project: currentProj,
+    tasks: state.tasks,
+    dependencies: state.dependencies
+  };
+
+  const jsonStr = JSON.stringify(exportPayload, null, 2);
+  const dateStr = new Date().toISOString().slice(0, 10);
+  downloadFileBlob(jsonStr, `${projTitle}_Yedek_${dateStr}.json`, 'application/json;charset=utf-8;');
+  showToast('💾 JSON proje yedeği indirildi.', 'success');
+}
+
+// Dosya İndirme Yardımcısı
+function downloadFileBlob(content, fileName, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
 function openExplanationModal(taskId, title) {

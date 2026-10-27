@@ -366,7 +366,7 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(completedTodo.is_completed, true);
   });
 
-  test('KANBAN DRAG & DROP: Durum güncelleme ve BLOCKED bağımlılık koruması', () => {
+  await t.test('KANBAN DRAG & DROP: Durum güncelleme ve BLOCKED bağımlılık koruması', () => {
     // 1. İki görev oluşturalım: Öncül (Task 1) -> Ardıl (Task 2)
     const task1 = taskService.createTask(
       authManagerA,
@@ -421,5 +421,57 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const resTodo = taskService.updateStatus(authManagerA, task2.id, 'TODO');
     assert.equal(resTodo.task.work_status, 'READY'); // Öncülü bittiği için hazır durumda kalır
   });
+
+  await t.test('EXCEL / CSV IMPORT: Toplu görev içe aktarma doğrulaması', () => {
+    const importData = [
+      {
+        title: 'Veritabanı Şeması Tasarımı',
+        type: 'TASK' as const,
+        priority: 'HIGH' as const,
+        assignee_email_or_name: assigneeA.email,
+        initial_start_date: '2026-11-01T09:00:00Z',
+        initial_due_date: '2026-11-05T18:00:00Z',
+        description: 'PostgreSQL tabloları oluşturulacak'
+      },
+      {
+        title: 'Kullanıcı Kabul Testleri Tamamlandı',
+        type: 'MILESTONE' as const,
+        priority: 'HIGH' as const,
+        assignee_email_or_name: assigneeA.name,
+        initial_start_date: '2026-11-06T09:00:00Z',
+        initial_due_date: '2026-11-06T18:00:00Z',
+        description: 'Müşteri onayı alınacak'
+      },
+      {
+        title: 'Giriş Sayfası Buton Renk Hatası',
+        type: 'BUG' as const,
+        priority: 'NORMAL' as const,
+        assignee_email_or_name: 'Bilinmeyen Kişi',
+        initial_start_date: '2026-11-07T09:00:00Z',
+        initial_due_date: '2026-11-08T18:00:00Z',
+        description: 'Buton hover rengi kontrol edilecek'
+      }
+    ];
+
+    const result = taskService.bulkCreateTasks(authManagerA, projectA.id, importData);
+    assert.equal(result.count, 3);
+    assert.equal(result.createdTasks.length, 3);
+
+    // E-posta ile eşleşen sorumlu doğrulaması
+    assert.equal(result.createdTasks[0].title, 'Veritabanı Şeması Tasarımı');
+    assert.equal(result.createdTasks[0].assignee_id, assigneeA.id);
+    assert.equal(result.createdTasks[0].type, 'TASK');
+
+    // İsim ile eşleşen sorumlu ve Milestone türü
+    assert.equal(result.createdTasks[1].title, 'Kullanıcı Kabul Testleri Tamamlandı');
+    assert.equal(result.createdTasks[1].assignee_id, assigneeA.id);
+    assert.equal(result.createdTasks[1].type, 'MILESTONE');
+
+    // Eşleşmeyen sorumlu (atanmamış kalır) ve Bug türü
+    assert.equal(result.createdTasks[2].title, 'Giriş Sayfası Buton Renk Hatası');
+    assert.equal(result.createdTasks[2].assignee_id, undefined);
+    assert.equal(result.createdTasks[2].type, 'BUG');
+  });
 });
+
 

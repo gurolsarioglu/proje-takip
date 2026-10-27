@@ -75,6 +75,17 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - Anlık Görev & Kişi Arama: Kanban üst barındaki canlı arama kutusu ile filtreleme.
   - 17/17 Birim & Kabul Testi eksiksiz geçti (`npm test`).
   - Tarayıcı alt ajanı ile canlı test edilip ekran görüntüsü alındı.
+- [x] **Adım 12:** Excel / CSV Dışa Aktarma & Proje İçe Aktarma (Import / Export):
+  - **Excel (CSV) Dışa Aktar:** UTF-8 BOM ile Microsoft Excel'de doğrudan Türkçe karakterlerle açılan noktalı virgüllü (;) görev listesi indirme.
+  - **JSON Proje Yedeği:** Proje, görevler ve bağımlılıkların tam yapısal JSON yedeği.
+  - **Sayfayı Yazdır / PDF:** A4 formatına duyarlı `@media print` temiz sayfa çıktısı.
+  - **CSV İle Toplu Görev İçe Aktar (Import):**
+    - Örnek şablon indirme (`ornek_gorev_sablonu.csv`).
+    - Dosya seçme ve sürükle-bırak dropzone alanı.
+    - Canlı ayrıştırma (virgül veya noktalı virgül otomatik tespiti) ve önizleme tablosu.
+    - Backend `POST /api/projects/:id/tasks/bulk` ve `TaskService.bulkCreateTasks` entegrasyonu.
+  - 18/18 Birim & Kabul Testi eksiksiz geçti (`npm test`).
+  - Tarayıcı alt ajanı ile canlı test edilip ekran görüntüsü alındı.
 
 ---
 

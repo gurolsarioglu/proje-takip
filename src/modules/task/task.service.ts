@@ -246,6 +246,62 @@ export class TaskService {
     throw new Error('Geçersiz hedef durum.');
   }
 
+  public bulkCreateTasks(
+    auth: AuthContext,
+    project_id: UUID,
+    tasksData: Array<{
+      title: string;
+      initial_start_date?: string;
+      initial_due_date?: string;
+      assignee_email_or_name?: string;
+      description?: string;
+      type?: Task['type'];
+      priority?: Task['priority'];
+    }>
+  ): { createdTasks: Task[]; count: number } {
+    const project = this.db.getProjectById(auth.tenant_id, project_id);
+    if (!project) throw new Error('Proje bulunamadı.');
+
+    const users = this.db.getUsers(auth.tenant_id);
+    const createdTasks: Task[] = [];
+    const now = new Date();
+
+    for (const item of tasksData) {
+      if (!item.title || !item.title.trim()) continue;
+
+      let assignee_id: UUID | undefined = undefined;
+      if (item.assignee_email_or_name) {
+        const query = item.assignee_email_or_name.toLowerCase().trim();
+        const matched = users.find(
+          u => u.email.toLowerCase() === query || u.name.toLowerCase() === query || u.name.toLowerCase().includes(query)
+        );
+        if (matched) assignee_id = matched.id;
+      }
+
+      const startDate = item.initial_start_date ? new Date(item.initial_start_date).toISOString() : now.toISOString();
+      const dueDate = item.initial_due_date
+        ? new Date(item.initial_due_date).toISOString()
+        : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const task = this.createTask(
+        auth,
+        project_id,
+        item.title.trim(),
+        startDate,
+        dueDate,
+        assignee_id,
+        item.description,
+        {
+          type: item.type || 'TASK',
+          priority: item.priority || 'NORMAL'
+        }
+      );
+      createdTasks.push(task);
+    }
+
+    return { createdTasks, count: createdTasks.length };
+  }
+
   public listTasks(auth: AuthContext, project_id: UUID): Task[] {
     return this.db.getTasks(auth.tenant_id, project_id);
   }
