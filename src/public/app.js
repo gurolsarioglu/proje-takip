@@ -260,7 +260,7 @@ function toggleTheme() {
   applyTheme(next);
   if (state.currentUser) {
     state.currentUser.theme = next;
-    apiCall('/api/profile/theme', 'PUT', { theme: next }).catch(() => {});
+    apiCall('/api/profile/theme', 'PUT', { theme: next }).catch(() => { });
   }
   showToast(next === 'dark' ? '🌙 Koyu tema aktif edildi.' : '☀️ Açık tema aktif edildi.', 'info');
 }
@@ -1510,7 +1510,7 @@ function drawDependencyArrows(svg, container) {
         d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
       } else {
         const midY = (y1 + y2) / 2;
-        d = `M ${x1} ${y1} C ${x1 + 35} ${y1}, ${x1 + 35} ${midY}, ${(x1 + x2)/2} ${midY} S ${x2 - 35} ${y2}, ${x2} ${y2}`;
+        d = `M ${x1} ${y1} C ${x1 + 35} ${y1}, ${x1 + 35} ${midY}, ${(x1 + x2) / 2} ${midY} S ${x2 - 35} ${y2}, ${x2} ${y2}`;
       }
 
       // Başlangıç noktası yuvarlağı
@@ -1739,7 +1739,7 @@ async function openTaskDrawer(taskId) {
 
     document.getElementById('wpProjectTitle').textContent = project?.title || 'FG Group Projesi';
     document.getElementById('wpId').textContent = `#${task.id.slice(0, 6)}`;
-    
+
     const typeBadge = document.getElementById('wpType');
     typeBadge.textContent = task.type === 'MILESTONE' ? '🏁 KİLOMETRE TAŞI' : (task.type === 'BUG' ? '🐞 HATA' : '📌 GÖREV');
     typeBadge.className = `op-type-badge ${task.type === 'MILESTONE' ? 'milestone' : (task.type === 'BUG' ? 'bug' : '')}`;
@@ -2110,7 +2110,7 @@ function setupEventListeners() {
       const res = await apiCall('/api/auth/login', 'POST', { email, password });
       showToast('Giriş başarılı!', 'success');
       onLoginSuccess(res.user, res.tenant, res.token);
-    } catch (err) {}
+    } catch (err) { }
   });
 
   // Hızlı Demo Giriş Butonları
@@ -2145,7 +2145,7 @@ function setupEventListeners() {
       applyTheme(selectedTheme);
       if (state.currentUser) {
         state.currentUser.theme = selectedTheme;
-        apiCall('/api/profile/theme', 'PUT', { theme: selectedTheme }).catch(() => {});
+        apiCall('/api/profile/theme', 'PUT', { theme: selectedTheme }).catch(() => { });
       }
     });
   });
@@ -3584,9 +3584,9 @@ function renderWidgetContent(widget, data) {
             </thead>
             <tbody>
               ${data.personnel_performance.map(u => {
-                const s = u.performance_score;
-                const badgeClass = s !== null ? (s >= 80 ? 'high' : (s >= 60 ? 'mid' : 'low')) : 'mid';
-                return `
+        const s = u.performance_score;
+        const badgeClass = s !== null ? (s >= 80 ? 'high' : (s >= 60 ? 'mid' : 'low')) : 'mid';
+        return `
                   <tr>
                     <td>
                       <div style="display:flex; align-items:center; gap:8px;">
@@ -3604,7 +3604,7 @@ function renderWidgetContent(widget, data) {
                     </td>
                   </tr>
                 `;
-              }).join('')}
+      }).join('')}
             </tbody>
           </table>
         </div>
@@ -3617,8 +3617,8 @@ function renderWidgetContent(widget, data) {
       return `
         <div class="status-dist-list">
           ${dist.map(item => {
-            const pct = Math.round((item.count / total) * 100);
-            return `
+        const pct = Math.round((item.count / total) * 100);
+        return `
               <div class="status-dist-row">
                 <div class="status-dist-info">
                   <span>${item.label}</span>
@@ -3629,7 +3629,7 @@ function renderWidgetContent(widget, data) {
                 </div>
               </div>
             `;
-          }).join('')}
+      }).join('')}
         </div>
       `;
     }
@@ -3867,7 +3867,7 @@ function attachTodoItemEventListeners() {
       try {
         await apiCall(`/api/todo/items/${id}/star`, 'POST');
         await loadAndRenderMicrosoftTodo();
-      } catch (err) {}
+      } catch (err) { }
     };
   });
 

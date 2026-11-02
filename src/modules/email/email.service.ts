@@ -313,10 +313,67 @@ export class EmailAndAutomationService {
       }
     } catch (err: any) {
       const errMsg = err?.message || 'Exchange Online SMTP bağlantı hatası';
-      // Microsoft Entra ID üzerinden 535 hatasının kesin kök nedenini sorgula (örn: AADSTS50055 Geçici Şifre)
+      // Microsoft Entra ID üzerinden 535 hatasının kesin kök nedenini sorgula (örn: AADSTS50055 Geçici Şifre) veya OAuth2 token al
       const entraDiag = (!isDirectSendConfig && config.username && config.password)
         ? await this.diagnoseEntraAccount(config.username, config.password)
         : {};
+
+      // Eğer kullanıcı adı ve şifre doğruysa (Entra ID accessToken döndürdüyse) OAuth2 (XOAUTH2) veya EWS üzerinden gönder!
+      if (entraDiag.accessToken) {
+        try {
+          const oauthCard = buildSampleAdaptiveCard('✅ EXCHANGE ONLINE OAUTH2 • BAĞLANTI DOĞRULANDI', 'Good', `${config.host}:${config.port} (OAuth2 Modern Auth)`);
+          const oauthHtml = buildSampleHtmlBody(`${config.host}:${config.port} (OAuth2 Modern Auth)`);
+          const fullOauthHtml = this.wrapHtmlWithAdaptiveCard(`✅ [OAuth2 Doğrulandı] FG Group Exchange Online Test E-postası`, oauthHtml, oauthCard);
+
+          const oauthTransporter = nodemailer.createTransport({
+            host: config.host,
+            port: config.port,
+            secure: config.port === 465 ? true : config.secure,
+            auth: {
+              type: 'OAuth2',
+              user: config.username,
+              accessToken: entraDiag.accessToken
+            },
+            tls: { rejectUnauthorized: false }
+          });
+
+          const info = await oauthTransporter.sendMail({
+            from: `"${config.from_name}" <${config.from_email || config.username}>`,
+            to: recipient,
+            subject: `✅ [OAuth2 Doğrulandı] FG Group Exchange Online Test E-postası`,
+            html: fullOauthHtml
+          });
+
+          const sentOauthItem = this.db.insertEmailOutbox({
+            id: crypto.randomUUID(),
+            tenant_id: auth.tenant_id,
+            to: [recipient],
+            subject: `✅ [OAuth2 Doğrulandı] FG Group Exchange Online Test E-postası`,
+            category: 'SMTP_TEST',
+            delivery_mode: 'SMTP_LIVE',
+            status: 'SENT',
+            adaptive_card_json: oauthCard,
+            html_preview: oauthHtml,
+            linked_task_id: sampleTask?.id,
+            sent_at: new Date().toISOString()
+          });
+
+          return {
+            verified: true,
+            mail_sent: true,
+            mode: 'SMTP_LIVE',
+            duration_ms: Date.now() - startTime,
+            host: config.host,
+            port: config.port,
+            username: config.username,
+            recipient,
+            smtp_response: `${info.response || '250 2.0.0 OK'} (Modern Auth OAuth2 ile doğrulandı)`,
+            outbox_item: sentOauthItem
+          };
+        } catch {
+          // OAuth2 SMTP başarısız olursa aşağıda Direct Send / Tanılama devam eder
+        }
+      }
 
       const detailedError = entraDiag.code ? `${errMsg} — [${entraDiag.code}]` : errMsg;
       const detailedHint = entraDiag.turkishReason || this.buildSmtpTroubleshootingHint(errMsg, config);
