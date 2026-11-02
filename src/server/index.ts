@@ -174,7 +174,39 @@ app.get('/api/projects', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const projects = projectService.listProjects(auth);
-    res.json(projects);
+    const now = new Date();
+    const enriched = projects.map(p => {
+      const pTasks = db.getTasks(auth.tenant_id, p.id);
+      const total_tasks = pTasks.length;
+      const completed_tasks = pTasks.filter(t => t.work_status === 'COMPLETED').length;
+      const in_progress_tasks = pTasks.filter(t => t.work_status === 'IN_PROGRESS').length;
+      const blocked_tasks = pTasks.filter(t => t.work_status === 'BLOCKED').length;
+      const delayed_tasks = pTasks.filter(t => t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < now).length;
+      const completion_rate = total_tasks > 0 ? Math.round((completed_tasks / total_tasks) * 100) : 0;
+      const plan_changes = db.getProjectPlanChanges(auth.tenant_id, p.id);
+      const is_manager = projectService.canManageProject(auth, p.id);
+      const is_editor = projectService.canEditTasks(auth, p.id);
+      const is_full_viewer = projectService.isFullProjectViewer(auth, p.id);
+      const pending_visibility_requests = is_manager
+        ? db.getVisibilityRequests(auth.tenant_id, p.id).filter(r => r.status === 'PENDING').length
+        : 0;
+
+      return {
+        ...p,
+        total_tasks,
+        completed_tasks,
+        in_progress_tasks,
+        blocked_tasks,
+        delayed_tasks,
+        completion_rate,
+        plan_changes_count: plan_changes.length,
+        is_manager,
+        is_editor,
+        is_full_viewer,
+        pending_visibility_requests
+      };
+    });
+    res.json(enriched);
   } catch (err: any) {
     res.status(403).json({ error: err.message });
   }
@@ -211,6 +243,7 @@ app.get('/api/projects/:id', (req, res) => {
     }
 
     const visibilityRequests = projectService.getVisibilityRequests(auth, project.id);
+    const planChanges = db.getProjectPlanChanges(auth.tenant_id, project.id);
     const isManager = projectService.canManageProject(auth, project.id);
     const isEditor = projectService.canEditTasks(auth, project.id);
     const isFullViewer = projectService.isFullProjectViewer(auth, project.id);
@@ -219,6 +252,7 @@ app.get('/api/projects/:id', (req, res) => {
       project,
       members,
       visibilityRequests,
+      planChanges,
       permissions: { isManager, isEditor, isFullViewer }
     });
   } catch (err: any) {
@@ -270,11 +304,30 @@ app.post('/api/projects/:id/visibility-decide', (req, res) => {
 });
 
 // 3. Tasks
+app.get('/api/tasks/search', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const q = (req.query.q as string) || '';
+    const projectId = (req.query.project_id as string) || undefined;
+    const matched = taskService.searchTasks(auth, q, projectId);
+    const enriched = matched.map(t => ({
+      ...t,
+      limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
+    }));
+    res.json(enriched);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
 app.get('/api/projects/:id/tasks', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const isFullViewer = projectService.isFullProjectViewer(auth, req.params.id);
-    const allTasks = taskService.listTasks(auth, req.params.id);
+    const q = (req.query.q as string) || '';
+    const allTasks = q
+      ? taskService.searchTasks(auth, q, req.params.id)
+      : taskService.listTasks(auth, req.params.id);
 
     // KAB02: Görev sorumlusu yalnızca kendi görevini ve sınırlı bağımlılık özetini görür
     if (!isFullViewer) {
@@ -420,9 +473,11 @@ app.get('/api/tasks/:id/details', (req, res) => {
       };
     }).filter(Boolean);
 
-    // Gecikme ve Açıklama Kayıtları
+    // Gecikme, Plan Revizyonu ve Açıklama Kayıtları
     const delays = delayService.getDelayRecords(auth.tenant_id, task.id);
-    const can_edit = projectService.canEditTasks(auth, task.project_id) || task.assignee_id === auth.user_id;
+    const plan_changes = db.getTaskPlanChanges(auth.tenant_id, task.id);
+    const can_manage_plan = projectService.canEditTasks(auth, task.project_id);
+    const can_edit = can_manage_plan || task.assignee_id === auth.user_id;
 
     res.json({
       task,
@@ -431,6 +486,8 @@ app.get('/api/tasks/:id/details', (req, res) => {
       predecessors,
       successors,
       delays,
+      plan_changes,
+      can_manage_plan,
       can_edit
     });
   } catch (err: any) {
@@ -809,10 +866,14 @@ app.get('/api/reports/builder-data', (req, res) => {
       };
     });
 
-    // 4. Bottlenecks (En çok ardıl bekleten öncüller)
+    // 4. Bottlenecks (En çok ardıl bekleten aktif/tamamlanmamış öncüller)
     const predecessorWaitCounts = new Map<string, number>();
     for (const dep of allDependencies) {
-      predecessorWaitCounts.set(dep.predecessor_id, (predecessorWaitCounts.get(dep.predecessor_id) || 0) + 1);
+      const pred = allTasks.find(t => t.id === dep.predecessor_id);
+      const succ = allTasks.find(t => t.id === dep.successor_id);
+      if (pred && pred.work_status !== 'COMPLETED' && succ && succ.work_status !== 'COMPLETED') {
+        predecessorWaitCounts.set(dep.predecessor_id, (predecessorWaitCounts.get(dep.predecessor_id) || 0) + 1);
+      }
     }
     const bottlenecks = Array.from(predecessorWaitCounts.entries())
       .map(([taskId, waitCount]) => {
@@ -829,19 +890,21 @@ app.get('/api/reports/builder-data', (req, res) => {
       })
       .sort((a, b) => b.waiting_successors_count - a.waiting_successors_count);
 
-    // 5. Critical & Delayed Tasks
-    const criticalTasks = delayedTasks.map(t => {
-      const assignee = t.assignee_id ? db.getUserById(auth.tenant_id, t.assignee_id) : null;
-      return {
-        id: t.id,
-        title: t.title,
-        priority: t.priority || 'NORMAL',
-        work_status: t.work_status,
-        progress: t.progress || 0,
-        current_due_date: t.current_due_date,
-        assignee_name: assignee?.name || 'Atanmamış'
-      };
-    });
+    // 5. Critical & Delayed Open Tasks (Tamamlanmamış geciken kritik görevler)
+    const criticalTasks = delayedTasks
+      .filter(t => t.work_status !== 'COMPLETED')
+      .map(t => {
+        const assignee = t.assignee_id ? db.getUserById(auth.tenant_id, t.assignee_id) : null;
+        return {
+          id: t.id,
+          title: t.title,
+          priority: t.priority || 'NORMAL',
+          work_status: t.work_status,
+          progress: t.progress || 0,
+          current_due_date: t.current_due_date,
+          assignee_name: assignee?.name || 'Atanmamış'
+        };
+      });
 
     // 6. Milestones
     const milestones = allTasks.filter(t => t.type === 'MILESTONE').map(t => {

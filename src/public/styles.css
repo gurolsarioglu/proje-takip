@@ -459,11 +459,12 @@ html, body {
   background: var(--bg-card);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 14px 28px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
+  flex-wrap: wrap;
   position: sticky;
   top: 0;
   z-index: 30;
@@ -472,27 +473,30 @@ html, body {
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .view-title {
-  font-size: 1.25rem;
+  font-size: 1.08rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .project-pill-select {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   padding: 4px 10px;
   border-radius: var(--radius-full);
+  white-space: nowrap;
 }
 
 .pill-label {
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   color: var(--text-tertiary);
   font-weight: 600;
 }
@@ -501,9 +505,11 @@ html, body {
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   padding: 2px 4px;
+  max-width: 190px;
+  text-overflow: ellipsis;
   outline: none;
   cursor: pointer;
 }
@@ -513,10 +519,97 @@ html, body {
   color: var(--text-primary);
 }
 
+.topbar-global-search {
+  flex: 1 1 180px;
+  max-width: 300px;
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 5px 11px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.topbar-global-search:focus-within,
+.topbar-global-search.has-active-query {
+  background: var(--bg-card);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.global-search-icon {
+  font-size: 0.82rem;
+  opacity: 0.7;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.global-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  font-weight: 500;
+  outline: none;
+}
+
+.global-search-input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.global-search-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  background: rgba(37, 99, 235, 0.12);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.global-search-clear-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.global-search-clear-btn:hover {
+  background: var(--accent-danger);
+  color: #ffffff;
+}
+
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.topbar-right .action-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 7px 11px;
+  font-size: 0.78rem;
 }
 
 /* ================= SECTIONS & CARDS ================= */
@@ -4804,4 +4897,318 @@ html, body {
 [data-theme="dark"] .template-info p {
   color: #4ade80 !important;
 }
+
+/* ==============================================================
+   V0.3+ İYİLEŞTİRMELER: ÇEKMECE İÇİ DÜZENLEME, DARBOĞAZ ROZETİ,
+   CANLI BİLDİRİMLER, PROJE YÖNETİMİ VE KAYITLI RAPORLAR
+   ============================================================== */
+
+.op-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wp-inline-select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  outline: none;
+  max-width: 195px;
+}
+
+.wp-inline-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.op-progress-slider-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.wp-range-slider {
+  width: 100%;
+  accent-color: #2563eb;
+  cursor: pointer;
+  height: 6px;
+}
+
+.wp-mini-link-btn {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wp-mini-link-btn:hover {
+  background: #dbeafe;
+}
+
+.wp-initial-plan-note {
+  margin-top: 8px;
+  font-size: 0.76rem;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.wp-rev-pill {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.wp-plan-revise-box {
+  margin-top: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.wp-plan-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.wp-plan-history-item {
+  font-size: 0.75rem;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: #1e293b;
+}
+
+.btn-remove-dep {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.btn-remove-dep:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* Darboğaz (Kimi Bekletiyor?) Rozetleri */
+.task-dep-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.task-bottleneck-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.board-card-bottleneck-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Bildirim Çekmecesi Öğeleri */
+.notif-card-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.notif-card-item:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.notif-card-item.notif-danger {
+  border-left: 4px solid #ef4444;
+}
+
+.notif-card-item.notif-success {
+  border-left: 4px solid #10b981;
+}
+
+.notif-card-item.notif-info {
+  border-left: 4px solid #3b82f6;
+}
+
+.notif-icon-col {
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.notif-body-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-msg {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.notif-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.notif-goto-link {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+/* Proje Kartları ve Yönetim Modalı */
+.proj-delayed-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.proj-revised-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.pm-section-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.pm-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+
+.pm-plan-compare {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.8rem;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #334155;
+}
+
+.template-section-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  padding: 4px 10px 2px;
+}
+
+/* Koyu Tema Uyumu */
+[data-theme="dark"] .wp-inline-select,
+[data-theme="dark"] .wp-initial-plan-note,
+[data-theme="dark"] .wp-plan-revise-box,
+[data-theme="dark"] .pm-section-box,
+[data-theme="dark"] .pm-member-row,
+[data-theme="dark"] .pm-plan-compare,
+[data-theme="dark"] .notif-card-item {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .notif-msg {
+  color: #f8fafc !important;
+}
+
 

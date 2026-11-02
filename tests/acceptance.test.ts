@@ -5,7 +5,7 @@ import { AuthService } from '../src/modules/auth/auth.service.js';
 import { ProjectService } from '../src/modules/project/project.service.js';
 import { DependencyService } from '../src/modules/dependency/dependency.service.js';
 import { DelayService } from '../src/modules/delay/delay.service.js';
-import { TaskService } from '../src/modules/task/task.service.js';
+import { TaskService, matchesTaskSearch } from '../src/modules/task/task.service.js';
 import { NotificationService } from '../src/modules/notification/notification.service.js';
 import { ReportingService } from '../src/modules/reporting/reporting.service.js';
 import { MicrosoftTodoService } from '../src/modules/microsoft_todo/microsoft_todo.service.js';
@@ -472,6 +472,164 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(result.createdTasks[2].assignee_id, undefined);
     assert.equal(result.createdTasks[2].type, 'BUG');
   });
+
+  await t.test('GLOBAL SEARCH: Görevleri başlık, açıklama ve atanan personele göre filtreleme', () => {
+    // 1. Başlığa göre arama
+    const byTitle = taskService.searchTasks(authManagerA, 'Veritabanı Şeması', projectA.id);
+    assert.ok(byTitle.some(t => t.title === 'Veritabanı Şeması Tasarımı'));
+
+    // 2. Açıklamaya göre arama (başlıkta geçmeyen "PostgreSQL tabloları" ifadesi)
+    const byDesc = taskService.searchTasks(authManagerA, 'PostgreSQL tabloları', projectA.id);
+    assert.equal(byDesc.length, 1);
+    assert.equal(byDesc[0].title, 'Veritabanı Şeması Tasarımı');
+
+    // 3. Atanan personel adına göre arama ("Mehmet Sorumlu")
+    const byAssignee = taskService.searchTasks(authManagerA, 'Mehmet Sorumlu', projectA.id);
+    assert.ok(byAssignee.length >= 2);
+    assert.ok(byAssignee.every(t => t.assignee_id === assigneeA.id));
+
+    // 4. Saf yardımcı fonksiyon (matchesTaskSearch) doğrulaması
+    assert.equal(
+      matchesTaskSearch(
+        { title: 'Sunucu Kurulumu', description: 'Yüksek erişilebilirlik', assignee_id: 'u1' },
+        'hans gruber',
+        { name: 'Hans Gruber', email: 'hans@fggroup.com.tr', department: 'Mühendislik' }
+      ),
+      true
+    );
+    assert.equal(
+      matchesTaskSearch(
+        { title: 'Sunucu Kurulumu', description: 'Yüksek erişilebilirlik', assignee_id: 'u1' },
+        'olmayan_sorgu_xyz',
+        { name: 'Hans Gruber', email: 'hans@fggroup.com.tr' }
+      ),
+      false
+    );
+  });
+
+  await t.test('DRAWER INLINE EDIT, DEPENDENCY REMOVAL & SAVED REPORTS: Plan revizyonu, bağımlılık silme ve rapor kaydetme', () => {
+    // 1. Görev plan revizyonunda ilk plan korunur ve geçmişe kaydedilir
+    const tPred = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Öncül Altyapı Görevi',
+      '2026-12-01T09:00:00Z',
+      '2026-12-05T18:00:00Z',
+      assigneeA.id
+    );
+    const tSucc = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Ardıl Entegrasyon Görevi',
+      '2026-12-06T09:00:00Z',
+      '2026-12-10T18:00:00Z',
+      assigneeA.id
+    );
+
+    const revised = taskService.updateTaskPlan(
+      authManagerA,
+      tPred.id,
+      '2026-12-02T09:00:00Z',
+      '2026-12-08T18:00:00Z',
+      'Kapsam genişletildi'
+    );
+    assert.equal(revised.initial_due_date, '2026-12-05T18:00:00Z');
+    assert.equal(revised.current_due_date, '2026-12-08T18:00:00Z');
+    const changes = db.getTaskPlanChanges(tenantA.id, tPred.id);
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].reason, 'Kapsam genişletildi');
+
+    // 2. Bağımlılık eklenince ardıl BLOCKED olur, bağımlılık silinince otomatik READY olur
+    dependencyService.addDependency(authManagerA, tPred.id, tSucc.id);
+    assert.equal(db.getTaskById(tenantA.id, tSucc.id)?.work_status, 'BLOCKED');
+
+    dependencyService.removeDependency(authManagerA, tPred.id, tSucc.id);
+    assert.equal(db.getTaskById(tenantA.id, tSucc.id)?.work_status, 'READY');
+  });
+
+  await t.test('5 KİŞİLİK EKİP & SOLO PROJELER SİMÜLASYONU: Yönetici ve son kullanıcı uçtan uca eşzamanlı çalışma testi', () => {
+    const simTenant = authService.createTenant('FG Simülasyon A.Ş.', 'entra-fg-sim-5');
+    const simAdmin = authService.createUser(simTenant.id, 'Yönetici Admin', 'admin@sim.com', undefined, { system_role: 'ADMIN', can_create_project: true, can_build_reports: true });
+    const u1 = authService.createUser(simTenant.id, 'Ahmet (PM)', 'ahmet@sim.com', undefined, { can_create_project: true, can_build_reports: true });
+    const u2 = authService.createUser(simTenant.id, 'Zeynep (Solo + UX)', 'zeynep@sim.com', undefined, { can_create_project: true, can_build_reports: true });
+    const u3 = authService.createUser(simTenant.id, 'Emre (Solo + Sec)', 'emre@sim.com', undefined, { can_create_project: true, can_build_reports: false });
+    const u4 = authService.createUser(simTenant.id, 'Hans (Backend)', 'hans@sim.com', undefined, { country: 'Almanya', can_create_project: false });
+    const u5 = authService.createUser(simTenant.id, 'Sarah (QA)', 'sarah@sim.com', undefined, { country: 'İngiltere', can_create_project: false });
+
+    const ctxAdmin = { tenant_id: simTenant.id, user_id: simAdmin.id, email: simAdmin.email, name: simAdmin.name };
+    const ctx1 = { tenant_id: simTenant.id, user_id: u1.id, email: u1.email, name: u1.name };
+    const ctx2 = { tenant_id: simTenant.id, user_id: u2.id, email: u2.email, name: u2.name };
+    const ctx3 = { tenant_id: simTenant.id, user_id: u3.id, email: u3.email, name: u3.name };
+    const ctx4 = { tenant_id: simTenant.id, user_id: u4.id, email: u4.email, name: u4.name };
+    const ctx5 = { tenant_id: simTenant.id, user_id: u5.id, email: u5.email, name: u5.name };
+
+    // 1. Ortak Proje başlatılır (5 kişiye görev atanır)
+    const sharedProj = projectService.createProject(ctx1, 'Ortak 5 Kişilik ERP Projesi', 'Tüm ekibin ortak çalıştığı proje', '2026-10-01T09:00:00Z', '2026-11-30T18:00:00Z');
+    projectService.addOrUpdateMember(ctx1, sharedProj.id, u2.id, 'EDITOR');
+    projectService.addOrUpdateMember(ctx1, sharedProj.id, u4.id, 'VIEWER');
+
+    const st1 = taskService.createTask(ctx1, sharedProj.id, '1. Mimari Kararlar', '2026-10-01T09:00:00Z', '2026-10-05T18:00:00Z', u1.id);
+    const st2 = taskService.createTask(ctx1, sharedProj.id, '2. Arayüz Tasarımı', '2026-10-06T09:00:00Z', '2026-10-10T18:00:00Z', u2.id);
+    const st3 = taskService.createTask(ctx1, sharedProj.id, '3. Veritabanı Kurulumu', '2026-10-06T09:00:00Z', '2026-10-12T18:00:00Z', u4.id);
+    const st4 = taskService.createTask(ctx1, sharedProj.id, '4. Güvenlik Sıkılaştırma', '2026-10-13T09:00:00Z', '2026-10-18T18:00:00Z', u3.id);
+    const st5 = taskService.createTask(ctx1, sharedProj.id, '5. Uçtan Uca QA Testi', '2026-10-19T09:00:00Z', '2026-10-25T18:00:00Z', u5.id);
+
+    dependencyService.addDependency(ctx1, st1.id, st2.id);
+    dependencyService.addDependency(ctx1, st1.id, st3.id);
+    dependencyService.addDependency(ctx1, st2.id, st4.id);
+    dependencyService.addDependency(ctx1, st3.id, st4.id);
+    dependencyService.addDependency(ctx1, st4.id, st5.id);
+
+    // 2. Zeynep ve Emre kendi solo projelerini başlatıp tek başlarına yürütür
+    const soloZeynep = projectService.createProject(ctx2, 'Zeynep Solo Tasarım Projesi', 'Tek başına yürütülen proje', '2026-10-05T09:00:00Z', '2026-11-10T18:00:00Z');
+    const zTask = taskService.createTask(ctx2, soloZeynep.id, 'Solo UI Kit', '2026-10-05T09:00:00Z', '2026-10-15T18:00:00Z', u2.id);
+    taskService.startTask(ctx2, zTask.id);
+    taskService.completeTask(ctx2, zTask.id);
+
+    const soloEmre = projectService.createProject(ctx3, 'Emre Solo Pentest Projesi', 'Tek başına yürütülen siber denetim', '2026-10-05T09:00:00Z', '2026-11-10T18:00:00Z');
+    const eTask = taskService.createTask(ctx3, soloEmre.id, 'Solo Firewall Kuralları', '2026-10-05T09:00:00Z', '2026-10-15T18:00:00Z', u3.id);
+    taskService.startTask(ctx3, eTask.id);
+
+    // İzolasyon kontrolü: Hans (u4) Zeynep veya Emre'nin solo projesini göremez, Admin ise hepsini görür!
+    assert.equal(projectService.listProjects(ctx4).length, 1);
+    assert.equal(projectService.listProjects(ctx2).length, 2); // Ortak + Kendi Solo Projesi
+    assert.equal(projectService.listProjects(ctx3).length, 2); // Ortak + Kendi Solo Projesi
+    assert.equal(projectService.listProjects(ctxAdmin).length, 3); // Admin tüm şirket projelerini denetler
+
+    // 3. Ekip aynı anda ortak projede çalışır:
+    // Ahmet (u1) 1. görevi tamamlar -> Zeynep (u2) ve Hans (u4) görevleri aynı anda READY olur!
+    taskService.startTask(ctx1, st1.id);
+    const comp1 = taskService.completeTask(ctx1, st1.id);
+    assert.equal(comp1.newlyReadyTaskIds.length, 2);
+
+    // Zeynep (u2) ve Hans (u4) eşzamanlı olarak görevlerini başlatıp tamamlar -> Emre'nin (u3) görevi (st4) READY olur!
+    taskService.startTask(ctx2, st2.id);
+    taskService.startTask(ctx4, st3.id);
+    taskService.completeTask(ctx2, st2.id);
+    assert.equal(db.getTaskById(simTenant.id, st4.id)?.work_status, 'BLOCKED'); // Hans henüz bitirmedi
+    const comp3 = taskService.completeTask(ctx4, st3.id);
+    assert.ok(comp3.newlyReadyTaskIds.includes(st4.id));
+    assert.equal(db.getTaskById(simTenant.id, st4.id)?.work_status, 'READY'); // İkisi de bitince Emre'nin görevi açıldı!
+
+    // 4. Emre (u3) ve Sarah (u5) ortak projede kısıtlı sorumludur; Sarah görünürlük talep eder, Ahmet (PM) onaylar
+    assert.equal(projectService.isFullProjectViewer(ctx5, sharedProj.id), false);
+    const visReq = projectService.requestVisibility(ctx5, sharedProj.id);
+    projectService.decideVisibilityRequest(ctx1, visReq.id, true);
+    assert.equal(projectService.isFullProjectViewer(ctx5, sharedProj.id), true);
+
+    // Emre ve Sarah görevlerini tamamlar -> Tüm ortak proje %100 tamamlanır!
+    taskService.startTask(ctx3, st4.id);
+    taskService.completeTask(ctx3, st4.id);
+    taskService.startTask(ctx5, st5.id);
+    taskService.completeTask(ctx5, st5.id);
+
+    const report = reportingService.getProjectReport(ctxAdmin, sharedProj.id);
+    assert.equal(report.total_tasks, 5);
+    assert.equal(report.completed_tasks, 5);
+  });
 });
+
+
+
 
 

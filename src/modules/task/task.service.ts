@@ -305,4 +305,54 @@ export class TaskService {
   public listTasks(auth: AuthContext, project_id: UUID): Task[] {
     return this.db.getTasks(auth.tenant_id, project_id);
   }
+
+  /**
+   * Görevleri başlık, açıklama veya atanan personele göre filtreler
+   */
+  public searchTasks(auth: AuthContext, query: string, project_id?: UUID): Task[] {
+    const tasks = this.db.getTasks(auth.tenant_id, project_id);
+    const trimmed = (query || '').trim();
+    if (!trimmed) return tasks;
+
+    const users = this.db.getUsers(auth.tenant_id);
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    return tasks.filter(task => {
+      const assignee = task.assignee_id ? userMap.get(task.assignee_id) : undefined;
+      return matchesTaskSearch(task, trimmed, assignee);
+    });
+  }
 }
+
+function normalizeForSearch(value?: string | null): string {
+  if (!value) return '';
+  return String(value).toLocaleLowerCase('tr-TR').trim();
+}
+
+export function matchesTaskSearch(
+  task: Pick<Task, 'title' | 'description' | 'assignee_id'>,
+  query: string,
+  assignee?: { name?: string; email?: string; department?: string; country?: string } | null
+): boolean {
+  const q = normalizeForSearch(query);
+  if (!q) return true;
+
+  const titleNorm = normalizeForSearch(task.title);
+  const descNorm = normalizeForSearch(task.description);
+  const assigneeNameNorm = normalizeForSearch(assignee?.name);
+  const assigneeEmailNorm = normalizeForSearch(assignee?.email);
+  const assigneeDeptNorm = normalizeForSearch(assignee?.department);
+  const assigneeCountryNorm = normalizeForSearch(assignee?.country);
+  const unassignedNorm = !task.assignee_id ? 'atanmamış atanmadı unassigned' : '';
+
+  return (
+    titleNorm.includes(q) ||
+    descNorm.includes(q) ||
+    assigneeNameNorm.includes(q) ||
+    assigneeEmailNorm.includes(q) ||
+    assigneeDeptNorm.includes(q) ||
+    assigneeCountryNorm.includes(q) ||
+    unassignedNorm.includes(q)
+  );
+}
+

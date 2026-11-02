@@ -41,7 +41,8 @@ const I18N = {
     zoom_day: 'Günlük',
     zoom_week: 'Haftalık',
     zoom_month: 'Aylık',
-    zoom_year: 'Yıllık'
+    zoom_year: 'Yıllık',
+    global_search_placeholder: 'Görev, açıklama veya personel ara... (Ctrl+K)'
   },
   en: {
     nav_my_tasks: 'My Tasks',
@@ -67,7 +68,8 @@ const I18N = {
     zoom_day: 'Daily',
     zoom_week: 'Weekly',
     zoom_month: 'Monthly',
-    zoom_year: 'Yearly'
+    zoom_year: 'Yearly',
+    global_search_placeholder: 'Search tasks by title, description, or assignee... (Ctrl+K)'
   },
   de: {
     nav_my_tasks: 'Meine Aufgaben',
@@ -93,7 +95,8 @@ const I18N = {
     zoom_day: 'Täglich',
     zoom_week: 'Wöchentlich',
     zoom_month: 'Monatlich',
-    zoom_year: 'Jährlich'
+    zoom_year: 'Jährlich',
+    global_search_placeholder: 'Aufgaben, Beschreibung oder Personal suchen... (Ctrl+K)'
   }
 };
 
@@ -110,6 +113,93 @@ function setLanguage(lang) {
       el.textContent = I18N[lang][key];
     }
   });
+
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18nPlaceholder;
+    if (I18N[lang] && I18N[lang][key]) {
+      el.setAttribute('placeholder', I18N[lang][key]);
+    }
+  });
+}
+
+// Küresel Görev Arama Yardımcıları (Başlık, Açıklama ve Sorumlu Personel)
+function normalizeSearchText(val) {
+  if (!val) return '';
+  return String(val).toLocaleLowerCase('tr-TR').trim();
+}
+
+function matchesTaskQuery(task, rawQuery) {
+  const q = normalizeSearchText(rawQuery);
+  if (!q) return true;
+
+  const assignee = state.personnelList.find(p => p.id === task.assignee_id);
+  const titleNorm = normalizeSearchText(task.title);
+  const descNorm = normalizeSearchText(task.description);
+  const assigneeNameNorm = normalizeSearchText(assignee?.name);
+  const assigneeEmailNorm = normalizeSearchText(assignee?.email);
+  const assigneeDeptNorm = normalizeSearchText(assignee?.department);
+  const assigneeCountryNorm = normalizeSearchText(assignee?.country);
+  const unassignedNorm = !task.assignee_id ? 'atanmamış atanmadı unassigned' : '';
+
+  return (
+    titleNorm.includes(q) ||
+    descNorm.includes(q) ||
+    assigneeNameNorm.includes(q) ||
+    assigneeEmailNorm.includes(q) ||
+    assigneeDeptNorm.includes(q) ||
+    assigneeCountryNorm.includes(q) ||
+    unassignedNorm.includes(q)
+  );
+}
+
+function updateGlobalSearchUI() {
+  const q = (state.searchQuery || '').trim();
+  const container = document.getElementById('globalSearchContainer');
+  const badge = document.getElementById('globalSearchCountBadge');
+  const clearBtn = document.getElementById('globalSearchClearBtn');
+
+  if (container) {
+    container.classList.toggle('has-active-query', q.length > 0);
+  }
+
+  if (clearBtn) {
+    clearBtn.style.display = q.length > 0 ? 'inline-flex' : 'none';
+  }
+
+  if (badge) {
+    if (q.length > 0) {
+      const matchedCount = state.tasks.filter(t => matchesTaskQuery(t, q)).length;
+      badge.textContent = `${matchedCount} / ${state.tasks.length}`;
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+
+function applyGlobalTaskSearch(rawQuery, sourceInputId = '') {
+  const q = rawQuery || '';
+  const trimmed = q.trim();
+
+  state.searchQuery = trimmed;
+  ganttFilterQuery = trimmed.toLocaleLowerCase('tr-TR');
+  state.kanbanSearchQuery = trimmed;
+
+  const inputIds = ['globalTaskSearchInput', 'taskSearchInput', 'ganttSearchInput', 'kanbanSearchInput'];
+  inputIds.forEach(id => {
+    if (id !== sourceInputId) {
+      const el = document.getElementById(id);
+      if (el && el.value !== q) {
+        el.value = q;
+      }
+    }
+  });
+
+  updateGlobalSearchUI();
+  renderMyTasks();
+  renderTimeline();
+  renderBoard();
+  renderMicrosoftTodoList();
 }
 
 // ================= INITIALIZATION =================
@@ -288,6 +378,13 @@ function logout() {
   state.currentUser = null;
   state.token = null;
   state.tenant = null;
+  state.currentProjectId = null;
+  state.projects = [];
+  state.tasks = [];
+  state.dependencies = [];
+  state.notifications = [];
+  closeTaskDrawer();
+  document.getElementById('notifDrawer')?.classList.remove('open');
   showLoginOverlay();
   showToast('Oturum kapatıldı.', 'info');
 }
@@ -297,19 +394,139 @@ async function loadInitialData() {
   await Promise.all([
     loadProjects(),
     loadPersonnel(),
-    loadAndRenderMicrosoftTodo()
+    loadAndRenderMicrosoftTodo(),
+    triggerWorkerAndLoadNotifications(true)
   ]);
+}
+
+async function triggerWorkerAndLoadNotifications(silent = true) {
+  try {
+    await apiCall('/api/worker/run', 'POST');
+  } catch (err) {
+    // ignore background worker error
+  }
+  await loadNotifications();
+  if (!silent) {
+    showToast('🔄 Teslim ve gecikme taraması tamamlandı.', 'info');
+  }
+}
+
+async function loadNotifications() {
+  try {
+    state.notifications = await apiCall('/api/notifications');
+    renderNotifications();
+  } catch (err) {
+    state.notifications = [];
+  }
+}
+
+function renderNotifications() {
+  const notifs = state.notifications || [];
+  const badge = document.getElementById('notifBadge');
+  if (badge) {
+    if (notifs.length > 0) {
+      badge.textContent = String(notifs.length);
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  const listEl = document.getElementById('notifList');
+  if (!listEl) return;
+
+  if (notifs.length === 0) {
+    listEl.innerHTML = `
+      <div style="padding:36px 20px; text-align:center; color:var(--text-tertiary);">
+        <div style="font-size:2rem; margin-bottom:8px;">🎉</div>
+        <strong style="color:var(--text-primary); display:block; margin-bottom:4px;">Yeni bildirim yok</strong>
+        <span style="font-size:0.8rem;">Tüm görevler ve teslim tarihleri kontrol altında.</span>
+      </div>
+    `;
+    return;
+  }
+
+  const sorted = [...notifs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  listEl.innerHTML = sorted.map(n => {
+    const icon = n.type === 'DELAY_EXPLANATION_REQUEST'
+      ? '⚠️'
+      : (n.type === 'DEPENDENCY_UNBLOCKED' ? '🔓' : (n.type === 'DUE_REMINDER_24H' ? '⏰' : '🔔'));
+    const typeClass = n.type === 'DELAY_EXPLANATION_REQUEST' ? 'notif-danger' : (n.type === 'DEPENDENCY_UNBLOCKED' ? 'notif-success' : 'notif-info');
+    const timeStr = n.created_at ? new Date(n.created_at).toLocaleString('tr-TR') : '';
+    return `
+      <div class="notif-card-item ${typeClass}" data-task-id="${n.link_task_id || ''}">
+        <div class="notif-icon-col">${icon}</div>
+        <div class="notif-body-col">
+          <div class="notif-msg">${escapeHtml(n.message)}</div>
+          <div class="notif-meta">
+            <span>${timeStr}</span>
+            ${n.link_task_id ? '<span class="notif-goto-link">Görevi Aç ➔</span>' : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  listEl.querySelectorAll('.notif-card-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const taskId = item.dataset.taskId;
+      document.getElementById('notifDrawer')?.classList.remove('open');
+      if (taskId) {
+        openTaskDrawer(taskId);
+      }
+    });
+  });
+}
+
+// Görevin tamamlanmamış kaç ardıl görevi beklettiğini hesapla (Kimi Bekletiyor?)
+function getBlockingSuccessorSummary(task) {
+  if (!task || task.work_status === 'COMPLETED') return { count: 0, titles: [] };
+
+  // 1. Tam bağımlılık grafiğinden kontrol
+  if (state.dependencies && state.dependencies.length > 0) {
+    const succIds = state.dependencies
+      .filter(d => d.predecessor_id === task.id)
+      .map(d => d.successor_id);
+    const activeSuccessors = succIds
+      .map(sid => state.tasks.find(t => t.id === sid))
+      .filter(st => st && st.work_status !== 'COMPLETED');
+    if (activeSuccessors.length > 0) {
+      return {
+        count: activeSuccessors.length,
+        titles: activeSuccessors.map(s => s.title)
+      };
+    }
+  }
+
+  // 2. Sınırlı bağımlılık özetinden kontrol (KAB02 kısıtlı görünüm için)
+  if (task.limited_dependencies && task.limited_dependencies.length > 0) {
+    const succs = task.limited_dependencies.filter(
+      d => d.relation_type === 'SUCCESSOR' && d.work_status !== 'COMPLETED'
+    );
+    if (succs.length > 0) {
+      return {
+        count: succs.length,
+        titles: succs.map(s => s.title)
+      };
+    }
+  }
+
+  return { count: 0, titles: [] };
 }
 
 async function loadProjects() {
   state.projects = await apiCall('/api/projects');
   document.getElementById('projectsCount').textContent = state.projects.length;
+
+  const hasCurrent = state.projects.some(p => p.id === state.currentProjectId);
+  if (state.projects.length > 0 && (!state.currentProjectId || !hasCurrent)) {
+    state.currentProjectId = state.projects[0].id;
+  } else if (state.projects.length === 0) {
+    state.currentProjectId = null;
+  }
+
   renderProjectSelector();
   renderProjectsGrid();
-
-  if (state.projects.length > 0 && !state.currentProjectId) {
-    state.currentProjectId = state.projects[0].id;
-  }
 
   if (state.currentProjectId) {
     await loadProjectTasks(state.currentProjectId);
@@ -324,6 +541,7 @@ async function loadProjectTasks(projectId) {
   state.tasks = await apiCall(`/api/projects/${projectId}/tasks`);
   state.dependencies = await apiCall(`/api/projects/${projectId}/dependencies`);
 
+  updateGlobalSearchUI();
   renderMyTasks();
   renderTimeline();
   renderBoard();
@@ -332,6 +550,12 @@ async function loadProjectTasks(projectId) {
 async function loadPersonnel() {
   state.personnelList = await apiCall('/api/users');
   renderPersonnelTable();
+  if (state.tasks.length > 0) {
+    updateGlobalSearchUI();
+    renderMyTasks();
+    renderTimeline();
+    renderBoard();
+  }
 }
 
 // ================= RENDER VIEWS =================
@@ -363,10 +587,9 @@ function renderMyTasks() {
     filtered = filtered.filter(t => t.work_status === state.activeFilter);
   }
 
-  // Arama Sorgusu
+  // Arama Sorgusu (Başlık, Açıklama veya Atanan Personel)
   if (state.searchQuery) {
-    const q = state.searchQuery.toLowerCase();
-    filtered = filtered.filter(t => t.title.toLowerCase().includes(q) || (t.description && t.description.toLowerCase().includes(q)));
+    filtered = filtered.filter(t => matchesTaskQuery(t, state.searchQuery));
   }
 
   // Badge sayacı güncelle
@@ -375,10 +598,10 @@ function renderMyTasks() {
 
   if (filtered.length === 0) {
     container.innerHTML = `
-      <div style="padding:40px; text-align:center; color:#64748b;">
+      <div style="padding:40px; text-align:center; color:var(--text-tertiary);">
         <span style="font-size:2rem;">🔍</span>
-        <h4 style="margin-top:10px; color:#f8fafc;">Arama veya filtre kriterine uygun görev bulunamadı.</h4>
-        <p style="font-size:0.85rem; margin-top:4px;">Yeni görev ekleyebilir veya filtreleri temizleyebilirsiniz.</p>
+        <h4 style="margin-top:10px; color:var(--text-primary);">Arama veya filtre kriterine uygun görev bulunamadı.</h4>
+        <p style="font-size:0.85rem; margin-top:4px;">Yeni görev ekleyebilir veya arama filtresini temizleyebilirsiniz.</p>
       </div>
     `;
     return;
@@ -391,14 +614,21 @@ function renderMyTasks() {
     row.className = 'task-list-row';
     row.dataset.id = task.id;
 
-    // Bağımlılık uyarısı (Öncül bekleniyor mu?)
-    let depNote = '';
+    // Bağımlılık uyarısı (Öncül bekleniyor mu? + Kimi bekletiyor?)
+    const depBadges = [];
     if (task.limited_dependencies && task.limited_dependencies.length > 0) {
       const blocking = task.limited_dependencies.find(d => d.is_blocking);
       if (blocking) {
-        depNote = `<span class="task-dep-pill">⏳ Öncül: "${blocking.title}" tamamlanmalı</span>`;
+        depBadges.push(`<span class="task-dep-pill">⏳ Öncül: "${escapeHtml(blocking.title)}" tamamlanmalı</span>`);
       }
     }
+
+    const blockingSucc = getBlockingSuccessorSummary(task);
+    if (blockingSucc.count > 0) {
+      const tooltip = `Bekleyen ardıl görevler: ${blockingSucc.titles.join(', ')}`;
+      depBadges.push(`<span class="task-bottleneck-pill" title="${escapeHtml(tooltip)}">🔥 ${blockingSucc.count} Görevi Bekletiyor</span>`);
+    }
+    const depNote = depBadges.length > 0 ? `<div class="task-dep-badges-row">${depBadges.join('')}</div>` : '';
 
     const statusPillClass = {
       BLOCKED: 'pill-status-blocked',
@@ -472,29 +702,68 @@ function renderProjectsGrid() {
     card.className = 'project-card';
     card.dataset.id = p.id;
 
+    const rate = typeof p.completion_rate === 'number' ? p.completion_rate : 0;
+    const totalTasks = typeof p.total_tasks === 'number' ? p.total_tasks : 0;
+    const completedTasks = typeof p.completed_tasks === 'number' ? p.completed_tasks : 0;
+    const delayedTasks = typeof p.delayed_tasks === 'number' ? p.delayed_tasks : 0;
+    const isRevised = p.initial_due_date && p.current_due_date && p.initial_due_date.slice(0, 10) !== p.current_due_date.slice(0, 10);
+
     card.innerHTML = `
-      <div class="proj-card-header">
-        <h4 class="proj-title">${p.title}</h4>
+      <div class="proj-card-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+        <h4 class="proj-title">${escapeHtml(p.title)}</h4>
+        <span class="nav-badge ${p.id === state.currentProjectId ? '' : 'neutral'}">
+          ${p.id === state.currentProjectId ? 'Aktif Proje' : `%${rate}`}
+        </span>
       </div>
-      <p class="proj-desc">${p.description || 'Açıklama belirtilmemiş.'}</p>
+      <p class="proj-desc">${escapeHtml(p.description || 'Açıklama belirtilmemiş.')}</p>
       
       <div class="proj-progress-box">
         <div class="proj-progress-meta">
-          <span>İlerleme</span>
-          <strong>${p.id === state.currentProjectId ? 'Aktif Proje' : 'Görüntüle ➔'}</strong>
+          <span>Tamamlanma: <strong>%${rate}</strong> (${completedTasks}/${totalTasks} Görev)</span>
+          ${delayedTasks > 0 ? `<span class="proj-delayed-chip">⚠️ ${delayedTasks} Geciken</span>` : `<span style="color:#10b981; font-weight:600;">✓ Takvimde</span>`}
         </div>
         <div class="proj-track">
-          <div class="proj-fill" style="width: 50%;"></div>
+          <div class="proj-fill" style="width: ${rate}%;"></div>
         </div>
       </div>
 
       <div class="proj-dates-row">
-        <span>Başlangıç: ${p.current_start_date.slice(0, 10)}</span>
-        <span>Bitiş: ${p.current_due_date.slice(0, 10)}</span>
+        <span>📅 Güncel: ${p.current_start_date.slice(0, 10)} → ${p.current_due_date.slice(0, 10)}</span>
+        ${isRevised ? `<span class="proj-revised-tag" title="İlk Plan: ${p.initial_start_date.slice(0, 10)} → ${p.initial_due_date.slice(0, 10)}">🔄 Revize Edildi</span>` : ''}
+      </div>
+
+      <div class="proj-card-actions" style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border-subtle);">
+        <button type="button" class="action-btn secondary-btn sm-btn btn-open-project" data-id="${p.id}">
+          📋 Görevleri Aç
+        </button>
+        ${p.is_manager ? `
+          <button type="button" class="action-btn outline-btn sm-btn btn-manage-project" data-id="${p.id}">
+            ⚙️ Ekip & Plan ${p.pending_visibility_requests > 0 ? `<span class="nav-badge" style="margin-left:4px;">${p.pending_visibility_requests}</span>` : ''}
+          </button>
+        ` : (!p.is_full_viewer ? `
+          <button type="button" class="action-btn outline-btn sm-btn btn-req-visibility" data-id="${p.id}">
+            👁️ Tüm Projeyi Gör Talebi
+          </button>
+        ` : '')}
       </div>
     `;
 
-    card.addEventListener('click', async () => {
+    card.addEventListener('click', async (e) => {
+      if (e.target.closest('.btn-manage-project')) {
+        e.stopPropagation();
+        openProjectManageModal(p.id);
+        return;
+      }
+      if (e.target.closest('.btn-req-visibility')) {
+        e.stopPropagation();
+        try {
+          await apiCall(`/api/projects/${p.id}/visibility-request`, 'POST');
+          showToast('👁️ Tam proje görünürlük talebiniz proje yöneticisine iletildi.', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+        return;
+      }
       await loadProjectTasks(p.id);
       switchView('view-my-tasks');
     });
@@ -534,12 +803,11 @@ function setupGanttInteractions() {
     });
   });
 
-  // 2. Arama Filtresi
+  // 2. Arama Filtresi (Küresel arama ile senkronize)
   const searchInput = document.getElementById('ganttSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
-      ganttFilterQuery = e.target.value.trim().toLowerCase();
-      renderTimeline();
+      applyGlobalTaskSearch(e.target.value, 'ganttSearchInput');
     });
   }
 
@@ -938,13 +1206,11 @@ function renderTimeline() {
     titleEl.textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
   }
 
-  // Arama / Filtreleme
+  // Arama / Filtreleme (Başlık, Açıklama veya Sorumlu Personel)
+  const activeGanttQuery = state.searchQuery || ganttFilterQuery;
   const tasksToRender = state.tasks.filter(t => {
-    if (!ganttFilterQuery) return true;
-    const titleMatch = (t.title || '').toLowerCase().includes(ganttFilterQuery);
-    const descMatch = (t.description || '').toLowerCase().includes(ganttFilterQuery);
-    const statusMatch = (t.work_status || '').toLowerCase().includes(ganttFilterQuery);
-    return titleMatch || descMatch || statusMatch;
+    if (!activeGanttQuery) return true;
+    return matchesTaskQuery(t, activeGanttQuery);
   });
 
   if (tasksToRender.length === 0) {
@@ -1291,12 +1557,10 @@ function renderBoard() {
   const counts = { TODO: 0, DOING: 0, DONE: 0 };
   Object.values(lists).forEach(l => l.innerHTML = '');
 
-  const q = (state.kanbanSearchQuery || '').toLowerCase();
+  const activeBoardQuery = state.searchQuery || state.kanbanSearchQuery || '';
   const filteredTasks = state.tasks.filter(t => {
-    if (!q) return true;
-    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
-    const text = `${t.title} ${assignee?.name || ''} ${t.type} ${t.priority}`.toLowerCase();
-    return text.includes(q);
+    if (!activeBoardQuery) return true;
+    return matchesTaskQuery(t, activeBoardQuery);
   });
 
   filteredTasks.forEach(t => {
@@ -1319,6 +1583,7 @@ function renderBoard() {
     const initials = assignee ? assignee.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
     const dueDateText = t.current_due_date ? t.current_due_date.slice(0, 10).split('-').reverse().join('.') : '';
     const progressVal = typeof t.progress === 'number' ? t.progress : (t.work_status === 'COMPLETED' ? 100 : 0);
+    const blockingSucc = getBlockingSuccessorSummary(t);
 
     card.innerHTML = `
       <div class="board-card-header">
@@ -1329,6 +1594,11 @@ function renderBoard() {
       ${isBlocked ? `
         <div class="board-card-blocked-pill" title="Öncül görevler bitmeden başlatılamaz">
           🔒 Öncül Bekliyor (BLOCKED)
+        </div>
+      ` : ''}
+      ${blockingSucc.count > 0 ? `
+        <div class="board-card-bottleneck-pill" title="Bekleyen ardıllar: ${escapeHtml(blockingSucc.titles.join(', '))}">
+          🔥 ${blockingSucc.count} Ardıl Görevi Bekletiyor
         </div>
       ` : ''}
       <div class="board-card-progress-bar">
@@ -1465,7 +1735,7 @@ async function openTaskDrawer(taskId) {
 
   try {
     const details = await apiCall(`/api/tasks/${taskId}/details`);
-    const { task, project, assignee, predecessors, successors, delays } = details;
+    const { task, project, assignee, predecessors, successors, delays, plan_changes, can_manage_plan, can_edit } = details;
 
     document.getElementById('wpProjectTitle').textContent = project?.title || 'FG Group Projesi';
     document.getElementById('wpId').textContent = `#${task.id.slice(0, 6)}`;
@@ -1477,6 +1747,12 @@ async function openTaskDrawer(taskId) {
     const priorityBadge = document.getElementById('wpPriority');
     priorityBadge.textContent = task.priority === 'HIGH' ? '🔥 Yüksek' : (task.priority === 'LOW' ? 'Düşük' : 'Normal');
     priorityBadge.className = `op-priority-badge ${task.priority === 'HIGH' ? 'high' : ''}`;
+
+    const prioritySelect = document.getElementById('wpPrioritySelect');
+    if (prioritySelect) {
+      prioritySelect.value = task.priority || 'NORMAL';
+      prioritySelect.disabled = !can_edit;
+    }
 
     document.getElementById('wpTitle').textContent = task.title;
 
@@ -1502,8 +1778,21 @@ async function openTaskDrawer(taskId) {
     const prog = task.work_status === 'COMPLETED' ? 100 : (task.progress || 0);
     document.getElementById('wpProgressText').textContent = `%${prog}`;
     document.getElementById('wpProgressFill').style.width = `${prog}%`;
+    const progSlider = document.getElementById('wpProgressSlider');
+    if (progSlider) {
+      progSlider.value = String(prog);
+      progSlider.disabled = !can_edit || task.work_status === 'COMPLETED';
+    }
 
-    // Personel Kartı
+    // Sorumlu Personel Seçici & Kartı
+    const assigneeSelect = document.getElementById('wpAssigneeSelect');
+    if (assigneeSelect) {
+      assigneeSelect.innerHTML = '<option value="">(Atanmamış)</option>' +
+        state.personnelList.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(u.department || 'Genel')})</option>`).join('');
+      assigneeSelect.value = task.assignee_id || '';
+      assigneeSelect.disabled = !can_manage_plan;
+    }
+
     const avatar = document.getElementById('wpAssigneeAvatar');
     const nameEl = document.getElementById('wpAssigneeName');
     const deptEl = document.getElementById('wpAssigneeDept');
@@ -1524,9 +1813,48 @@ async function openTaskDrawer(taskId) {
       phoneEl.textContent = '-';
     }
 
-    // Tarihler & Gecikme Uyarısı
-    document.getElementById('wpStartDate').textContent = task.current_start_date ? task.current_start_date.slice(0, 10) : '-';
-    document.getElementById('wpDueDate').textContent = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
+    // Tarihler, İlk Plan & Plan Revizyonu
+    const curStart = task.current_start_date ? task.current_start_date.slice(0, 10) : '-';
+    const curDue = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
+    const initStart = task.initial_start_date ? task.initial_start_date.slice(0, 10) : curStart;
+    const initDue = task.initial_due_date ? task.initial_due_date.slice(0, 10) : curDue;
+
+    document.getElementById('wpStartDate').textContent = curStart;
+    document.getElementById('wpDueDate').textContent = curDue;
+
+    const initDatesEl = document.getElementById('wpInitialDates');
+    if (initDatesEl) {
+      const isRevised = initStart !== curStart || initDue !== curDue;
+      initDatesEl.innerHTML = `📌 <strong>İlk Plan (Baz):</strong> ${initStart} → ${initDue} ${isRevised ? '<span class="wp-rev-pill">Revize Edildi</span>' : '<span style="color:#10b981;">(Orijinal Plan)</span>'}`;
+    }
+
+    const newStartInput = document.getElementById('wpNewStart');
+    const newDueInput = document.getElementById('wpNewDue');
+    const planReasonInput = document.getElementById('wpPlanReason');
+    if (newStartInput) newStartInput.value = curStart !== '-' ? curStart : '';
+    if (newDueInput) newDueInput.value = curDue !== '-' ? curDue : '';
+    if (planReasonInput) planReasonInput.value = '';
+
+    const togglePlanBtn = document.getElementById('wpTogglePlanRevBtn');
+    if (togglePlanBtn) {
+      togglePlanBtn.style.display = can_manage_plan ? 'inline-flex' : 'none';
+    }
+    const planForm = document.getElementById('wpPlanReviseForm');
+    if (planForm) planForm.style.display = 'none';
+
+    const planHistoryEl = document.getElementById('wpPlanHistoryList');
+    if (planHistoryEl) {
+      if (plan_changes && plan_changes.length > 0) {
+        planHistoryEl.innerHTML = plan_changes.map(pc => `
+          <div class="wp-plan-history-item">
+            <div>🔄 <strong>Plan Revizyonu:</strong> ${pc.old_due_date.slice(0, 10)} → <strong>${pc.new_due_date.slice(0, 10)}</strong></div>
+            <div style="color:var(--text-secondary); margin-top:2px;">Neden: ${escapeHtml(pc.reason || '-')}</div>
+          </div>
+        `).join('');
+      } else {
+        planHistoryEl.innerHTML = '';
+      }
+    }
 
     const delayAlert = document.getElementById('wpDelayBadge');
     const isOverdue = task.work_status !== 'COMPLETED' && new Date(task.current_due_date) < new Date();
@@ -1539,32 +1867,38 @@ async function openTaskDrawer(taskId) {
 
     document.getElementById('wpDesc').textContent = task.description || 'Bu görev için detaylı açıklama girilmemiş.';
 
-    // Öncül Listesi
+    // Öncül Listesi (Silme Butonu ile)
     const predContainer = document.getElementById('wpPredecessorsList');
     if (predecessors && predecessors.length > 0) {
       predContainer.innerHTML = predecessors.map(p => `
         <div class="op-rel-item">
           <div>
-            <span class="rel-title">${p.title}</span>
-            <div class="rel-user">👤 ${p.assignee_name}</div>
+            <span class="rel-title">${escapeHtml(p.title)}</span>
+            <div class="rel-user">👤 ${escapeHtml(p.assignee_name)}</div>
           </div>
-          <span class="task-status-pill ${p.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-progress'}">${p.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'}</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="task-status-pill ${p.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-progress'}">${p.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'}</span>
+            ${can_manage_plan ? `<button type="button" class="btn-remove-dep" data-pred="${p.id}" data-succ="${task.id}" title="Öncül Bağımlılığı Kaldır">&times;</button>` : ''}
+          </div>
         </div>
       `).join('');
     } else {
       predContainer.innerHTML = '<span style="font-size:0.8rem; color:#64748b;">(Öncül görev yok - hemen başlayabilir)</span>';
     }
 
-    // Ardıl Listesi
+    // Ardıl Listesi (Silme Butonu ile)
     const succContainer = document.getElementById('wpSuccessorsList');
     if (successors && successors.length > 0) {
       succContainer.innerHTML = successors.map(s => `
         <div class="op-rel-item">
           <div>
-            <span class="rel-title">${s.title}</span>
-            <div class="rel-user">👤 ${s.assignee_name}</div>
+            <span class="rel-title">${escapeHtml(s.title)}</span>
+            <div class="rel-user">👤 ${escapeHtml(s.assignee_name)}</div>
           </div>
-          <span class="task-status-pill ${s.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-blocked'}">${s.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Bekliyor'}</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="task-status-pill ${s.work_status === 'COMPLETED' ? 'pill-status-done' : 'pill-status-blocked'}">${s.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Bekliyor'}</span>
+            ${can_manage_plan ? `<button type="button" class="btn-remove-dep" data-pred="${task.id}" data-succ="${s.id}" title="Ardıl Bağımlılığı Kaldır">&times;</button>` : ''}
+          </div>
         </div>
       `).join('');
     } else {
@@ -1576,17 +1910,23 @@ async function openTaskDrawer(taskId) {
     const currentPredIds = new Set((predecessors || []).map(p => p.id));
     const eligibleTasks = state.tasks.filter(t => t.id !== task.id && !currentPredIds.has(t.id));
     addDepSelect.innerHTML = '<option value="">+ Öncül Bağımlılık Seç...</option>' +
-      eligibleTasks.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+      eligibleTasks.map(t => `<option value="${t.id}">${escapeHtml(t.title)}</option>`).join('');
 
-    // Gecikme & Aktivite Akışı
+    // Gecikme & Aktivite Akışı (explanation_source ve detected_at/reported_at uyumlu)
     const delaysContainer = document.getElementById('wpDelaysList');
     if (delays && delays.length > 0) {
-      delaysContainer.innerHTML = delays.map(d => `
-        <div class="op-activity-item ${d.explanation_type === 'SYSTEM_DEPENDENCY_BLOCK' ? 'system' : ''}">
-          <div><strong>${d.explanation_type === 'SYSTEM_DEPENDENCY_BLOCK' ? '⚙️ Sistem Tespiti' : '👤 Personel Açıklaması'}:</strong> ${d.explanation_text || d.delay_reason || 'Gecikme kaydedildi.'}</div>
-          <div class="op-activity-time">${new Date(d.logged_at).toLocaleString('tr-TR')}</div>
-        </div>
-      `).join('');
+      delaysContainer.innerHTML = delays.map(d => {
+        const isSystem = d.explanation_source === 'SYSTEM' || d.explanation_type === 'SYSTEM_DEPENDENCY_BLOCK';
+        const text = d.explanation_text || d.reason || d.delay_reason || 'Gecikme kaydedildi.';
+        const timestamp = d.reported_at || d.detected_at || d.logged_at;
+        const timeText = timestamp ? new Date(timestamp).toLocaleString('tr-TR') : '';
+        return `
+          <div class="op-activity-item ${isSystem ? 'system' : ''}">
+            <div><strong>${isSystem ? '⚙️ Sistem Tespiti' : '👤 Personel Açıklaması'}:</strong> ${escapeHtml(text)}</div>
+            <div class="op-activity-time">${timeText}</div>
+          </div>
+        `;
+      }).join('');
     } else {
       delaysContainer.innerHTML = '<span style="font-size:0.8rem; color:#64748b;">Henüz gecikme kaydı veya aktivite bulunmuyor.</span>';
     }
@@ -1851,12 +2191,45 @@ function setupEventListeners() {
     }
   });
 
+  // Küresel Görev Arama Çubuğu (Üst Bar)
+  const globalSearchInput = document.getElementById('globalTaskSearchInput');
+  if (globalSearchInput) {
+    globalSearchInput.addEventListener('input', (e) => {
+      applyGlobalTaskSearch(e.target.value, 'globalTaskSearchInput');
+    });
+    globalSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        applyGlobalTaskSearch('', '');
+        globalSearchInput.blur();
+      }
+    });
+  }
+
+  const globalSearchClearBtn = document.getElementById('globalSearchClearBtn');
+  if (globalSearchClearBtn) {
+    globalSearchClearBtn.addEventListener('click', () => {
+      applyGlobalTaskSearch('', '');
+      document.getElementById('globalTaskSearchInput')?.focus();
+    });
+  }
+
+  // Klavye Kısayolu (Ctrl+K / Cmd+K ile Küresel Aramaya Odaklan)
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const input = document.getElementById('globalTaskSearchInput');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  });
+
   // OpenProject Filtre ve Arama Çubuğu
   const searchInput = document.getElementById('taskSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
-      state.searchQuery = e.target.value.trim();
-      renderMyTasks();
+      applyGlobalTaskSearch(e.target.value, 'taskSearchInput');
     });
   }
 
@@ -1869,10 +2242,128 @@ function setupEventListeners() {
     });
   });
 
+  // Bildirim Çanı ve Çekmecesi
+  document.getElementById('notifBellBtn')?.addEventListener('click', async () => {
+    document.getElementById('notifDrawer')?.classList.add('open');
+    await loadNotifications();
+  });
+
+  document.getElementById('closeDrawerBtn')?.addEventListener('click', () => {
+    document.getElementById('notifDrawer')?.classList.remove('open');
+  });
+
+  document.getElementById('notifDrawer')?.addEventListener('click', (e) => {
+    if (e.target.id === 'notifDrawer') {
+      document.getElementById('notifDrawer')?.classList.remove('open');
+    }
+  });
+
+  document.getElementById('runWorkerScanBtn')?.addEventListener('click', async () => {
+    await triggerWorkerAndLoadNotifications(false);
+  });
+
   // OpenProject Split Screen Çekmece Eylemleri
   document.getElementById('wpCloseBtn')?.addEventListener('click', closeTaskDrawer);
   document.getElementById('wpCloseFooterBtn')?.addEventListener('click', closeTaskDrawer);
   document.getElementById('wpDrawerBackdrop')?.addEventListener('click', closeTaskDrawer);
+
+  // Çekmece İçi İlerleme Kaydırıcısı (Canlı Önizleme + Kayıt)
+  const wpProgressSlider = document.getElementById('wpProgressSlider');
+  if (wpProgressSlider) {
+    wpProgressSlider.addEventListener('input', (e) => {
+      const val = Number(e.target.value);
+      document.getElementById('wpProgressText').textContent = `%${val}`;
+      document.getElementById('wpProgressFill').style.width = `${val}%`;
+    });
+    wpProgressSlider.addEventListener('change', async (e) => {
+      if (!state.activeTaskId) return;
+      const val = Number(e.target.value);
+      try {
+        await apiCall(`/api/tasks/${state.activeTaskId}`, 'PATCH', { progress: val });
+        showToast(`İlerleme oranı %${val} olarak güncellendi.`, 'success');
+        await loadProjectTasks(state.currentProjectId);
+        await loadProjects();
+      } catch (err) {
+        showToast('İlerleme güncellenemedi: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // Çekmece İçi Öncelik Değişimi
+  document.getElementById('wpPrioritySelect')?.addEventListener('change', async (e) => {
+    if (!state.activeTaskId) return;
+    try {
+      await apiCall(`/api/tasks/${state.activeTaskId}`, 'PATCH', { priority: e.target.value });
+      showToast('Görev önceliği güncellendi.', 'success');
+      await loadProjectTasks(state.currentProjectId);
+      await openTaskDrawer(state.activeTaskId);
+    } catch (err) {
+      showToast('Öncelik güncellenemedi: ' + err.message, 'error');
+    }
+  });
+
+  // Çekmece İçi Sorumlu Personel Değişimi
+  document.getElementById('wpAssigneeSelect')?.addEventListener('change', async (e) => {
+    if (!state.activeTaskId) return;
+    try {
+      await apiCall(`/api/tasks/${state.activeTaskId}/assign`, 'POST', { assignee_id: e.target.value || null });
+      showToast('Sorumlu personel güncellendi.', 'success');
+      await loadProjectTasks(state.currentProjectId);
+      await openTaskDrawer(state.activeTaskId);
+      await loadNotifications();
+    } catch (err) {
+      showToast('Personel ataması yapılamadı: ' + err.message, 'error');
+    }
+  });
+
+  // Çekmece İçi Plan Revizyonu Aç/Kapa ve Kaydet
+  document.getElementById('wpTogglePlanRevBtn')?.addEventListener('click', () => {
+    const form = document.getElementById('wpPlanReviseForm');
+    if (form) {
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+  });
+
+  document.getElementById('wpCancelPlanRevBtn')?.addEventListener('click', () => {
+    const form = document.getElementById('wpPlanReviseForm');
+    if (form) form.style.display = 'none';
+  });
+
+  document.getElementById('wpPlanReviseForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!state.activeTaskId) return;
+    const new_start_date = new Date(document.getElementById('wpNewStart').value).toISOString();
+    const new_due_date = new Date(document.getElementById('wpNewDue').value).toISOString();
+    const reason = document.getElementById('wpPlanReason').value.trim();
+    try {
+      await apiCall(`/api/tasks/${state.activeTaskId}/plan`, 'POST', {
+        new_start_date,
+        new_due_date,
+        reason
+      });
+      showToast('📅 Görev zaman planı revize edildi (İlk plan korundu).', 'success');
+      await loadProjectTasks(state.currentProjectId);
+      await openTaskDrawer(state.activeTaskId);
+    } catch (err) {
+      showToast('Plan revize edilemedi: ' + err.message, 'error');
+    }
+  });
+
+  // Çekmece İçi Bağımlılık Silme (Öncül veya Ardıl)
+  document.getElementById('workPackageDrawer')?.addEventListener('click', async (e) => {
+    const rmBtn = e.target.closest('.btn-remove-dep');
+    if (!rmBtn || !state.activeTaskId) return;
+    const predecessor_id = rmBtn.dataset.pred;
+    const successor_id = rmBtn.dataset.succ;
+    try {
+      await apiCall('/api/dependencies', 'DELETE', { predecessor_id, successor_id });
+      showToast('🔗 Bağımlılık kaldırıldı ve görev durumu güncellendi.', 'info');
+      await loadProjectTasks(state.currentProjectId);
+      await openTaskDrawer(state.activeTaskId);
+    } catch (err) {
+      showToast('Bağımlılık kaldırılamadı: ' + err.message, 'error');
+    }
+  });
 
   document.getElementById('wpStartBtn')?.addEventListener('click', async () => {
     if (!state.activeTaskId) return;
@@ -1887,7 +2378,9 @@ function setupEventListeners() {
     await apiCall(`/api/tasks/${state.activeTaskId}/complete`, 'POST');
     showToast('Görev tamamlandı!', 'success');
     await loadProjectTasks(state.currentProjectId);
+    await loadProjects();
     await openTaskDrawer(state.activeTaskId);
+    await loadNotifications();
   });
 
   document.getElementById('wpAddDepBtn')?.addEventListener('click', async () => {
@@ -1919,6 +2412,9 @@ function setupEventListeners() {
     await openTaskDrawer(state.activeTaskId);
   });
 
+  // Proje Ekip, Plan ve Görünürlük Yönetimi Modalı Dinleyicileri
+  setupProjectManageModalListeners();
+
   // Yeni Görev Modalı Aç
   document.getElementById('newTaskBtn').addEventListener('click', () => {
     populateTaskModalSelects();
@@ -1934,12 +2430,11 @@ function setupEventListeners() {
     });
   }
 
-  // Kanban Canlı Filtre / Arama
+  // Kanban Canlı Filtre / Arama (Küresel arama ile senkronize)
   const kanbanSearchInput = document.getElementById('kanbanSearchInput');
   if (kanbanSearchInput) {
     kanbanSearchInput.addEventListener('input', (e) => {
-      state.kanbanSearchQuery = e.target.value;
-      renderBoard();
+      applyGlobalTaskSearch(e.target.value, 'kanbanSearchInput');
     });
   }
 
@@ -2532,9 +3027,227 @@ async function initReportBuilder() {
     applyReportTemplate('executive');
   }
 
-  await loadReportBuilderData();
+  await Promise.all([
+    loadReportBuilderData(),
+    loadSavedReportLayouts()
+  ]);
   setupReportDragAndDrop();
   setupReportControls();
+}
+
+let savedCustomReportLayouts = [];
+
+async function loadSavedReportLayouts() {
+  try {
+    savedCustomReportLayouts = await apiCall('/api/reports/custom-layouts');
+    renderSavedReportLayoutsMenu();
+  } catch (err) {
+    savedCustomReportLayouts = [];
+  }
+}
+
+function renderSavedReportLayoutsMenu() {
+  const section = document.getElementById('savedReportLayoutsSection');
+  const listEl = document.getElementById('savedReportLayoutsList');
+  if (!section || !listEl) return;
+
+  if (!savedCustomReportLayouts || savedCustomReportLayouts.length === 0) {
+    section.style.display = 'none';
+    listEl.innerHTML = '';
+    return;
+  }
+
+  section.style.display = 'block';
+  listEl.innerHTML = savedCustomReportLayouts.map(layout => `
+    <button type="button" class="template-item saved-layout-item" data-layout-id="${layout.id}">
+      <strong>📌 ${escapeHtml(layout.name)}</strong>
+      <span>${(layout.widgets || []).length} bileşen • ${new Date(layout.created_at).toLocaleDateString('tr-TR')}</span>
+    </button>
+  `).join('');
+
+  listEl.querySelectorAll('.saved-layout-item').forEach(btn => {
+    btn.onclick = async () => {
+      const layout = savedCustomReportLayouts.find(l => l.id === btn.dataset.layoutId);
+      if (!layout) return;
+      const titleEl = document.getElementById('reportDisplayTitle');
+      if (titleEl && layout.name) titleEl.textContent = layout.name;
+      if (layout.project_id) {
+        reportState.selectedProjectId = layout.project_id;
+        const projSelect = document.getElementById('reportProjectSelect');
+        if (projSelect) projSelect.value = layout.project_id;
+        await loadReportBuilderData();
+      }
+      reportState.widgets = Array.isArray(layout.widgets) ? JSON.parse(JSON.stringify(layout.widgets)) : [];
+      renderReportCanvas();
+      const tmplMenu = document.getElementById('reportTemplateMenu');
+      if (tmplMenu) tmplMenu.style.display = 'none';
+      showToast(`"${layout.name}" rapor düzeni yüklendi.`, 'success');
+    };
+  });
+}
+
+let managingProjectId = null;
+
+async function openProjectManageModal(projectId) {
+  managingProjectId = projectId;
+  const modal = document.getElementById('projectManageModal');
+  if (!modal) return;
+
+  try {
+    const details = await apiCall(`/api/projects/${projectId}`);
+    const { project, members, visibilityRequests, planChanges } = details;
+
+    document.getElementById('pmModalTitle').textContent = `📁 ${project.title}`;
+
+    // Üye ekleme personel listesi
+    const userSelect = document.getElementById('pmUserSelect');
+    if (userSelect) {
+      userSelect.innerHTML = state.personnelList.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(u.department || 'Genel')})</option>`).join('');
+    }
+
+    // Mevcut üyeler
+    const roleNames = {
+      PROJECT_MANAGER: '👑 Proje Yöneticisi',
+      EDITOR: '✏️ Düzenleyici (Editor)',
+      VIEWER: '👁️ Tam Görüntüleyici'
+    };
+    const membersListEl = document.getElementById('pmMembersList');
+    if (membersListEl) {
+      if (members && members.length > 0) {
+        membersListEl.innerHTML = members.map(m => {
+          const u = state.personnelList.find(p => p.id === m.user_id);
+          return `
+            <div class="pm-member-row">
+              <div>
+                <strong>${escapeHtml(u ? u.name : m.user_id)}</strong>
+                <span style="font-size:0.75rem; color:var(--text-tertiary); margin-left:6px;">${escapeHtml(u?.email || '')}</span>
+              </div>
+              <span class="nav-badge neutral">${roleNames[m.role] || m.role}</span>
+            </div>
+          `;
+        }).join('');
+      } else {
+        membersListEl.innerHTML = '<span style="font-size:0.8rem; color:var(--text-tertiary);">Henüz atanmış proje üyesi yok.</span>';
+      }
+    }
+
+    // Görünürlük talepleri (KAB03)
+    const visSection = document.getElementById('pmVisibilitySection');
+    const visList = document.getElementById('pmVisibilityRequestsList');
+    const pendingReqs = (visibilityRequests || []).filter(r => r.status === 'PENDING');
+    if (visSection && visList) {
+      if (pendingReqs.length > 0) {
+        visSection.style.display = 'block';
+        visList.innerHTML = pendingReqs.map(r => {
+          const reqUid = r.user_id || r.requester_user_id;
+          const u = state.personnelList.find(p => p.id === reqUid);
+          return `
+            <div class="pm-member-row">
+              <div>
+                <strong>${escapeHtml(u ? u.name : reqUid)}</strong>
+                <span style="font-size:0.75rem; color:var(--text-tertiary); margin-left:6px;">Tüm projeyi görüntüleme yetkisi talep ediyor</span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="action-btn success-btn sm-btn btn-vis-decide" data-req="${r.id}" data-approve="true">Onayla</button>
+                <button type="button" class="action-btn secondary-btn sm-btn btn-vis-decide" data-req="${r.id}" data-approve="false">Reddet</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        visSection.style.display = 'none';
+        visList.innerHTML = '';
+      }
+    }
+
+    // Plan Karşılaştırma ve Revizyon Formu
+    const initStart = project.initial_start_date.slice(0, 10);
+    const initDue = project.initial_due_date.slice(0, 10);
+    const curStart = project.current_start_date.slice(0, 10);
+    const curDue = project.current_due_date.slice(0, 10);
+
+    const compareBar = document.getElementById('pmPlanCompareBar');
+    if (compareBar) {
+      compareBar.innerHTML = `
+        <div>📌 <strong>İlk Plan (Baz):</strong> ${initStart} → ${initDue}</div>
+        <div>📅 <strong>Güncel Plan:</strong> ${curStart} → ${curDue}</div>
+      `;
+    }
+
+    document.getElementById('pmNewStart').value = curStart;
+    document.getElementById('pmNewDue').value = curDue;
+    document.getElementById('pmPlanReason').value = '';
+
+    const histEl = document.getElementById('pmPlanHistoryList');
+    if (histEl) {
+      if (planChanges && planChanges.length > 0) {
+        histEl.innerHTML = planChanges.map(pc => `
+          <div class="wp-plan-history-item">
+            <div>🔄 <strong>${pc.old_due_date.slice(0, 10)} → ${pc.new_due_date.slice(0, 10)}</strong> (${new Date(pc.changed_at).toLocaleDateString('tr-TR')})</div>
+            <div style="color:var(--text-secondary);">Gerekçe: ${escapeHtml(pc.reason)}</div>
+          </div>
+        `).join('');
+      } else {
+        histEl.innerHTML = '';
+      }
+    }
+
+    modal.classList.add('open');
+  } catch (err) {
+    showToast('Proje yönetim bilgileri alınamadı: ' + err.message, 'error');
+  }
+}
+
+let pmListenersAttached = false;
+function setupProjectManageModalListeners() {
+  if (pmListenersAttached) return;
+  pmListenersAttached = true;
+
+  document.getElementById('pmAddMemberForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!managingProjectId) return;
+    const user_id = document.getElementById('pmUserSelect').value;
+    const role = document.getElementById('pmRoleSelect').value;
+    try {
+      await apiCall(`/api/projects/${managingProjectId}/members`, 'POST', { user_id, role });
+      showToast('👥 Proje ekip rolü güncellendi.', 'success');
+      await openProjectManageModal(managingProjectId);
+      await loadProjects();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('pmPlanForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!managingProjectId) return;
+    const new_start_date = new Date(document.getElementById('pmNewStart').value).toISOString();
+    const new_due_date = new Date(document.getElementById('pmNewDue').value).toISOString();
+    const reason = document.getElementById('pmPlanReason').value.trim();
+    try {
+      await apiCall(`/api/projects/${managingProjectId}/plan`, 'POST', { new_start_date, new_due_date, reason });
+      showToast('📅 Proje planı revize edildi (İlk plan korundu).', 'success');
+      await openProjectManageModal(managingProjectId);
+      await loadProjects();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('pmVisibilityRequestsList')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.btn-vis-decide');
+    if (!btn || !managingProjectId) return;
+    const request_id = btn.dataset.req;
+    const approve = btn.dataset.approve === 'true';
+    try {
+      await apiCall(`/api/projects/${managingProjectId}/visibility-decide`, 'POST', { request_id, approve });
+      showToast(approve ? '✅ Görünürlük talebi onaylandı.' : 'Görünürlük talebi reddedildi.', 'info');
+      await openProjectManageModal(managingProjectId);
+      await loadProjects();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 }
 
 async function loadReportBuilderData() {
@@ -2622,7 +3335,7 @@ function setupReportControls() {
       }
     });
 
-    tmplMenu.querySelectorAll('.template-item').forEach(item => {
+    tmplMenu.querySelectorAll('.template-item[data-template]').forEach(item => {
       item.onclick = () => {
         const key = item.dataset.template;
         applyReportTemplate(key);
@@ -2653,7 +3366,8 @@ function setupReportControls() {
           widgets: reportState.widgets,
           project_id: reportState.selectedProjectId
         });
-        showToast('Rapor düzeni başarıyla kaydedildi!', 'success');
+        await loadSavedReportLayouts();
+        showToast('Rapor düzeni başarıyla kaydedildi! (Şablonlar menüsünden geri yükleyebilirsiniz)', 'success');
       } catch (err) {
         showToast('Rapor kaydedilemedi: ' + err.message, 'error');
       }
@@ -3043,8 +3757,21 @@ function renderMicrosoftTodoList() {
     msTodoState.items = [];
   }
 
-  const activeItems = msTodoState.items.filter(item => !item.is_completed);
-  const completedItems = msTodoState.items.filter(item => item.is_completed);
+  const q = normalizeSearchText(state.searchQuery);
+  const filteredTodoItems = msTodoState.items.filter(item => {
+    if (!q) return true;
+    const linkedTask = item.linked_task_id ? state.tasks.find(t => t.id === item.linked_task_id) : null;
+    if (linkedTask && matchesTaskQuery(linkedTask, state.searchQuery)) return true;
+    const assignee = state.personnelList.find(p => p.id === item.user_id);
+    return (
+      normalizeSearchText(item.title).includes(q) ||
+      normalizeSearchText(item.body_content).includes(q) ||
+      normalizeSearchText(assignee?.name).includes(q)
+    );
+  });
+
+  const activeItems = filteredTodoItems.filter(item => !item.is_completed);
+  const completedItems = filteredTodoItems.filter(item => item.is_completed);
 
   // Sayaçları Güncelle
   const activeCountEl = document.getElementById('msActiveCount');

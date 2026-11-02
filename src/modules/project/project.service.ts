@@ -132,6 +132,10 @@ export class ProjectService {
   }
 
   public getMembers(auth: AuthContext, project_id: UUID): ProjectMember[] {
+    const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+    if (user?.system_role === 'ADMIN') {
+      return this.db.getProjectMembers(auth.tenant_id, project_id);
+    }
     // Sorumlu üye listesine doğrudan erişemez (KAB02)
     const member = this.db.getProjectMember(auth.tenant_id, project_id, auth.user_id);
     if (!member) {
@@ -190,17 +194,25 @@ export class ProjectService {
   }
 
   // --- Yetki Kontrol Metotları ---
+  private isTenantAdmin(auth: AuthContext): boolean {
+    const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+    return user?.system_role === 'ADMIN';
+  }
+
   public canManageProject(auth: AuthContext, project_id: UUID): boolean {
+    if (this.isTenantAdmin(auth)) return true;
     const m = this.db.getProjectMember(auth.tenant_id, project_id, auth.user_id);
     return m?.role === 'PROJECT_MANAGER';
   }
 
   public canEditTasks(auth: AuthContext, project_id: UUID): boolean {
+    if (this.isTenantAdmin(auth)) return true;
     const m = this.db.getProjectMember(auth.tenant_id, project_id, auth.user_id);
     return m?.role === 'PROJECT_MANAGER' || m?.role === 'EDITOR';
   }
 
   public canViewProject(auth: AuthContext, project_id: UUID): boolean {
+    if (this.isTenantAdmin(auth)) return true;
     const m = this.db.getProjectMember(auth.tenant_id, project_id, auth.user_id);
     if (m) return true;
 
@@ -211,6 +223,7 @@ export class ProjectService {
   }
 
   public isFullProjectViewer(auth: AuthContext, project_id: UUID): boolean {
+    if (this.isTenantAdmin(auth)) return true;
     const m = this.db.getProjectMember(auth.tenant_id, project_id, auth.user_id);
     return !!m; // PROJECT_MANAGER, EDITOR, or VIEWER
   }
