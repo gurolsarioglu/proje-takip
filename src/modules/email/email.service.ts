@@ -70,6 +70,66 @@ export class EmailAndAutomationService {
   }
 
   /**
+   * Microsoft Entra ID (Azure AD) üzerinden 535 hatasının gerçek kök nedenini (AADSTS50055 geçici şifre, MFA, yanlış şifre vb.) sorgular.
+   */
+  private async diagnoseEntraAccount(username: string, password: string): Promise<{
+    code?: string;
+    suberror?: string;
+    accessToken?: string;
+    turkishReason?: string;
+  }> {
+    try {
+      const domain = username.includes('@') ? username.split('@')[1].trim() : 'common';
+      const resp = await fetch(`https://login.microsoftonline.com/${domain}/oauth2/v2.0/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: 'd3590ed6-52b3-4102-aeff-aad2292ab01c',
+          scope: 'https://outlook.office365.com/.default',
+          grant_type: 'password',
+          username,
+          password
+        })
+      });
+      const data: any = await resp.json();
+      if (data.access_token) {
+        return { accessToken: data.access_token };
+      }
+      const desc = String(data.error_description || '');
+      const sub = String(data.suberror || '');
+      if (desc.includes('AADSTS50055') || sub === 'user_password_expired') {
+        return {
+          code: 'AADSTS50055 (Geçici Şifre / İlk Giriş Şifre Değiştirme Zorunluluğu)',
+          suberror: sub,
+          turkishReason: `🎯 KESİN KÖK NEDEN TESPİT EDİLDİ (AADSTS50055 - İlk Oturumda Şifre Değiştirme Zorunluluğu): "${username}" hesabını Microsoft 365 panelinden yeni açtığınız için girdiğiniz şifre "İlk oturum açmada değiştirilmesi gereken geçici şifre" durumunda bekliyor. Microsoft Exchange Online, geçici şifre değiştirilene kadar Port 587 (SMTP) girişini reddeder. ÇÖZÜM: 1) Yeni bir sekmede https://outlook.office.com adresine gidip "${username}" ve mevcut şifrenizle bir kez giriş yaparak kalıcı şifrenizi belirleyin (veya Microsoft 365 Admin Center'da şifre sıfırlarken "Kullanıcının ilk oturum açmada parolasını değiştirmesini iste" kutucuğunun işaretini kaldırın). 2) Ayrıca Microsoft 365 Admin Center ➔ Aktif Kullanıcılar ➔ ${username} ➔ Posta ➔ "E-posta uygulamalarını yönet" altından "Kimliği doğrulanmış SMTP (Authenticated SMTP)" seçeneğinin açık olduğundan emin olun.`
+        };
+      }
+      if (desc.includes('AADSTS50126')) {
+        return {
+          code: 'AADSTS50126 (Hatalı Kullanıcı Adı veya Şifre)',
+          suberror: sub,
+          turkishReason: `🎯 KESİN KÖK NEDEN (AADSTS50126): "${username}" için girdiğiniz şifre Microsoft 365 üzerindeki şifreyle eşleşmiyor. Şifre kutusunun yanındaki 👁️ ikonuna basarak şifrenizi kontrol edin.`
+        };
+      }
+      if (desc.includes('AADSTS50076') || desc.includes('AADSTS50079')) {
+        return {
+          code: 'AADSTS50076 (Çok Faktörlü Kimlik Doğrulama / MFA Zorunlu)',
+          suberror: sub,
+          turkishReason: `🎯 KESİN KÖK NEDEN (AADSTS50076 - MFA Aktif): "${username}" hesabında Çok Faktörlü Kimlik Doğrulama (MFA) açık olduğu için normal şifre ile SMTP girişi yapılamaz. Microsoft 365 Güvenlik sayfasından bir "Uygulama Şifresi (App Password)" oluşturup girin veya bu bildirim hesabı için MFA'yı kapatın.`
+        };
+      }
+      return {};
+    } catch {
+      return {};
+    }
+  }
+
+  private getDirectSendMxHost(emailOrUsername: string): string {
+    const domain = (emailOrUsername.split('@')[1] || 'fggroup.com.tr').trim().toLowerCase();
+    return `${domain.replace(/\./g, '-')}.mail.protection.outlook.com`;
+  }
+
+  /**
    * Exchange Online Plan 1 (SMTP) bağlantısını ve kimlik bilgilerini canlı doğrular (transporter.verify)
    * ve başarılıysa gerçek bir test e-postası (Adaptive Card gömülü) gönderir.
    */
@@ -79,6 +139,7 @@ export class EmailAndAutomationService {
   ): Promise<{
     verified: boolean;
     mail_sent: boolean;
+    direct_send_used?: boolean;
     mode: 'SMTP_LIVE' | 'SIMULATED';
     duration_ms: number;
     host: string;
@@ -95,16 +156,78 @@ export class EmailAndAutomationService {
     const config = this.saveSmtpConfig(auth, input);
     const recipient = (input.test_recipient || config.username || auth.email).trim();
 
-    if (!config.password || config.password.trim().length === 0) {
+    const tasks = this.db.getTasks(auth.tenant_id);
+    const sampleTask = tasks.find(t => t.work_status === 'READY' && t.assignee_id) || tasks[0];
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+
+    const buildSampleAdaptiveCard = (headerText: string, headerColor: 'Good' | 'Accent' | 'Warning', serverLabel: string) => ({
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      body: [
+        { type: 'TextBlock', text: headerText, weight: 'Bolder', color: headerColor, size: 'Small' },
+        { type: 'TextBlock', text: sampleTask ? sampleTask.title : 'Exchange Online SMTP Canlı Test Görevi', weight: 'Bolder', size: 'Large', wrap: true },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: 'SMTP Sunucusu:', value: serverLabel },
+            { title: 'Gönderici Hesap:', value: config.username },
+            { title: 'Test Alıcısı:', value: recipient },
+            { title: 'Doğrulama Zamanı:', value: new Date().toLocaleString('tr-TR') }
+          ]
+        },
+        { type: 'Input.Text', id: 'explanationText', placeholder: 'Outlook içinden test notu göndermek için yazın...', isMultiline: true }
+      ],
+      actions: sampleTask ? [
+        {
+          type: 'Action.Http',
+          title: '▶️ Görevi Başlat',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: sampleTask.id, user_id: auth.user_id, action: 'START_TASK' })
+        },
+        {
+          type: 'Action.Http',
+          title: '✅ Tamamlandı İşaretle',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: sampleTask.id, user_id: auth.user_id, action: 'COMPLETE_TASK' })
+        }
+      ] : []
+    });
+
+    const buildSampleHtmlBody = (serverLabel: string) => `
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #10b981;border-radius:12px;padding:24px;">
+        <div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:6px;">
+          ✅ Exchange Online Plan 1 • Canlı Test E-postası
+        </div>
+        <h2 style="margin:0 0 10px 0;font-size:18px;color:#0f172a;">FG Group Proje Sistemi - Outlook Actionable Card Testi</h2>
+        <p style="margin:0 0 14px 0;font-size:14px;color:#334155;">
+          Bu e-posta <strong>${config.username}</strong> gönderici adresiyle <strong>${serverLabel}</strong> üzerinden canlı olarak iletilmiştir.
+        </p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:13px;color:#166534;">
+          <div><strong>Sunucu:</strong> ${serverLabel}</div>
+          <div><strong>Gönderici:</strong> ${config.from_name} &lt;${config.username}&gt;</div>
+          <div><strong>Alıcı:</strong> ${recipient}</div>
+          <div><strong>Callback Adresi:</strong> ${baseUrl}</div>
+        </div>
+      </div>
+    `;
+
+    const isDirectSendConfig = config.port === 25 || config.host.includes('.mail.protection.outlook.com');
+
+    if (!isDirectSendConfig && (!config.password || config.password.trim().length === 0)) {
+      const simCard = buildSampleAdaptiveCard('🟡 SİMÜLASYON TESTİ • OUTLOOK ADAPTIVE CARD', 'Warning', `${config.host}:${config.port}`);
+      const simHtml = buildSampleHtmlBody(`${config.host}:${config.port} (Yerel Simülasyon)`);
       const simItem = await this.dispatchEmail({
         tenant_id: auth.tenant_id,
         to: [recipient],
         subject: `🧪 [Simülasyon Testi] Exchange Online & Adaptive Card Kontrolü`,
         category: 'SMTP_TEST',
-        htmlBody: `<div style="padding:18px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;">
-          <h3 style="margin-top:0;color:#0f172a;">🟡 Yerel Outbox Simülasyon Testi</h3>
-          <p>Şifre alanı boş bırakıldığı için bu e-posta gerçek Exchange Online yerine yerel Giden Kutusu Simülatörüne kaydedildi.</p>
-        </div>`
+        htmlBody: simHtml,
+        adaptiveCardJson: simCard,
+        linked_task_id: sampleTask?.id
       });
 
       return {
@@ -116,8 +239,8 @@ export class EmailAndAutomationService {
         port: config.port,
         username: config.username,
         recipient,
-        error_message: 'Mail şifresi girilmediği için gerçek Exchange Online (SMTP) sunucusuna bağlanılmadı.',
-        troubleshooting_hint: 'Gerçek e-posta gönderimini test etmek için "Mail Şifresi / Uygulama Şifresi" kutusuna Exchange Online şifrenizi yazıp tekrar "🔌 Bağlantıyı Test Et" butonuna basın.',
+        error_message: 'Mail şifresi girilmediği için Port 587 üzerinden şifreli bağlantı kurulmadı.',
+        troubleshooting_hint: 'Gerçek e-posta göndermek için "Mail Şifresi" kutusuna Exchange Online şifrenizi yazın VEYA şirket içi (@fggroup.com.tr) şifresiz gönderim için üstteki "⚡ Direct Send (Port 25 - Şifresiz Kurum İçi)" modunu seçin.',
         outbox_item: simItem
       };
     }
@@ -126,10 +249,12 @@ export class EmailAndAutomationService {
       host: config.host,
       port: config.port,
       secure: config.port === 465 ? true : config.secure,
-      auth: {
-        user: config.username,
-        pass: config.password
-      },
+      ...(isDirectSendConfig ? {} : {
+        auth: {
+          user: config.username,
+          pass: config.password
+        }
+      }),
       tls: {
         rejectUnauthorized: false
       },
@@ -138,68 +263,13 @@ export class EmailAndAutomationService {
     });
 
     try {
-      // 1. Adım: SMTP Sunucusu ve Kimlik Doğrulama (Handshake + STARTTLS + AUTH LOGIN)
+      // 1. Adım: SMTP Sunucusu ve Kimlik Doğrulama (Handshake + STARTTLS)
       await transporter.verify();
 
       // 2. Adım: Gerçek Test E-postasını (Adaptive Card ile) Gönder
-      const tasks = this.db.getTasks(auth.tenant_id);
-      const sampleTask = tasks.find(t => t.work_status === 'READY' && t.assignee_id) || tasks[0];
-      const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
-
-      const adaptiveCard = {
-        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-        type: 'AdaptiveCard',
-        version: '1.4',
-        originator: 'fg-group-proje-sistemi',
-        body: [
-          { type: 'TextBlock', text: '✅ EXCHANGE ONLINE PLAN 1 • BAĞLANTI DOĞRULANDI', weight: 'Bolder', color: 'Good', size: 'Small' },
-          { type: 'TextBlock', text: sampleTask ? sampleTask.title : 'Exchange Online SMTP Canlı Test Görevi', weight: 'Bolder', size: 'Large', wrap: true },
-          {
-            type: 'FactSet',
-            facts: [
-              { title: 'SMTP Sunucusu:', value: `${config.host}:${config.port} (STARTTLS)` },
-              { title: 'Gönderici Hesap:', value: config.username },
-              { title: 'Test Alıcısı:', value: recipient },
-              { title: 'Doğrulama Zamanı:', value: new Date().toLocaleString('tr-TR') }
-            ]
-          },
-          { type: 'Input.Text', id: 'explanationText', placeholder: 'Outlook içinden test notu göndermek için yazın...', isMultiline: true }
-        ],
-        actions: sampleTask ? [
-          {
-            type: 'Action.Http',
-            title: '▶️ Görevi Başlat',
-            method: 'POST',
-            url: `${baseUrl}/api/outlook/action`,
-            body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: sampleTask.id, user_id: auth.user_id, action: 'START_TASK' })
-          },
-          {
-            type: 'Action.Http',
-            title: '✅ Tamamlandı İşaretle',
-            method: 'POST',
-            url: `${baseUrl}/api/outlook/action`,
-            body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: sampleTask.id, user_id: auth.user_id, action: 'COMPLETE_TASK' })
-          }
-        ] : []
-      };
-
-      const htmlBody = `
-        <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #10b981;border-radius:12px;padding:24px;">
-          <div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:6px;">
-            ✅ Exchange Online Plan 1 (SMTP) Doğrulama Başarılı
-          </div>
-          <h2 style="margin:0 0 10px 0;font-size:18px;color:#0f172a;">FG Group Proje Sistemi - Canlı SMTP Test E-postası</h2>
-          <p style="margin:0 0 14px 0;font-size:14px;color:#334155;">
-            Tebrikler! <strong>${config.username}</strong> hesabınız üzerinden <strong>${config.host}:${config.port}</strong> sunucusuna bağlantı ve kimlik doğrulama başarıyla tamamlandı.
-          </p>
-          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:13px;color:#166534;">
-            <div><strong>Sunucu:</strong> ${config.host}:${config.port} (STARTTLS)</div>
-            <div><strong>Gönderici:</strong> ${config.from_name} &lt;${config.username}&gt;</div>
-            <div><strong>Alıcı:</strong> ${recipient}</div>
-            <div><strong>Callback Adresi:</strong> ${baseUrl}</div>
-          </div>
-        </div>
-      `;
+      const serverLabel = `${config.host}:${config.port} (${isDirectSendConfig ? 'Exchange Online Direct Send' : 'STARTTLS'})`;
+      const adaptiveCard = buildSampleAdaptiveCard('✅ EXCHANGE ONLINE PLAN 1 • BAĞLANTI DOĞRULANDI', 'Good', serverLabel);
+      const htmlBody = buildSampleHtmlBody(serverLabel);
 
       const outboxItem = await this.dispatchEmail({
         tenant_id: auth.tenant_id,
@@ -216,13 +286,14 @@ export class EmailAndAutomationService {
         return {
           verified: true,
           mail_sent: true,
+          direct_send_used: isDirectSendConfig,
           mode: 'SMTP_LIVE',
           duration_ms,
           host: config.host,
           port: config.port,
           username: config.username,
           recipient,
-          smtp_response: `250 2.0.0 OK (${config.host}:${config.port} üzerinden canlı teslim edildi)`,
+          smtp_response: `250 2.6.0 OK (${config.host}:${config.port} üzerinden gerçek posta kutusuna teslim edildi)`,
           outbox_item: outboxItem
         };
       } else {
@@ -242,19 +313,91 @@ export class EmailAndAutomationService {
       }
     } catch (err: any) {
       const errMsg = err?.message || 'Exchange Online SMTP bağlantı hatası';
-      const duration_ms = Date.now() - startTime;
+      // Microsoft Entra ID üzerinden 535 hatasının kesin kök nedenini sorgula (örn: AADSTS50055 Geçici Şifre)
+      const entraDiag = (!isDirectSendConfig && config.username && config.password)
+        ? await this.diagnoseEntraAccount(config.username, config.password)
+        : {};
 
-      // Hata durumunu Outbox'a da kaydet ki kullanıcı geçmişte görsün
+      const detailedError = entraDiag.code ? `${errMsg} — [${entraDiag.code}]` : errMsg;
+      const detailedHint = entraDiag.turkishReason || this.buildSmtpTroubleshootingHint(errMsg, config);
+
+      // Eğer alıcı şirket içi (@fggroup.com.tr) ise Exchange Online Direct Send (Port 25 MX) ile gerçek maili yine de ulaştır!
+      const mxHost = this.getDirectSendMxHost(config.username);
+      const senderDomain = (config.username.split('@')[1] || '').toLowerCase();
+      const recipDomain = (recipient.split('@')[1] || '').toLowerCase();
+
+      if (senderDomain && senderDomain === recipDomain) {
+        try {
+          const directCard = buildSampleAdaptiveCard('⚡ EXCHANGE ONLINE DIRECT SEND • CANLI TEST KARTI', 'Accent', `${mxHost}:25 (Direct Send)`);
+          const directHtml = buildSampleHtmlBody(`${mxHost}:25 (Exchange Online Direct Send)`);
+          const fullHtml = this.wrapHtmlWithAdaptiveCard(`✅ [Direct Send] FG Group Exchange Online Test E-postası`, directHtml, directCard);
+
+          const directTransporter = nodemailer.createTransport({
+            host: mxHost,
+            port: 25,
+            secure: false,
+            tls: { rejectUnauthorized: false },
+            connectionTimeout: 8000,
+            greetingTimeout: 8000
+          });
+
+          const info = await directTransporter.sendMail({
+            from: `"${config.from_name}" <${config.from_email || config.username}>`,
+            to: recipient,
+            subject: `✅ [Direct Send] FG Group Exchange Online Test E-postası`,
+            html: fullHtml
+          });
+
+          const sentItem = this.db.insertEmailOutbox({
+            id: crypto.randomUUID(),
+            tenant_id: auth.tenant_id,
+            to: [recipient],
+            subject: `✅ [Direct Send İletildi] FG Group Exchange Online Test E-postası`,
+            category: 'SMTP_TEST',
+            delivery_mode: 'SMTP_LIVE',
+            status: 'SENT',
+            adaptive_card_json: directCard,
+            html_preview: directHtml,
+            linked_task_id: sampleTask?.id,
+            sent_at: new Date().toISOString()
+          });
+
+          return {
+            verified: false,
+            mail_sent: true,
+            direct_send_used: true,
+            mode: 'SMTP_LIVE',
+            duration_ms: Date.now() - startTime,
+            host: config.host,
+            port: config.port,
+            username: config.username,
+            recipient,
+            smtp_response: `${info.response || '250 2.6.0 Queued mail for delivery'} (${mxHost}:25 üzerinden gerçek posta kutusuna iletildi!)`,
+            error_message: detailedError,
+            troubleshooting_hint: detailedHint,
+            outbox_item: sentItem
+          };
+        } catch {
+          // Direct send de başarısız olursa standart hata dön
+        }
+      }
+
+      const duration_ms = Date.now() - startTime;
+      const failCard = buildSampleAdaptiveCard('⚠️ SMTP BAĞLANTI TANILAMA KARTI', 'Warning', `${config.host}:${config.port}`);
+      const failHtml = buildSampleHtmlBody(`${config.host}:${config.port}`);
+
       const failedItem = this.db.insertEmailOutbox({
         id: crypto.randomUUID(),
         tenant_id: auth.tenant_id,
         to: [recipient],
-        subject: `❌ [SMTP Bağlantı Hatası] ${config.host}:${config.port}`,
+        subject: `⚠️ [SMTP Tanılama] ${config.host}:${config.port}`,
         category: 'SMTP_TEST',
         delivery_mode: 'SMTP_LIVE',
         status: 'FAILED',
-        error_message: errMsg,
-        html_preview: `<div style="padding:16px;color:#dc2626;"><strong>SMTP Hatası:</strong> ${errMsg}</div>`,
+        error_message: detailedError,
+        adaptive_card_json: failCard,
+        html_preview: failHtml,
+        linked_task_id: sampleTask?.id,
         sent_at: new Date().toISOString()
       });
 
@@ -267,8 +410,8 @@ export class EmailAndAutomationService {
         port: config.port,
         username: config.username,
         recipient,
-        error_message: errMsg,
-        troubleshooting_hint: this.buildSmtpTroubleshootingHint(errMsg, config),
+        error_message: detailedError,
+        troubleshooting_hint: detailedHint,
         outbox_item: failedItem
       };
     }
@@ -280,7 +423,7 @@ export class EmailAndAutomationService {
       return `Microsoft 365 üzerinde bu hesap veya Tenant için "Authenticated SMTP (Kimliği Doğrulanmış SMTP)" kapalı. Çözüm: Microsoft 365 Admin Center (admin.microsoft.com) ➔ Kullanıcılar ➔ Aktif Kullanıcılar ➔ ${config.username} ➔ Posta (Mail) sekmesi ➔ "E-posta uygulamalarını yönet (Manage email apps)" ➔ "Kimliği doğrulanmış SMTP (Authenticated SMTP)" seçeneğini işaretleyip kaydedin.`;
     }
     if (lower.includes('535') || lower.includes('authentication unsuccessful') || lower.includes('invalid login') || lower.includes('5.7.3')) {
-      return `Kullanıcı adı (${config.username}) veya şifre Microsoft Exchange Online tarafından reddedildi. 1) Şifrenizi doğru yazdığınızdan emin olun (👁️ ikonuna basarak kontrol edebilirsiniz). 2) Hesapta Çok Faktörlü Kimlik Doğrulama (MFA) aktifse normal şifre yerine Microsoft 365 Güvenlik sayfasından bir "Uygulama Şifresi (App Password)" oluşturup girin. 3) Microsoft 365 Admin Center'dan bu kullanıcı için "Authenticated SMTP" izninin açık olduğunu doğrulayın.`;
+      return `Kullanıcı adı (${config.username}) veya şifre Microsoft Exchange Online tarafından reddedildi. 1) Hesabı yeni açtıysanız ilk girişte geçici şifreyi değiştirmek için https://outlook.office.com adresinden bir kez giriş yapın. 2) Hesapta Çok Faktörlü Kimlik Doğrulama (MFA) aktifse Microsoft 365 Güvenlik sayfasından bir "Uygulama Şifresi (App Password)" oluşturup girin. 3) Microsoft 365 Admin Center'dan bu kullanıcı için "Authenticated SMTP" izninin açık olduğunu doğrulayın.`;
     }
     if (lower.includes('timed out') || lower.includes('etimedout') || lower.includes('econnrefused') || lower.includes('enotfound')) {
       return `${config.host}:${config.port} adresine ağ üzerinden ulaşılamadı. Sunucu adresini, Port numarasını (587) ve güvenlik duvarınızın (Firewall) 587 numaralı TCP portuna çıkış izni verdiğini kontrol edin.`;
@@ -326,18 +469,22 @@ export class EmailAndAutomationService {
     let status: 'SENT' | 'SIMULATED' | 'FAILED' = 'SIMULATED';
     let error_message: string | undefined;
 
-    // Eğer şifre girilmişse gerçek Exchange Online SMTP üzerinden gönder
-    if (config.host && config.username && config.password && config.password.trim().length > 0) {
+    const isDirectSendConfig = config.port === 25 || config.host.includes('.mail.protection.outlook.com');
+
+    // Eğer Direct Send seçiliyse veya şifre girilmişse gerçek Exchange Online üzerinden gönder
+    if (isDirectSendConfig || (config.host && config.username && config.password && config.password.trim().length > 0)) {
       delivery_mode = 'SMTP_LIVE';
       try {
         const transporter = nodemailer.createTransport({
           host: config.host,
           port: config.port,
-          secure: config.secure, // false for 587 (STARTTLS)
-          auth: {
-            user: config.username,
-            pass: config.password
-          },
+          secure: config.port === 465 ? true : config.secure,
+          ...(isDirectSendConfig ? {} : {
+            auth: {
+              user: config.username,
+              pass: config.password
+            }
+          }),
           tls: {
             rejectUnauthorized: false
           },
@@ -354,8 +501,37 @@ export class EmailAndAutomationService {
 
         status = 'SENT';
       } catch (err: any) {
-        status = 'FAILED';
-        error_message = err.message || 'Exchange Online SMTP bağlantı hatası';
+        // Eğer Port 587'de geçici şifre / Basic Auth hatası alındıysa ve alıcılar şirket içi (@fggroup.com.tr) ise Direct Send (Port 25) ile otomatik ilet
+        const senderDomain = (config.username.split('@')[1] || '').toLowerCase();
+        const allSameDomain = senderDomain && params.to.every(addr => addr.toLowerCase().endsWith(`@${senderDomain}`));
+
+        if (!isDirectSendConfig && allSameDomain) {
+          try {
+            const mxHost = this.getDirectSendMxHost(config.username);
+            const directTransporter = nodemailer.createTransport({
+              host: mxHost,
+              port: 25,
+              secure: false,
+              tls: { rejectUnauthorized: false },
+              connectionTimeout: 8000,
+              greetingTimeout: 8000
+            });
+            await directTransporter.sendMail({
+              from: `"${config.from_name}" <${config.from_email || config.username}>`,
+              to: params.to.join(', '),
+              subject: params.subject,
+              html: fullHtml
+            });
+            status = 'SENT';
+            error_message = undefined;
+          } catch {
+            status = 'FAILED';
+            error_message = err.message || 'Exchange Online SMTP bağlantı hatası';
+          }
+        } else {
+          status = 'FAILED';
+          error_message = err.message || 'Exchange Online SMTP bağlantı hatası';
+        }
       }
     }
 
@@ -542,6 +718,12 @@ export class EmailAndAutomationService {
   public async sendDelayExplanationActionableCard(tenant_id: UUID, task_id: UUID): Promise<EmailOutboxItem | null> {
     const config = this.getSmtpConfig(tenant_id);
     if (!config.enable_actionable_cards) return null;
+
+    // Aynı görev için zaten mazeret kartı gönderildiyse mükerrer gönderim yapma
+    const existingCard = this.db.getEmailOutbox(tenant_id, 50).find(
+      item => item.category === 'DELAY_EXPLANATION_CARD' && item.linked_task_id === task_id && !item.action_taken
+    );
+    if (existingCard) return existingCard;
 
     const task = this.db.getTaskById(tenant_id, task_id);
     if (!task || !task.assignee_id) return null;

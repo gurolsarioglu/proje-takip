@@ -4391,19 +4391,52 @@ function renderSmtpDiagnosticResult(res) {
   if (res.verified && res.mail_sent) {
     if (badgeEl) {
       badgeEl.className = 'smtp-status-pill live';
-      badgeEl.textContent = `🟢 Canlı Exchange Online SMTP Doğrulandı (${res.username} ➔ ${res.host}:${res.port})`;
+      badgeEl.style.background = '';
+      badgeEl.style.color = '';
+      badgeEl.style.borderColor = '';
+      badgeEl.textContent = `🟢 Canlı Exchange Online Aktif (${res.username} ➔ ${res.host}:${res.port})`;
     }
     box.innerHTML = `
       <div style="padding:14px 16px; border-radius:10px; background:#ecfdf5; border:1px solid #10b981; color:#065f46; font-size:0.84rem;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <strong style="font-size:0.92rem; color:#047857;">✅ Exchange Online Plan 1 (SMTP) Bağlantısı & Gönderim Başarılı!</strong>
+          <strong style="font-size:0.92rem; color:#047857;">✅ Exchange Online Bağlantısı & Canlı E-posta Gönderimi Başarılı!</strong>
           <span style="font-size:0.75rem; font-weight:700; background:#d1fae5; padding:2px 8px; border-radius:999px;">${res.duration_ms || 0} ms</span>
         </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid rgba(16,185,129,0.25); font-size:0.8rem;">
-          <div><strong>Sunucu:</strong> ${escapeHtml(res.host)}:${escapeHtml(String(res.port))} (STARTTLS)</div>
-          <div><strong>Kimlik Doğrulama:</strong> ${escapeHtml(res.username)} ✓</div>
+          <div><strong>Sunucu:</strong> ${escapeHtml(res.host)}:${escapeHtml(String(res.port))}</div>
+          <div><strong>Gönderici:</strong> ${escapeHtml(res.username)} ✓</div>
           <div><strong>Test Alıcısı:</strong> ${escapeHtml(res.recipient)}</div>
           <div><strong>Sunucu Yanıtı:</strong> ${escapeHtml(res.smtp_response || '250 OK')}</div>
+        </div>
+      </div>
+    `;
+  } else if (res.direct_send_used && res.mail_sent) {
+    if (badgeEl) {
+      badgeEl.className = 'smtp-status-pill live';
+      badgeEl.style.background = '';
+      badgeEl.style.color = '';
+      badgeEl.style.borderColor = '';
+      badgeEl.textContent = `🟢 Exchange Online Direct Send İle Gönderildi (Port 587 Geçici Şifre Uyarısı)`;
+    }
+    box.innerHTML = `
+      <div style="padding:14px 16px; border-radius:10px; background:#ecfdf5; border:1px solid #10b981; color:#065f46; font-size:0.84rem; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <strong style="font-size:0.92rem; color:#047857;">✅ Test E-postası Exchange Online Direct Send İle Posta Kutunuza (${escapeHtml(res.recipient)}) İletildi!</strong>
+          <span style="font-size:0.75rem; font-weight:700; background:#d1fae5; padding:2px 8px; border-radius:999px;">${res.duration_ms || 0} ms</span>
+        </div>
+        <div style="font-size:0.79rem; color:#065f46;">
+          <strong>Microsoft Sunucu Yanıtı:</strong> <code>${escapeHtml(res.smtp_response || '250 2.6.0 Queued mail for delivery')}</code>
+        </div>
+      </div>
+      <div style="padding:14px 16px; border-radius:10px; background:#fffbeb; border:1px solid #f59e0b; color:#92400e; font-size:0.82rem;">
+        <div style="font-weight:700; font-size:0.88rem; margin-bottom:6px; color:#b45309;">
+          ⚠️ Neden Port 587 (${escapeHtml(res.host)}:587) Şifreli Giriş Reddedildi?
+        </div>
+        <div style="margin-bottom:8px; font-family:'JetBrains Mono', monospace; font-size:0.76rem; background:#ffffff; padding:8px 10px; border-radius:6px; border:1px solid #fde68a; color:#b45309; word-break:break-word;">
+          ${escapeHtml(res.error_message || '')}
+        </div>
+        <div style="line-height:1.5; background:#fef3c7; padding:10px 12px; border-radius:6px; border-left:3px solid #d97706;">
+          ${escapeHtml(res.troubleshooting_hint || '')}
         </div>
       </div>
     `;
@@ -4458,6 +4491,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('refreshOutboxBtn')?.addEventListener('click', () => {
     loadEmailAutomationDashboard();
+  });
+
+  // Preset Mod Seçiciler (Standart SMTP 587 vs Exchange Direct Send 25)
+  document.getElementById('presetSmtpAuthBtn')?.addEventListener('click', () => {
+    const h = document.getElementById('smtpHostInput');
+    const p = document.getElementById('smtpPortInput');
+    if (h) h.value = 'smtp.office365.com';
+    if (p) p.value = '587';
+    showToast('🔐 Standart SMTP Auth (smtp.office365.com:587) seçildi.', 'info');
+  });
+  document.getElementById('presetDirectSendBtn')?.addEventListener('click', () => {
+    const h = document.getElementById('smtpHostInput');
+    const p = document.getElementById('smtpPortInput');
+    const u = document.getElementById('smtpUsernameInput')?.value.trim() || 'bildirim@fggroup.com.tr';
+    const dom = (u.split('@')[1] || 'fggroup.com.tr').toLowerCase().replace(/\./g, '-');
+    if (h) h.value = `${dom}.mail.protection.outlook.com`;
+    if (p) p.value = '25';
+    showToast(`⚡ Exchange Direct Send (${dom}.mail.protection.outlook.com:25) seçildi. Kaydet veya Test Et butonuna basabilirsiniz.`, 'info');
   });
 
   // Şifre Göster / Gizle Butonu

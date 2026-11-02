@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,21 +9,24 @@
   <meta property="og:description" content="FG Group - Sadeleştirilmiş Proje & Görev Yönetimi">
   <meta name="theme-color" content="#f8fafc">
   <title>FG Group - Proje & Görev Yönetimi</title>
-  
+
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
   <script>
-    (function() {
+    (function () {
       try {
         const savedTheme = localStorage.getItem('fggroup_theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
-      } catch (e) {}
+      } catch (e) { }
     })();
   </script>
 </head>
+
 <body>
 
   <!-- ================= GİRİŞ (LOGIN) EKRANI ================= -->
@@ -42,7 +46,8 @@
       <form id="loginForm" class="login-form">
         <div class="form-group">
           <label for="loginEmail" data-i18n="login_email">E-posta Adresi</label>
-          <input type="email" id="loginEmail" required class="styled-input" placeholder="admin@fggroup.com.tr" value="admin@fggroup.com.tr">
+          <input type="email" id="loginEmail" required class="styled-input" placeholder="admin@fggroup.com.tr"
+            value="admin@fggroup.com.tr">
         </div>
 
         <div class="form-group">
@@ -84,7 +89,7 @@
 
   <!-- ================= ANA PANEL (SIDEBAR + MAIN) ================= -->
   <div id="appContainer" class="app-layout" style="display:none;">
-    
+
     <!-- SOL KENAR ÇUBUĞU (SIDEBAR) -->
     <aside class="app-sidebar">
       <!-- Logo & Şirket -->
@@ -133,7 +138,8 @@
           <span class="nav-badge ms-todo-pill" id="msTodoCount">0</span>
         </button> -->
 
-        <button class="nav-item report-auth-only" id="navReportsBuilderBtn" data-nav="view-report-builder" style="display:none;">
+        <button class="nav-item report-auth-only" id="navReportsBuilderBtn" data-nav="view-report-builder"
+          style="display:none;">
           <span class="nav-icon">📈</span>
           <span class="nav-text">Özel Raporlar</span>
           <span class="nav-badge gold-badge">Sürükle-Bırak</span>
@@ -168,7 +174,8 @@
           </button>
         </div>
 
-        <div class="user-profile-row" id="userProfileBtn" title="Kullanıcı Profili ve Tema Ayarları" style="cursor:pointer;">
+        <div class="user-profile-row" id="userProfileBtn" title="Kullanıcı Profili ve Tema Ayarları"
+          style="cursor:pointer;">
           <div class="profile-avatar" id="userAvatar">A</div>
           <div class="profile-details">
             <span class="profile-name" id="userNameDisplay">Admin</span>
@@ -189,7 +196,7 @@
       <header class="main-topbar">
         <div class="topbar-left">
           <h2 class="view-title" id="currentViewTitle">Görevlerim</h2>
-          
+
           <!-- Proje Filtresi (Projeli görünümlerde çıkar) -->
           <div class="project-pill-select" id="projectSelectorContainer">
             <span class="pill-label">Proje:</span>
@@ -200,29 +207,20 @@
         <!-- Küresel Görev Arama Çubuğu (Tüm Görünümlerde Başlık, Açıklama veya Personel Filtreleme) -->
         <div class="topbar-global-search" id="globalSearchContainer" role="search">
           <span class="global-search-icon" aria-hidden="true">🔍</span>
-          <input
-            type="text"
-            id="globalTaskSearchInput"
-            class="global-search-input"
+          <input type="text" id="globalTaskSearchInput" class="global-search-input"
             placeholder="Görev, açıklama veya personel ara... (Ctrl+K)"
             aria-label="Tüm görünümlerde görev, açıklama veya personel ara"
-            data-i18n-placeholder="global_search_placeholder"
-            autocomplete="off"
-          >
-          <span id="globalSearchCountBadge" class="global-search-badge" style="display:none;" title="Eşleşen görev sayısı">0 / 0</span>
-          <button
-            type="button"
-            id="globalSearchClearBtn"
-            class="global-search-clear-btn"
-            style="display:none;"
-            title="Aramayı Temizle (Esc)"
-            aria-label="Aramayı temizle"
-          >&times;</button>
+            data-i18n-placeholder="global_search_placeholder" autocomplete="off">
+          <span id="globalSearchCountBadge" class="global-search-badge" style="display:none;"
+            title="Eşleşen görev sayısı">0 / 0</span>
+          <button type="button" id="globalSearchClearBtn" class="global-search-clear-btn" style="display:none;"
+            title="Aramayı Temizle (Esc)" aria-label="Aramayı temizle">&times;</button>
         </div>
 
         <div class="topbar-right">
           <!-- İçe / Dışa Aktarma Butonları -->
-          <button id="importTasksBtn" class="action-btn outline-btn" title="Excel veya CSV dosyasından toplu görev yükleyin">
+          <button id="importTasksBtn" class="action-btn outline-btn"
+            title="Excel veya CSV dosyasından toplu görev yükleyin">
             📥 İçe Aktar (CSV)
           </button>
 
@@ -233,16 +231,19 @@
             <div class="dropdown-menu" id="exportDropdownMenu">
               <button type="button" class="dropdown-item" id="exportExcelBtn">
                 <span class="dropdown-icon">📊</span>
-                <span class="dropdown-text"><strong>Excel (CSV) İndir</strong><small>Türkçe karakter uyumlu (.csv)</small></span>
+                <span class="dropdown-text"><strong>Excel (CSV) İndir</strong><small>Türkçe karakter uyumlu
+                    (.csv)</small></span>
               </button>
               <button type="button" class="dropdown-item" id="exportJsonBtn">
                 <span class="dropdown-icon">💾</span>
-                <span class="dropdown-text"><strong>JSON Proje Yedeği</strong><small>Tüm görev ve bağımlılıklar</small></span>
+                <span class="dropdown-text"><strong>JSON Proje Yedeği</strong><small>Tüm görev ve
+                    bağımlılıklar</small></span>
               </button>
               <div class="dropdown-divider"></div>
               <button type="button" class="dropdown-item" id="printReportBtn">
                 <span class="dropdown-icon">🖨️</span>
-                <span class="dropdown-text"><strong>Sayfayı Yazdır / PDF</strong><small>A4 formatında temiz çıktı</small></span>
+                <span class="dropdown-text"><strong>Sayfayı Yazdır / PDF</strong><small>A4 formatında temiz
+                    çıktı</small></span>
               </button>
             </div>
           </div>
@@ -276,7 +277,8 @@
         <div class="welcome-banner">
           <div>
             <h3 class="welcome-heading" id="welcomeUserText">Hoş geldiniz!</h3>
-            <p class="welcome-sub" data-i18n="my_tasks_sub">Size atanan görevler, durumları ve yaklaşan teslim tarihleri aşağıda listelenmiştir.</p>
+            <p class="welcome-sub" data-i18n="my_tasks_sub">Size atanan görevler, durumları ve yaklaşan teslim tarihleri
+              aşağıda listelenmiştir.</p>
           </div>
         </div>
 
@@ -284,7 +286,8 @@
         <div class="op-toolbar">
           <div class="op-search-box">
             <span class="search-icon">🔍</span>
-            <input type="text" id="taskSearchInput" class="op-search-input" placeholder="İş paketlerinde veya görevlerde ara...">
+            <input type="text" id="taskSearchInput" class="op-search-input"
+              placeholder="İş paketlerinde veya görevlerde ara...">
           </div>
           <div class="op-filter-tabs">
             <button class="op-tab-btn active" data-filter="all">Tümü (<span id="countAll">0</span>)</button>
@@ -305,7 +308,8 @@
       <!-- ================= GÖRÜNÜM 2: PROJELER (PROJECTS OVERVIEW) ================= -->
       <section id="view-projects" class="view-section">
         <div class="section-intro">
-          <p class="intro-desc" data-i18n="projects_intro">Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve takvimleri.</p>
+          <p class="intro-desc" data-i18n="projects_intro">Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve
+            takvimleri.</p>
         </div>
 
         <div class="projects-grid" id="projectsCardsGrid">
@@ -329,23 +333,32 @@
             <div class="gantt-toolbar-right">
               <!-- Zoom Seviyeleri (Günlük, Haftalık, Aylık, Yıllık) -->
               <div class="gantt-zoom-group" id="ganttZoomGroup" role="group" aria-label="Zaman Ölçeği">
-                <button type="button" class="zoom-btn active" data-zoom="day" title="Günlük Detaylı Görünüm" data-i18n="zoom_day">Günlük</button>
-                <button type="button" class="zoom-btn" data-zoom="week" title="Haftalık Görünüm" data-i18n="zoom_week">Haftalık</button>
-                <button type="button" class="zoom-btn" data-zoom="month" title="Aylık Görünüm" data-i18n="zoom_month">Aylık</button>
-                <button type="button" class="zoom-btn" data-zoom="year" title="Yıllık (Çeyrekler) Görünümü" data-i18n="zoom_year">Yıllık</button>
+                <button type="button" class="zoom-btn active" data-zoom="day" title="Günlük Detaylı Görünüm"
+                  data-i18n="zoom_day">Günlük</button>
+                <button type="button" class="zoom-btn" data-zoom="week" title="Haftalık Görünüm"
+                  data-i18n="zoom_week">Haftalık</button>
+                <button type="button" class="zoom-btn" data-zoom="month" title="Aylık Görünüm"
+                  data-i18n="zoom_month">Aylık</button>
+                <button type="button" class="zoom-btn" data-zoom="year" title="Yıllık (Çeyrekler) Görünümü"
+                  data-i18n="zoom_year">Yıllık</button>
               </div>
 
               <button type="button" class="gantt-tool-btn" id="ganttTodayBtn" title="Bugünün Tarihine Odaklan">
                 <span class="btn-icon">📍</span> <span data-i18n="gantt_today">Bugün</span>
               </button>
               <button type="button" class="gantt-tool-btn" id="ganttToggleTableBtn" title="Sol Tabloyu Göster / Gizle">
-                <span class="btn-icon">◫</span> <span id="ganttToggleTableLabel" data-i18n="gantt_toggle_table">Tabloyu Gizle</span>
+                <span class="btn-icon">◫</span> <span id="ganttToggleTableLabel" data-i18n="gantt_toggle_table">Tabloyu
+                  Gizle</span>
               </button>
               <div class="timeline-legend">
-                <span class="legend-item"><span class="legend-dot dot-blocked"></span> <span data-i18n="legend_blocked">Öncül Bekliyor</span></span>
-                <span class="legend-item"><span class="legend-dot dot-ready"></span> <span data-i18n="legend_ready">Başlamaya Hazır</span></span>
-                <span class="legend-item"><span class="legend-dot dot-progress"></span> <span data-i18n="legend_progress">Devam Ediyor</span></span>
-                <span class="legend-item"><span class="legend-dot dot-done"></span> <span data-i18n="legend_done">Tamamlandı</span></span>
+                <span class="legend-item"><span class="legend-dot dot-blocked"></span> <span
+                    data-i18n="legend_blocked">Öncül Bekliyor</span></span>
+                <span class="legend-item"><span class="legend-dot dot-ready"></span> <span
+                    data-i18n="legend_ready">Başlamaya Hazır</span></span>
+                <span class="legend-item"><span class="legend-dot dot-progress"></span> <span
+                    data-i18n="legend_progress">Devam Ediyor</span></span>
+                <span class="legend-item"><span class="legend-dot dot-done"></span> <span
+                    data-i18n="legend_done">Tamamlandı</span></span>
               </div>
             </div>
           </div>
@@ -388,11 +401,13 @@
           <div class="kanban-toolbar-left">
             <div class="kanban-search-box">
               <span class="kanban-search-icon">🔍</span>
-              <input type="text" id="kanbanSearchInput" class="kanban-input" placeholder="Panoda görev, kişi veya etiket ara..." />
+              <input type="text" id="kanbanSearchInput" class="kanban-input"
+                placeholder="Panoda görev, kişi veya etiket ara..." />
             </div>
             <div class="kanban-hint-pill">
               <span class="hint-icon">💡</span>
-              <span class="hint-text">Kartları fareyle sütunlar arasında sürükleyip bırakarak durumları canlı güncelleyebilirsiniz.</span>
+              <span class="hint-text">Kartları fareyle sütunlar arasında sürükleyip bırakarak durumları canlı
+                güncelleyebilirsiniz.</span>
             </div>
           </div>
           <div class="kanban-toolbar-right">
@@ -442,9 +457,11 @@
       <!-- ================= GÖRÜNÜM 5: EKİP & PERSONEL (ADMIN) ================= -->
       <section id="view-team" class="view-section">
         <div class="section-intro-actions">
-          <p class="intro-desc" data-i18n="team_intro">Şirket personellerinin iletişim kartları, ülkeleri, dilleri ve proje açma yetkileri.</p>
+          <p class="intro-desc" data-i18n="team_intro">Şirket personellerinin iletişim kartları, ülkeleri, dilleri ve
+            proje açma yetkileri.</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button type="button" id="gotoEmailAutomationFromTeamBtn" class="action-btn secondary-btn sm-btn">📧 Exchange (SMTP) & Otomatik Rapor Ayarları</button>
+            <button type="button" id="gotoEmailAutomationFromTeamBtn" class="action-btn secondary-btn sm-btn">📧
+              Exchange (SMTP) & Otomatik Rapor Ayarları</button>
             <button id="newPersonnelBtn" class="action-btn primary-btn sm-btn">+ Yeni Personel Ekle</button>
           </div>
         </div>
@@ -476,8 +493,10 @@
               <span class="report-badge">DİNAMİK RAPOR OLUŞTURUCU</span>
               <span class="report-sub-tag">Sürükle-Bırak Tuvali</span>
             </div>
-            <h2 id="reportDisplayTitle" contenteditable="true" spellcheck="false" title="Başlığı düzenlemek için tıklayın">Yönetim ve Görev Dağılım Raporu</h2>
-            <p class="report-subtitle">Soldaki bileşenleri tuvale sürükleyip bırakarak kendi istediğiniz raporu anında tasarlayın.</p>
+            <h2 id="reportDisplayTitle" contenteditable="true" spellcheck="false"
+              title="Başlığı düzenlemek için tıklayın">Yönetim ve Görev Dağılım Raporu</h2>
+            <p class="report-subtitle">Soldaki bileşenleri tuvale sürükleyip bırakarak kendi istediğiniz raporu anında
+              tasarlayın.</p>
           </div>
           <div class="report-controls-bar">
             <div class="report-filter-item">
@@ -509,7 +528,8 @@
                     <strong>📋 Kapsamlı Rapor (Tüm Bileşenler)</strong>
                     <span>Tüm metrikler ve listeler</span>
                   </button>
-                  <div id="savedReportLayoutsSection" style="display:none; border-top:1px solid #e2e8f0; margin-top:4px; padding-top:4px;">
+                  <div id="savedReportLayoutsSection"
+                    style="display:none; border-top:1px solid #e2e8f0; margin-top:4px; padding-top:4px;">
                     <div class="template-section-label">💾 Kaydedilen Raporlarım</div>
                     <div id="savedReportLayoutsList"></div>
                   </div>
@@ -519,7 +539,8 @@
               <button id="saveReportLayoutBtn" class="action-btn secondary-btn sm-btn" title="Rapor Düzenini Kaydet">
                 💾 Kaydet
               </button>
-              <button type="button" id="gotoScheduledReportsBtn" class="action-btn outline-btn sm-btn admin-only" title="Bu raporu otomatik e-posta olarak zamanla">
+              <button type="button" id="gotoScheduledReportsBtn" class="action-btn outline-btn sm-btn admin-only"
+                title="Bu raporu otomatik e-posta olarak zamanla">
                 ⏰ Otomatik E-posta Zamanla
               </button>
               <button id="clearReportCanvasBtn" class="action-btn danger-bare-btn sm-btn" title="Tuvali Temizle">
@@ -534,14 +555,14 @@
 
         <!-- Ana Çalışma Alanı: Sol Bileşen Kütüphanesi + Sağ Tuval -->
         <div class="report-builder-workspace">
-          
+
           <!-- Sol Panel: Sürüklenebilir Bileşenler Kütüphanesi -->
           <div class="report-toolbox-panel card">
             <div class="toolbox-header">
               <h3>📦 Bileşen Kütüphanesi</h3>
               <p>Tuvale sürükleyin veya <strong>+ Ekle</strong> butonuna basın</p>
             </div>
-            
+
             <div class="toolbox-widgets-list">
               <!-- Widget 1: Proje İlerleme ve KPI Özeti -->
               <div class="toolbox-widget-card" draggable="true" data-widget="kpis">
@@ -562,7 +583,8 @@
                   <h4>👥 Personel Performans Tablosu</h4>
                   <p>Şartname formülü puanı, zamanında bitirme oranı ve görev adetleri</p>
                 </div>
-                <button type="button" class="add-widget-direct-btn" data-add="performance" title="Tuvale Ekle">+</button>
+                <button type="button" class="add-widget-direct-btn" data-add="performance"
+                  title="Tuvale Ekle">+</button>
               </div>
 
               <!-- Widget 3: Görev Durum Dağılımı -->
@@ -573,7 +595,8 @@
                   <h4>📈 Görev Durum Dağılımı</h4>
                   <p>Tamamlanan, Devam Eden, Hazır ve Öncül Bekleyen çubukları</p>
                 </div>
-                <button type="button" class="add-widget-direct-btn" data-add="distribution" title="Tuvale Ekle">+</button>
+                <button type="button" class="add-widget-direct-btn" data-add="distribution"
+                  title="Tuvale Ekle">+</button>
               </div>
 
               <!-- Widget 4: Kritik Yol ve Geciken Görevler -->
@@ -595,7 +618,8 @@
                   <h4>🔗 Bağımlılık & Darboğaz Analizi</h4>
                   <p>En çok ardıl görevi bekleten öncüller ve kilitler</p>
                 </div>
-                <button type="button" class="add-widget-direct-btn" data-add="bottlenecks" title="Tuvale Ekle">+</button>
+                <button type="button" class="add-widget-direct-btn" data-add="bottlenecks"
+                  title="Tuvale Ekle">+</button>
               </div>
 
               <!-- Widget 6: Gecikme Gerekçeleri Günlüğü -->
@@ -606,7 +630,8 @@
                   <h4>📝 Gecikme Gerekçeleri & Loglar</h4>
                   <p>Personelin girdiği mazeretler ve sistem gecikme kayıtları</p>
                 </div>
-                <button type="button" class="add-widget-direct-btn" data-add="explanations" title="Tuvale Ekle">+</button>
+                <button type="button" class="add-widget-direct-btn" data-add="explanations"
+                  title="Tuvale Ekle">+</button>
               </div>
 
               <!-- Widget 7: Kilometre Taşları (Milestones) -->
@@ -640,7 +665,8 @@
               <div class="canvas-empty-state" id="canvasEmptyState">
                 <div class="empty-drop-illustration">📥</div>
                 <h4>Rapor Tuvaliniz Boş</h4>
-                <p>Soldaki bileşenleri buraya sürükleyip bırakın veya yukarıdaki <strong>📑 Şablonlar</strong> menüsünden hazır bir rapor seçin.</p>
+                <p>Soldaki bileşenleri buraya sürükleyip bırakın veya yukarıdaki <strong>📑 Şablonlar</strong>
+                  menüsünden hazır bir rapor seçin.</p>
               </div>
             </div>
           </div>
@@ -684,9 +710,12 @@
           <div class="alert-text">
             <strong>Gerçek Outlook / Microsoft To Do Masaüstü Eşitlemesi Neden Henüz Çalışmıyor?</strong>
             <p>
-              Masaüstünüzdeki veya cep telefonunuzdaki gerçek Outlook / To Do hesabınızla canlı senkronizasyon yapılabilmesi için 
-              <strong>Microsoft Entra ID (Azure Portal)</strong> üzerinde bir <em>Uygulama Kaydı (App Registration)</em> açılması, 
-              <code>Tenant ID</code>, <code>Client ID</code> ve <code>Tasks.ReadWrite</code> izinlerinin sisteme girilmesi gerekmektedir. 
+              Masaüstünüzdeki veya cep telefonunuzdaki gerçek Outlook / To Do hesabınızla canlı senkronizasyon
+              yapılabilmesi için
+              <strong>Microsoft Entra ID (Azure Portal)</strong> üzerinde bir <em>Uygulama Kaydı (App Registration)</em>
+              açılması,
+              <code>Tenant ID</code>, <code>Client ID</code> ve <code>Tasks.ReadWrite</code> izinlerinin sisteme
+              girilmesi gerekmektedir.
               Bu kimlik bilgileri olmadan harici hiçbir sistem Microsoft bulutundaki kullanıcı posta kutunuza erişemez.
             </p>
           </div>
@@ -697,7 +726,8 @@
           <!-- Hızlı Görev Ekleme Kutusu (Outlook Stili) -->
           <form id="msAddTodoForm" class="ms-add-task-bar">
             <div class="ms-add-circle">+</div>
-            <input type="text" id="msTodoTitleInput" class="ms-add-input" placeholder="Görev ekle (örn: Rapor hazırla, Toplantı notlarını düzenle...)" required>
+            <input type="text" id="msTodoTitleInput" class="ms-add-input"
+              placeholder="Görev ekle (örn: Rapor hazırla, Toplantı notlarını düzenle...)" required>
             <div class="ms-add-options">
               <input type="date" id="msTodoDueDateInput" class="ms-date-picker-inline" title="Teslim Tarihi">
               <label class="ms-star-toggle" title="Önemli olarak işaretle">
@@ -737,14 +767,17 @@
           <div class="email-hero-left">
             <div class="email-hero-badge-row">
               <span class="report-badge">EXCHANGE ONLINE PLAN 1</span>
-              <span id="smtpStatusBadge" class="smtp-status-pill simulated">🟡 Yerel Outbox Simülasyon Modu (Şifre Girildiğinde Canlı SMTP Aktif Olur)</span>
+              <span id="smtpStatusBadge" class="smtp-status-pill simulated">🟡 Yerel Outbox Simülasyon Modu (Şifre
+                Girildiğinde Canlı SMTP Aktif Olur)</span>
             </div>
             <h3>📧 Exchange Online (SMTP), Outlook Actionable Messages & Zamanlanmış Rapor Merkezi</h3>
-            <p>Personellere giden etkileşimli görev kartlarını (Adaptive Cards), Exchange Online Plan 1 mail hesabınızı ve otomatik zamanlanmış yönetici raporlarını buradan yönetin.</p>
+            <p>Personellere giden etkileşimli görev kartlarını (Adaptive Cards), Exchange Online Plan 1 mail hesabınızı
+              ve otomatik zamanlanmış yönetici raporlarını buradan yönetin.</p>
           </div>
           <div class="email-hero-right">
             <div class="smtp-quick-test-box">
-              <input type="email" id="smtpTestRecipientInput" class="styled-input sm-input" placeholder="Test alıcı (örn: ahmet@fggroup.com.tr)" style="min-width:220px;">
+              <input type="email" id="smtpTestRecipientInput" class="styled-input sm-input"
+                placeholder="Test alıcı (örn: ahmet@fggroup.com.tr)" style="min-width:220px;">
               <button type="button" id="sendTestActionableCardBtn" class="action-btn primary-btn sm-btn">
                 🚀 Örnek Canlı Görev Kartı Gönder
               </button>
@@ -759,11 +792,20 @@
             <div class="email-card-header">
               <div>
                 <h4>⚙️ Exchange Online Plan 1 (SMTP) Hesap Ayarları</h4>
-                <p>Microsoft 365 / Exchange Online kullanıcı adı ve şifrenizi girerek gerçek e-posta gönderimini aktifleştirin.</p>
+                <p>Microsoft 365 / Exchange Online kullanıcı adı ve şifrenizi girerek gerçek e-posta gönderimini
+                  aktifleştirin.</p>
               </div>
             </div>
 
             <form id="smtpConfigForm" class="smtp-config-form">
+              <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+                <button type="button" id="presetSmtpAuthBtn" class="action-btn secondary-btn sm-btn" style="font-size:0.75rem; padding:6px 10px;">
+                  🔐 Standart SMTP (smtp.office365.com : 587)
+                </button>
+                <button type="button" id="presetDirectSendBtn" class="action-btn secondary-btn sm-btn" style="font-size:0.75rem; padding:6px 10px;" title="Şirket içi @fggroup.com.tr adreslerine şifre gerekmeden doğrudan Exchange Online MX üzerinden gönderir">
+                  ⚡ Exchange Direct Send (fggroup-com-tr.mail.protection.outlook.com : 25)
+                </button>
+              </div>
               <div class="form-row">
                 <div class="form-group" style="flex:2;">
                   <label for="smtpHostInput">SMTP Sunucusu (Host) *</label>
@@ -778,13 +820,16 @@
               <div class="form-row">
                 <div class="form-group">
                   <label for="smtpUsernameInput">Mail Kullanıcı Adı (Exchange E-posta) *</label>
-                  <input type="email" id="smtpUsernameInput" class="styled-input" placeholder="bildirim@fggroup.com.tr" required>
+                  <input type="email" id="smtpUsernameInput" class="styled-input" placeholder="bildirim@fggroup.com.tr"
+                    required>
                 </div>
                 <div class="form-group">
                   <label for="smtpPasswordInput">Mail Şifresi / Uygulama Şifresi</label>
                   <div style="display:flex; gap:6px; align-items:center;">
-                    <input type="password" id="smtpPasswordInput" class="styled-input" placeholder="Exchange Online şifrenizi giriniz" style="flex:1;">
-                    <button type="button" id="toggleSmtpPassBtn" class="action-btn secondary-btn sm-btn" title="Şifreyi Göster / Gizle" style="padding:8px 10px;">👁️</button>
+                    <input type="password" id="smtpPasswordInput" class="styled-input"
+                      placeholder="Exchange Online şifrenizi giriniz" style="flex:1;">
+                    <button type="button" id="toggleSmtpPassBtn" class="action-btn secondary-btn sm-btn"
+                      title="Şifreyi Göster / Gizle" style="padding:8px 10px;">👁️</button>
                   </div>
                 </div>
               </div>
@@ -796,28 +841,35 @@
                 </div>
                 <div class="form-group">
                   <label for="smtpBaseUrlInput">Ağ Geri Dönüş Adresi (Callback Base URL) *</label>
-                  <input type="text" id="smtpBaseUrlInput" class="styled-input" value="http://10.1.0.45:3000" required title="Outlook içindeki Görevi Başlat / Tamamla butonlarının istek atacağı sunucu adresi">
+                  <input type="text" id="smtpBaseUrlInput" class="styled-input" value="http://10.1.0.45:3000" required
+                    title="Outlook içindeki Görevi Başlat / Tamamla butonlarının istek atacağı sunucu adresi">
                 </div>
               </div>
 
               <div class="form-group permission-box" style="margin-top:6px;">
                 <label class="checkbox-label">
                   <input type="checkbox" id="smtpEnableActionableCards" checked>
-                  <span><strong>Outlook Actionable Messages (Canlı E-posta Kartları) Aktif:</strong> Görev kilidi açıldığında (<code>READY</code>), gecikme mazereti gerektiğinde (<code>KAB07</code>) ve görünürlük taleplerinde (<code>KAB03</code>) e-posta içine canlı butonlar gömülür.</span>
+                  <span><strong>Outlook Actionable Messages (Canlı E-posta Kartları) Aktif:</strong> Görev kilidi
+                    açıldığında (<code>READY</code>), gecikme mazereti gerektiğinde (<code>KAB07</code>) ve görünürlük
+                    taleplerinde (<code>KAB03</code>) e-posta içine canlı butonlar gömülür.</span>
                 </label>
               </div>
 
               <!-- Doğrudan Kart İçi Canlı Bağlantı & Gönderim Test Alanı -->
-              <div style="margin-top:10px; padding:12px 14px; border-radius:10px; background:var(--surface-hover, #f8fafc); border:1px dashed var(--border-color, #cbd5e1);">
+              <div
+                style="margin-top:10px; padding:12px 14px; border-radius:10px; background:var(--surface-hover, #f8fafc); border:1px dashed var(--border-color, #cbd5e1);">
                 <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
                   <div style="flex:1; min-width:200px;">
-                    <label for="smtpInlineTestRecipient" style="display:block; font-size:0.76rem; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">
+                    <label for="smtpInlineTestRecipient"
+                      style="display:block; font-size:0.76rem; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">
                       🧪 Bağlantı Doğrulama & Test E-postası Alıcısı:
                     </label>
-                    <input type="email" id="smtpInlineTestRecipient" class="styled-input sm-input" placeholder="Test mailinin gönderileceği e-posta (örn: kendi adresiniz)" style="width:100%;">
+                    <input type="email" id="smtpInlineTestRecipient" class="styled-input sm-input"
+                      placeholder="Test mailinin gönderileceği e-posta (örn: kendi adresiniz)" style="width:100%;">
                   </div>
                   <div style="display:flex; align-items:flex-end; padding-top:18px;">
-                    <button type="button" id="verifySmtpConnectionBtn" class="action-btn sm-btn" style="background:linear-gradient(135deg, #059669, #047857); color:#ffffff; border:none; font-weight:700; padding:9px 16px; box-shadow:0 2px 6px rgba(5,150,105,0.25);">
+                    <button type="button" id="verifySmtpConnectionBtn" class="action-btn sm-btn"
+                      style="background:linear-gradient(135deg, #059669, #047857); color:#ffffff; border:none; font-weight:700; padding:9px 16px; box-shadow:0 2px 6px rgba(5,150,105,0.25);">
                       🔌 Bağlantıyı Test Et & Test Maili Gönder
                     </button>
                   </div>
@@ -825,7 +877,8 @@
               </div>
 
               <div class="smtp-form-footer" style="margin-top:12px;">
-                <span id="smtpLastSavedInfo" class="smtp-saved-hint">Varsayılan: smtp.office365.com:587 (STARTTLS)</span>
+                <span id="smtpLastSavedInfo" class="smtp-saved-hint">Varsayılan: smtp.office365.com:587
+                  (STARTTLS)</span>
                 <div style="display:flex; gap:8px; align-items:center;">
                   <button type="submit" class="action-btn primary-btn sm-btn">💾 SMTP Ayarlarını Kaydet</button>
                 </div>
@@ -841,7 +894,8 @@
             <div class="email-card-header">
               <div>
                 <h4>⏰ Zamanlanmış Otomatik Rapor Gönderimi</h4>
-                <p>Belirlediğiniz gün ve saatlerde proje ilerleme, darboğaz ve performans raporlarını otomatik e-posta olarak gönderin.</p>
+                <p>Belirlediğiniz gün ve saatlerde proje ilerleme, darboğaz ve performans raporlarını otomatik e-posta
+                  olarak gönderin.</p>
               </div>
             </div>
 
@@ -849,7 +903,8 @@
               <div class="form-row">
                 <div class="form-group" style="flex:1.4;">
                   <label for="schedReportName">Rapor Başlığı *</label>
-                  <input type="text" id="schedReportName" class="styled-input" placeholder="Örn: Günlük Tekstil Koleksiyonu Özeti" required>
+                  <input type="text" id="schedReportName" class="styled-input"
+                    placeholder="Örn: Günlük Tekstil Koleksiyonu Özeti" required>
                 </div>
                 <div class="form-group" style="flex:1;">
                   <label for="schedProjectSelect">Proje Kapsamı</label>
@@ -885,7 +940,8 @@
 
               <div class="form-group">
                 <label for="schedRecipients">Alıcı E-posta Adresleri (Virgülle ayırın) *</label>
-                <input type="text" id="schedRecipients" class="styled-input" placeholder="admin@fggroup.com.tr, ahmet@fggroup.com.tr" required>
+                <input type="text" id="schedRecipients" class="styled-input"
+                  placeholder="admin@fggroup.com.tr, ahmet@fggroup.com.tr" required>
                 <div id="schedQuickRecipients" class="quick-recipient-chips"></div>
               </div>
 
@@ -911,7 +967,8 @@
           <div class="outbox-header-bar">
             <div>
               <h4>📬 Giden E-posta Kutusu & Canlı Outlook Adaptive Card Simülatörü</h4>
-              <p>Sistemin gönderdiği tüm Actionable Message e-postalarını ve zamanlanmış raporları inceleyin; sağ panelde <strong>Outlook içindeymiş gibi butonlara tıklayarak</strong> canlı test edin.</p>
+              <p>Sistemin gönderdiği tüm Actionable Message e-postalarını ve zamanlanmış raporları inceleyin; sağ
+                panelde <strong>Outlook içindeymiş gibi butonlara tıklayarak</strong> canlı test edin.</p>
             </div>
             <button type="button" id="refreshOutboxBtn" class="action-btn outline-btn sm-btn">🔄 Listeyi Yenile</button>
           </div>
@@ -994,7 +1051,8 @@
 
         <div class="form-group">
           <label for="tDesc">Kısa Açıklama</label>
-          <textarea id="tDesc" class="styled-textarea" rows="2" placeholder="Görevle ilgili önemli notlar..."></textarea>
+          <textarea id="tDesc" class="styled-textarea" rows="2"
+            placeholder="Görevle ilgili önemli notlar..."></textarea>
         </div>
 
         <div class="modal-footer">
@@ -1088,14 +1146,16 @@
         <div class="form-group permission-box">
           <label class="checkbox-label">
             <input type="checkbox" id="persCanCreateProj">
-            <span><strong>Proje Açma İzni:</strong> Bu personel yeni proje oluşturabilir ve diğer personele görev atayabilir.</span>
+            <span><strong>Proje Açma İzni:</strong> Bu personel yeni proje oluşturabilir ve diğer personele görev
+              atayabilir.</span>
           </label>
         </div>
 
         <div class="form-group permission-box">
           <label class="checkbox-label">
             <input type="checkbox" id="persCanBuildReports">
-            <span><strong>Raporlama & Özel Rapor Yetkisi:</strong> Bu personel sürükle-bırak ile kendi isteğine göre dinamik raporlar ve paneller oluşturabilir.</span>
+            <span><strong>Raporlama & Özel Rapor Yetkisi:</strong> Bu personel sürükle-bırak ile kendi isteğine göre
+              dinamik raporlar ve paneller oluşturabilir.</span>
           </label>
         </div>
 
@@ -1121,7 +1181,8 @@
         </div>
         <div class="form-group">
           <label for="expText">Gecikme Nedeni ve Alınan Önlem *</label>
-          <textarea id="expText" required class="styled-textarea" rows="3" placeholder="Gecikmenin nedenini kısaca açıklayınız..."></textarea>
+          <textarea id="expText" required class="styled-textarea" rows="3"
+            placeholder="Gecikmenin nedenini kısaca açıklayınız..."></textarea>
         </div>
         <div class="modal-footer">
           <button type="button" class="action-btn secondary-btn" data-close="explanationModal">İptal</button>
@@ -1139,11 +1200,15 @@
         <button class="modal-close" data-close="azureConfigModal">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="azure-help-guide" style="background:#1e293b; border-left:4px solid #38bdf8; padding:12px; border-radius:6px; margin-bottom:16px; font-size:0.85rem; line-height:1.5;">
+        <div class="azure-help-guide"
+          style="background:#1e293b; border-left:4px solid #38bdf8; padding:12px; border-radius:6px; margin-bottom:16px; font-size:0.85rem; line-height:1.5;">
           <strong>Gerçek Outlook / Microsoft To Do Senkronizasyonu İçin Gerekli Adımlar:</strong>
           <ol style="margin-top:8px; padding-left:18px;">
-            <li><strong>Azure Portal:</strong> <code>portal.azure.com</code> adresinde <em>Microsoft Entra ID ➔ App registrations</em> bölümünden yeni uygulama kaydı açın.</li>
-            <li><strong>API İzinleri:</strong> <em>API Permissions ➔ Microsoft Graph</em> altında <code>Tasks.ReadWrite</code> ve <code>offline_access</code> izinlerini ekleyin ve Tenant Yöneticisi Onayı (Admin Consent) verin.</li>
+            <li><strong>Azure Portal:</strong> <code>portal.azure.com</code> adresinde <em>Microsoft Entra ID ➔ App
+                registrations</em> bölümünden yeni uygulama kaydı açın.</li>
+            <li><strong>API İzinleri:</strong> <em>API Permissions ➔ Microsoft Graph</em> altında
+              <code>Tasks.ReadWrite</code> ve <code>offline_access</code> izinlerini ekleyin ve Tenant Yöneticisi Onayı
+              (Admin Consent) verin.</li>
             <li>Aşağıdaki kimlik bilgilerini girin:</li>
           </ol>
         </div>
@@ -1159,7 +1224,8 @@
           </div>
           <div class="form-group">
             <label for="azureClientSecret">Client Secret (İstemci Parolası)</label>
-            <input type="password" id="azureClientSecret" class="styled-input" placeholder="Azure'dan oluşturulan gizli anahtar">
+            <input type="password" id="azureClientSecret" class="styled-input"
+              placeholder="Azure'dan oluşturulan gizli anahtar">
           </div>
           <div class="modal-footer" style="margin-top:16px;">
             <button type="button" class="action-btn secondary-btn" data-close="azureConfigModal">Kapat</button>
@@ -1193,7 +1259,8 @@
 
         <!-- Tema Tercihi Seçimi -->
         <div class="form-group" style="margin-top: 20px;">
-          <label style="font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">🎨 Arayüz Teması</label>
+          <label style="font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; display: block;">🎨 Arayüz
+            Teması</label>
           <div class="theme-selection-grid">
             <div class="theme-choice-card" id="themeCardLight" data-set-theme="light">
               <div class="theme-preview light-preview">
@@ -1255,7 +1322,8 @@
       </div>
       <div class="modal-body">
         <p class="import-intro-text">
-          Hazırladığınız CSV dosyasını seçerek veya bu alana sürükleyip bırakarak aktif projeye birden fazla görevi tek seferde yükleyebilirsiniz.
+          Hazırladığınız CSV dosyasını seçerek veya bu alana sürükleyip bırakarak aktif projeye birden fazla görevi tek
+          seferde yükleyebilirsiniz.
         </p>
 
         <!-- Örnek Şablon Kutusu -->
@@ -1264,7 +1332,8 @@
             <span class="template-icon">📄</span>
             <div>
               <strong>Örnek Şablon Dosyası:</strong>
-              <p>Doğru sütun başlıkları ve örnek verileri içeren CSV dosyasını indirip doğrudan Excel'de düzenleyebilirsiniz.</p>
+              <p>Doğru sütun başlıkları ve örnek verileri içeren CSV dosyasını indirip doğrudan Excel'de
+                düzenleyebilirsiniz.</p>
             </div>
           </div>
           <button type="button" id="downloadCsvTemplateBtn" class="action-btn outline-btn sm-btn">
@@ -1274,12 +1343,14 @@
 
         <!-- Sürükle Bırak / Dosya Yükleme Alanı -->
         <div class="csv-upload-dropzone" id="csvDropzone">
-          <input type="file" id="csvFileInput" accept=".csv, text/csv, application/vnd.ms-excel" style="display:none;" />
+          <input type="file" id="csvFileInput" accept=".csv, text/csv, application/vnd.ms-excel"
+            style="display:none;" />
           <div class="dropzone-content">
             <span class="dropzone-icon">📊</span>
             <h4>CSV Dosyanızı Buraya Sürükleyip Bırakın</h4>
             <p>veya bilgisayarınızdan seçmek için <strong class="link-text">dosya seçin</strong></p>
-            <span class="dropzone-file-hint">Desteklenen format: .csv (Türkçe karakter ve UTF-8 uyumlu, noktalı virgül veya virgül ayrımı)</span>
+            <span class="dropzone-file-hint">Desteklenen format: .csv (Türkçe karakter ve UTF-8 uyumlu, noktalı virgül
+              veya virgül ayrımı)</span>
           </div>
         </div>
 
@@ -1323,7 +1394,8 @@
       <div class="modal-header">
         <div>
           <h3 id="pmModalTitle">📁 Proje Yönetimi</h3>
-          <p id="pmModalSubtitle" style="font-size:0.78rem; color:var(--text-tertiary); margin-top:2px;">Ekip rolleri, takvim revizyonu ve görünürlük talepleri</p>
+          <p id="pmModalSubtitle" style="font-size:0.78rem; color:var(--text-tertiary); margin-top:2px;">Ekip rolleri,
+            takvim revizyonu ve görünürlük talepleri</p>
         </div>
         <button class="modal-close" data-close="projectManageModal">&times;</button>
       </div>
@@ -1332,7 +1404,8 @@
         <div class="pm-section-box">
           <div class="op-section-title" style="margin-bottom:8px;">👥 Proje Ekibi & Yetki Rolleri</div>
           <form id="pmAddMemberForm" style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-            <select id="pmUserSelect" class="styled-select sm-select" style="flex:2; min-width:180px;" required></select>
+            <select id="pmUserSelect" class="styled-select sm-select" style="flex:2; min-width:180px;"
+              required></select>
             <select id="pmRoleSelect" class="styled-select sm-select" style="flex:1; min-width:150px;" required>
               <option value="PROJECT_MANAGER">👑 Proje Yöneticisi</option>
               <option value="EDITOR" selected>✏️ Düzenleyici (Editor)</option>
@@ -1366,7 +1439,8 @@
             </div>
             <div class="form-group">
               <label for="pmPlanReason">Revizyon Gerekçesi *</label>
-              <input type="text" id="pmPlanReason" class="styled-input" placeholder="Örn: Müşteri ek modül talebi nedeniyle +1 hafta uzatıldı" required>
+              <input type="text" id="pmPlanReason" class="styled-input"
+                placeholder="Örn: Müşteri ek modül talebi nedeniyle +1 hafta uzatıldı" required>
             </div>
             <div style="display:flex; justify-content:flex-end;">
               <button type="submit" class="action-btn secondary-btn sm-btn">📅 Proje Planını Revize Et</button>
@@ -1389,7 +1463,8 @@
           <h3>🔔 Bildirimler & Uyarılar</h3>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <button type="button" id="runWorkerScanBtn" class="action-btn outline-btn sm-btn" title="Yaklaşan teslimleri ve gecikmeleri tara">
+          <button type="button" id="runWorkerScanBtn" class="action-btn outline-btn sm-btn"
+            title="Yaklaşan teslimleri ve gecikmeleri tara">
             🔄 Gecikmeleri Tara
           </button>
           <button class="modal-close" id="closeDrawerBtn">&times;</button>
@@ -1437,7 +1512,8 @@
               <div class="op-progress-fill" id="wpProgressFill" style="width:50%;"></div>
             </div>
             <div class="op-progress-slider-row">
-              <input type="range" id="wpProgressSlider" min="0" max="100" step="5" value="50" class="wp-range-slider" title="İlerleme yüzdesini kaydırarak güncelleyin">
+              <input type="range" id="wpProgressSlider" min="0" max="100" step="5" value="50" class="wp-range-slider"
+                title="İlerleme yüzdesini kaydırarak güncelleyin">
             </div>
           </div>
         </div>
@@ -1486,7 +1562,8 @@
           <div class="form-row">
             <div class="form-group" style="margin-bottom:6px;">
               <label for="wpNewStart" style="font-size:0.74rem;">Yeni Başlangıç *</label>
-              <input type="date" id="wpNewStart" class="styled-input" style="padding:6px 8px; font-size:0.8rem;" required>
+              <input type="date" id="wpNewStart" class="styled-input" style="padding:6px 8px; font-size:0.8rem;"
+                required>
             </div>
             <div class="form-group" style="margin-bottom:6px;">
               <label for="wpNewDue" style="font-size:0.74rem;">Yeni Hedef Bitiş *</label>
@@ -1495,7 +1572,8 @@
           </div>
           <div class="form-group" style="margin-bottom:8px;">
             <label for="wpPlanReason" style="font-size:0.74rem;">Revizyon Gerekçesi *</label>
-            <input type="text" id="wpPlanReason" class="styled-input" style="padding:6px 8px; font-size:0.8rem;" placeholder="Örn: Öncül test süreci uzadı" required>
+            <input type="text" id="wpPlanReason" class="styled-input" style="padding:6px 8px; font-size:0.8rem;"
+              placeholder="Örn: Öncül test süreci uzadı" required>
           </div>
           <div style="display:flex; justify-content:flex-end; gap:6px;">
             <button type="button" id="wpCancelPlanRevBtn" class="action-btn secondary-btn sm-btn">Vazgeç</button>
@@ -1517,7 +1595,7 @@
         <div class="op-relations-group">
           <label class="op-rel-label">⏳ Neyi Bekliyor? (Öncül Görevler):</label>
           <div id="wpPredecessorsList" class="op-rel-list"></div>
-          
+
           <div class="op-add-dep-box" id="wpAddDepBox">
             <select id="wpAddDepSelect" class="styled-select sm-select">
               <option value="">+ Öncül Bağımlılık Ekle...</option>
@@ -1538,7 +1616,8 @@
         <div id="wpDelaysList" class="op-activity-list"></div>
 
         <form id="wpInlineExpForm" class="op-inline-form">
-          <textarea id="wpInlineExpText" class="styled-textarea" rows="2" placeholder="Gecikme gerekçesi veya durum notu yazınız..."></textarea>
+          <textarea id="wpInlineExpText" class="styled-textarea" rows="2"
+            placeholder="Gecikme gerekçesi veya durum notu yazınız..."></textarea>
           <button type="submit" class="action-btn primary-btn sm-btn" style="margin-top:6px;">Açıklama Gönder</button>
         </form>
       </div>
@@ -1556,4 +1635,5 @@
 
   <script src="/app.js"></script>
 </body>
+
 </html>

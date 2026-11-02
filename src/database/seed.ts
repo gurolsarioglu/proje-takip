@@ -8,6 +8,10 @@ import { NotificationService } from '../modules/notification/notification.servic
 import { EmailAndAutomationService } from '../modules/email/email.service.js';
 
 export function seedDatabase(db: Database) {
+  // Kullanıcının daha önce kaydettiği SMTP ayarları varsa sunucu yeniden başlarken koru
+  const existingTenants = db.getTenants();
+  const prevSmtp = existingTenants.length > 0 ? db.getSmtpConfig(existingTenants[0].id) : undefined;
+
   // Always initialize fresh 5-person team & projects on server boot
   db.reset();
 
@@ -467,9 +471,19 @@ export function seedDatabase(db: Database) {
   });
 
   // Başlangıç örnek Actionable Card e-postaları (Emre'nin hazır numune dikimi görevi, Hans'ın gecikme kartı ve örnek otomatik rapor)
-  void emailService.sendTaskReadyActionableCard(tenantFG.id, tx5.id);
-  void emailService.sendDelayExplanationActionableCard(tenantFG.id, t2.id);
-  void emailService.executeScheduledReportJob(tenantFG.id, job1.id);
+  void Promise.all([
+    emailService.sendTaskReadyActionableCard(tenantFG.id, tx5.id),
+    emailService.sendDelayExplanationActionableCard(tenantFG.id, t2.id),
+    emailService.executeScheduledReportJob(tenantFG.id, job1.id)
+  ]).then(() => {
+    // Eğer kullanıcının daha önce kaydettiği Exchange Online ayarları varsa yeni tenant üzerine geri yükle
+    if (prevSmtp) {
+      db.upsertSmtpConfig({
+        ...prevSmtp,
+        tenant_id: tenantFG.id
+      });
+    }
+  });
 
   console.log('FG Group 5 kişilik ekip, Tekstil & ERP projeleri ve Exchange Online / Actionable Cards başarıyla yüklendi.');
 }
