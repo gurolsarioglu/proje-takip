@@ -14,6 +14,7 @@ import { TaskService } from '../modules/task/task.service.js';
 import { NotificationService } from '../modules/notification/notification.service.js';
 import { ReportingService } from '../modules/reporting/reporting.service.js';
 import { MicrosoftTodoService } from '../modules/microsoft_todo/microsoft_todo.service.js';
+import { EmailAndAutomationService } from '../modules/email/email.service.js';
 import { AuthContext, UUID, Task } from '../core/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +39,7 @@ const taskService = new TaskService(db, dependencyService, delayService);
 const notificationService = new NotificationService(db);
 const reportingService = new ReportingService(db, projectService);
 const microsoftTodoService = new MicrosoftTodoService(db);
+const emailService = new EmailAndAutomationService(db, taskService, delayService, projectService, notificationService);
 
 // Güvenli Kiracı ve Kullanıcı Bağlamı Middleware'i
 function getAuthContext(req: Request): AuthContext {
@@ -286,6 +288,7 @@ app.post('/api/projects/:id/visibility-request', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const request = projectService.requestVisibility(auth, req.params.id);
+    void emailService.sendVisibilityRequestActionableCard(auth.tenant_id, request.id);
     res.status(201).json(request);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -399,6 +402,9 @@ app.post('/api/tasks', (req, res) => {
     }
 
     const createdWithStatus = db.getTaskById(auth.tenant_id, task.id);
+    if (createdWithStatus && createdWithStatus.assignee_id && createdWithStatus.work_status === "READY") {
+      void emailService.sendTaskReadyActionableCard(auth.tenant_id, createdWithStatus.id);
+    }
     res.status(201).json(createdWithStatus || task);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -558,6 +564,7 @@ app.post('/api/tasks/:id/complete', (req, res) => {
       const t = db.getTaskById(auth.tenant_id, readyId);
       if (t && t.assignee_id) {
         notificationService.notifyTaskReady(auth.tenant_id, t.id, t.assignee_id, t.title);
+          void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
       }
     }
 
@@ -583,6 +590,7 @@ app.post('/api/tasks/:id/status', (req, res) => {
         const t = db.getTaskById(auth.tenant_id, readyId);
         if (t && t.assignee_id) {
           notificationService.notifyTaskReady(auth.tenant_id, t.id, t.assignee_id, t.title);
+          void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
         }
       }
     }
@@ -758,6 +766,7 @@ app.post('/api/worker/run', (req, res) => {
         // Açıklama gerekiyorsa günlük hatırlat
         if (delay.explanation_status === 'REQUIRED' && task.assignee_id) {
           notificationService.notifyDailyExplanationReminder(auth.tenant_id, task.id, task.assignee_id, task.title);
+          void emailService.sendDelayExplanationActionableCard(auth.tenant_id, task.id);
           remindersSent++;
         }
       }
@@ -1132,6 +1141,187 @@ app.post('/api/todo/azure-config', (req, res) => {
     azureTenantConfigs.set(auth.tenant_id, { tenant_id, client_id, client_secret });
     res.json({ success: true, message: 'Azure Entra ID kimlik bilgileri başarıyla kaydedildi.' });
   } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+
+// ==========================================
+// 10. Exchange Online (SMTP), Outlook Actionable Messages & Zamanlanmış Raporlar API
+// ==========================================
+app.get('/api/admin/smtp-config', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const cfg = emailService.getSmtpConfig(auth.tenant_id);
+    const { password, ...safeCfg } = cfg;
+    res.json({
+      ...safeCfg,
+      has_password: !!(password && password.length > 0),
+      password_masked: password && password.length > 0 ? '••••••••' : ''
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/smtp-config', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const saved = emailService.saveSmtpConfig(auth, req.body);
+    const { password, ...safeCfg } = saved;
+    res.json({
+      ...safeCfg,
+      has_password: !!(password && password.length > 0),
+      password_masked: password && password.length > 0 ? '••••••••' : ''
+    });
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/smtp-test', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { recipient_email, task_id } = req.body;
+    const tasks = db.getTasks(auth.tenant_id);
+    const targetTask = (task_id && db.getTaskById(auth.tenant_id, task_id))
+      || tasks.find(t => t.work_status === 'READY' && t.assignee_id)
+      || tasks[0];
+
+    if (targetTask && !recipient_email) {
+      const item = await emailService.sendTaskReadyActionableCard(auth.tenant_id, targetTask.id);
+      return res.json({ success: true, item });
+    }
+
+    const toEmail = (recipient_email || auth.email).trim();
+    const cfg = emailService.getSmtpConfig(auth.tenant_id);
+    const baseUrl = cfg.public_base_url || 'http://10.1.0.45:3000';
+    const sampleTask = targetTask || { id: 'sample', title: '5. Prototip Numune Dikimi', description: 'Exchange Online Plan 1 Actionable Card Test Görevi' };
+
+    const adaptiveCard = {
+      '$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      body: [
+        { type: 'TextBlock', text: '🧪 EXCHANGE ONLINE PLAN 1 • CANLI KART TESTİ', weight: 'Bolder', color: 'Accent', size: 'Small' },
+        { type: 'TextBlock', text: sampleTask.title, weight: 'Bolder', size: 'Large', wrap: true },
+        { type: 'FactSet', facts: [
+          { title: 'SMTP Sunucusu:', value: cfg.host + ':' + cfg.port },
+          { title: 'Gönderici Hesap:', value: cfg.username },
+          { title: 'Alıcı:', value: toEmail }
+        ]},
+        { type: 'Input.Text', id: 'explanationText', placeholder: 'Test notu veya gecikme açıklaması yazınız...', isMultiline: true }
+      ],
+      actions: targetTask ? [
+        {
+          type: 'Action.Http',
+          title: '▶️ Görevi Başlat',
+          method: 'POST',
+          url: baseUrl + '/api/outlook/action',
+          body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: targetTask.id, user_id: auth.user_id, action: 'START_TASK' })
+        },
+        {
+          type: 'Action.Http',
+          title: '✅ Tamamlandı İşaretle',
+          method: 'POST',
+          url: baseUrl + '/api/outlook/action',
+          body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: targetTask.id, user_id: auth.user_id, action: 'COMPLETE_TASK' })
+        },
+        {
+          type: 'Action.Http',
+          title: '📝 Not / Gecikme Kaydet',
+          method: 'POST',
+          url: baseUrl + '/api/outlook/action',
+          body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: targetTask.id, user_id: auth.user_id, action: 'SUBMIT_EXPLANATION', explanation_text: '{{explanationText.value}}' })
+        }
+      ] : []
+    };
+
+    const htmlBody = '<div style="padding:20px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;"><h3>🧪 Exchange Online Plan 1 & Outlook Actionable Card Testi</h3><p>Görev: <strong>' + sampleTask.title + '</strong></p></div>';
+    const item = await emailService.dispatchEmail({
+      tenant_id: auth.tenant_id,
+      to: [toEmail],
+      subject: '🧪 [Test] Outlook Actionable Card: ' + sampleTask.title,
+      category: 'SMTP_TEST',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard,
+      linked_task_id: targetTask?.id
+    });
+
+    res.json({ success: true, item });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/scheduled-reports', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    res.json(emailService.listScheduledReports(auth.tenant_id));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/scheduled-reports', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const job = emailService.createScheduledReport(auth, req.body);
+    res.status(201).json(job);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/scheduled-reports/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const updated = emailService.toggleScheduledReport(auth, req.params.id, !!req.body.is_active);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/scheduled-reports/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const ok = emailService.deleteScheduledReport(auth, req.params.id);
+    res.json({ success: ok });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/scheduled-reports/:id/send-now', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const sent = await emailService.executeScheduledReportJob(auth.tenant_id, req.params.id);
+    res.json({ success: true, item: sent });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/email/outbox', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    res.json(db.getEmailOutbox(auth.tenant_id, 50));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Outlook Actionable Message HTTP Callback Endpoint
+app.post('/api/outlook/action', async (req, res) => {
+  try {
+    const result = await emailService.handleOutlookCardAction(req.body);
+    res.setHeader('CARD-ACTION-STATUS', encodeURIComponent(result.message));
+    res.setHeader('CARD-UPDATE-IN-BODY', 'true');
+    res.json(result);
+  } catch (err: any) {
+    res.setHeader('CARD-ACTION-STATUS', encodeURIComponent(err.message || 'İşlem başarısız'));
     res.status(400).json({ error: err.message });
   }
 });

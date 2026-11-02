@@ -318,3 +318,69 @@ export interface MicrosoftTodoItem {
   synced_at: string;
   created_at: string;
 }
+
+
+// 9. Exchange Online Plan 1 (SMTP), Outlook Actionable Messages (Adaptive Cards) & Zamanlanmış Raporlar
+export interface SmtpConfig {
+  tenant_id: UUID;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password?: string;
+  from_name: string;
+  from_email: string;
+  public_base_url: string;
+  enable_actionable_cards: boolean;
+  updated_at: string;
+}
+
+export type ScheduledReportType =
+  | 'EXECUTIVE_SUMMARY'
+  | 'PERFORMANCE_SCORECARD'
+  | 'BOTTLENECK_DELAY'
+  | 'FULL_REPORT';
+
+export type ScheduledReportFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export interface ScheduledReportJob {
+  id: UUID;
+  tenant_id: UUID;
+  name: string;
+  project_id?: string; // 'all' veya proje UUID
+  report_type: ScheduledReportType;
+  frequency: ScheduledReportFrequency;
+  day_of_week?: number; // 1 (Pzt) - 7 (Paz)
+  send_time: string; // '09:00'
+  recipients: string[];
+  include_adaptive_card: boolean;
+  is_active: boolean;
+  last_sent_at?: string;
+  created_by_user_id: UUID;
+  created_at: string;
+}
+
+export type EmailOutboxCategory =
+  | 'ACTIONABLE_TASK_CARD'
+  | 'DELAY_EXPLANATION_CARD'
+  | 'APPROVAL_CARD'
+  | 'SCHEDULED_REPORT'
+  | 'SMTP_TEST';
+
+export interface EmailOutboxItem {
+  id: UUID;
+  tenant_id: UUID;
+  to: string[];
+  subject: string;
+  category: EmailOutboxCategory;
+  delivery_mode: 'SMTP_LIVE' | 'LOCAL_OUTBOX';
+  status: 'SENT' | 'SIMULATED' | 'FAILED';
+  error_message?: string;
+  adaptive_card_json?: any;
+  html_preview: string;
+  linked_task_id?: UUID;
+  linked_project_id?: UUID;
+  linked_request_id?: UUID;
+  action_taken?: string;
+  sent_at: string;
+}

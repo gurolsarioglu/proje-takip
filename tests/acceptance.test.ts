@@ -9,6 +9,7 @@ import { TaskService, matchesTaskSearch } from '../src/modules/task/task.service
 import { NotificationService } from '../src/modules/notification/notification.service.js';
 import { ReportingService } from '../src/modules/reporting/reporting.service.js';
 import { MicrosoftTodoService } from '../src/modules/microsoft_todo/microsoft_todo.service.js';
+import { EmailAndAutomationService } from '../src/modules/email/email.service.js';
 
 test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryoları', async (t) => {
   const db = new Database(); // Fresh in-memory DB for tests
@@ -20,6 +21,7 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
   const notificationService = new NotificationService(db);
   const reportingService = new ReportingService(db, projectService);
   const microsoftTodoService = new MicrosoftTodoService(db);
+  const emailService = new EmailAndAutomationService(db, taskService, delayService, projectService, notificationService);
 
   // Setup Test Tenants and Users
   const tenantA = authService.createTenant('Acme Holding', 'entra-tenant-acme-111');
@@ -627,9 +629,92 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(report.total_tasks, 5);
     assert.equal(report.completed_tasks, 5);
   });
+
+  await t.test('EXCHANGE ONLINE (SMTP), OUTLOOK ACTIONABLE CARDS & ZAMANLANMIŞ RAPORLAR: Canlı e-posta kartı ve zamanlanmış rapor testi', async () => {
+    // 1. Varsayılan Exchange Online Plan 1 ayarlarının gelmesi
+    const defaultCfg = emailService.getSmtpConfig(tenantA.id);
+    assert.equal(defaultCfg.host, 'smtp.office365.com');
+    assert.equal(defaultCfg.port, 587);
+
+    // 2. Yetkisiz kullanıcı SMTP ayarlarını değiştiremez
+    assert.throws(() => {
+      emailService.saveSmtpConfig(authAssigneeA, { username: 'hacker@acme.com' });
+    }, /Yetkisiz İşlem/);
+
+    // 3. Admin SMTP ayarlarını günceller
+    const savedCfg = emailService.saveSmtpConfig(authManagerA, {
+      host: 'smtp.office365.com',
+      port: 587,
+      username: 'bildirim@fggroup.com.tr',
+      from_name: 'FG Group Tekstil Sistemi',
+      public_base_url: 'http://10.1.0.45:3000',
+      enable_actionable_cards: true
+    });
+    assert.equal(savedCfg.username, 'bildirim@fggroup.com.tr');
+
+    // 4. Tekstil numune görevi için Actionable Card (Adaptive Card v1.4) üretimi
+    const cardTask1 = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Numune Kesim & Dikim (Outlook Card)',
+      '2026-11-01T09:00:00Z',
+      '2026-11-05T18:00:00Z',
+      assigneeA.id
+    );
+    const cardTask2 = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Kalite Kontrol & Showroom Sunumu',
+      '2026-11-06T09:00:00Z',
+      '2026-11-10T18:00:00Z',
+      editorA.id
+    );
+    dependencyService.addDependency(authManagerA, cardTask1.id, cardTask2.id);
+
+    const outboxItem = await emailService.sendTaskReadyActionableCard(tenantA.id, cardTask1.id);
+    assert.ok(outboxItem);
+    assert.equal(outboxItem.category, 'ACTIONABLE_TASK_CARD');
+    assert.equal(outboxItem.adaptive_card_json.type, 'AdaptiveCard');
+    assert.equal(outboxItem.adaptive_card_json.actions.length, 3);
+
+    // 5. Outlook içinden [▶️ Görevi Başlat] butonuna tıklama simülasyonu
+    const startRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: cardTask1.id,
+      user_id: assigneeA.id,
+      outboxId: outboxItem.id,
+      action: 'START_TASK'
+    });
+    assert.equal(db.getTaskById(tenantA.id, cardTask1.id)?.work_status, 'IN_PROGRESS');
+    assert.ok(startRes.message.includes('BAŞLATILDI'));
+
+    // 6. Outlook içinden [✅ Tamamlandı İşaretle] butonuna tıklama -> Ardıl görev (cardTask2) otomatik READY olur ve yeni e-posta kartı gider!
+    const compRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: cardTask1.id,
+      user_id: assigneeA.id,
+      outboxId: outboxItem.id,
+      action: 'COMPLETE_TASK'
+    });
+    assert.equal(db.getTaskById(tenantA.id, cardTask1.id)?.work_status, 'COMPLETED');
+    assert.equal(db.getTaskById(tenantA.id, cardTask2.id)?.work_status, 'READY');
+    assert.ok(compRes.message.includes('Kalite Kontrol & Showroom Sunumu'));
+
+    // 7. Zamanlanmış Otomatik Rapor oluşturma ve anında gönderme
+    const schedJob = emailService.createScheduledReport(authManagerA, {
+      name: 'Günlük Tekstil Müşteri Sunumu İlerleme Raporu',
+      project_id: projectA.id,
+      report_type: 'EXECUTIVE_SUMMARY',
+      frequency: 'DAILY',
+      send_time: '09:00',
+      recipients: ['ali@acme.com', 'ayse@acme.com'],
+      include_adaptive_card: true
+    });
+    assert.equal(schedJob.is_active, true);
+
+    const reportMail = await emailService.executeScheduledReportJob(tenantA.id, schedJob.id);
+    assert.equal(reportMail.category, 'SCHEDULED_REPORT');
+    assert.ok(reportMail.subject.includes('Günlük Tekstil Müşteri Sunumu İlerleme Raporu'));
+    assert.ok(reportMail.adaptive_card_json);
+  });
 });
-
-
-
-
-

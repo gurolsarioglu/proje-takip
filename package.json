@@ -11,8 +11,10 @@
     "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.2",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "nodemailer": "^10.3.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

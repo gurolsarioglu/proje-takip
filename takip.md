@@ -174,3 +174,22 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 
 
 
+### [2 Kasım 2026 - 16:00] - Exchange Online Plan 1 (SMTP), Outlook Actionable Messages (Adaptive Cards v1.4) & Zamanlanmış Otomatik Raporlar Merkezi
+* **Admin E-Posta (SMTP) & Otomasyon Merkezi (`#view-email-automation`):**
+  - Admin kullanıcı paneline **📧 E-Posta & Otomasyon (SMTP)** sekmesi eklendi (hem sol menüden hem de `Ekip & Personel` ve `Özel Raporlar` ekranlarındaki hızlı geçiş butonlarından erişilebilir).
+  - **Exchange Online Plan 1 SMTP Yapılandırması:** `smtp.office365.com`, Port `587` (STARTTLS), E-posta Kullanıcı Adı (`bildirim@fggroup.com.tr`), Uygulama/Hesap Şifresi, Gönderici Başlığı, Callback Base URL (`http://10.1.0.45:3000`) ve `nodemailer` tabanlı canlı SMTP gönderim motoru (`EmailAndAutomationService`) entegre edildi.
+  - **Canlı Test Maili Gönderimi (`POST /api/admin/smtp-test`):** Girilen Exchange Online kimlik bilgileriyle anında gerçek SMTP bağlantısını test eden veya yerel simülasyon modunda Outbox'a düşüren test mekanizması kuruldu.
+* **Outlook "Actionable Messages" (E-Posta İçi Canlı Butonlar - Adaptive Cards v1.4):**
+  - Gönderilen her e-postanın HTML gövdesine `<script type="application/adaptivecard+json">` formatında Microsoft Adaptive Card v1.4 JSON şeması gömüldü.
+  - **3 Canlı Kart Senaryosu:**
+    1. **Görev Sırası Geldi (`TASK_READY`):** Öncül görev tamamlandığında sıradaki sorumlu personele otomatik gider; e-posta içinden **"🚀 Göreve Başla (IN_PROGRESS)"** veya **"✅ Tamamlandı İşaretle"** butonlarına basılabilir.
+    2. **Gecikme Açıklama Talebi (`DELAY_EXPLANATION` - KAB07):** Geciken görevler için e-posta içindeki kategori seçimi ve metin kutusundan doğrudan mazeret gönderilebilir.
+    3. **Proje Görünürlük Onayı (`VISIBILITY_REQUEST` - KAB03):** Proje yöneticisinin e-posta içinden **Onayla / Reddet** kararı vermesini sağlar.
+  - **HTTP POST Callback Endpoint (`POST /api/outlook/action`):** Outlook'tan (veya dahili canlı simülatörden) gelen `Action.Http` isteklerini işler, DAG bağımlılık motorunu tetikler, ardıl görevlerin kilidini açıp sıradaki kişiye otomatik yeni kart gönderir ve e-posta içindeki kartı `CARD-ACTION-STATUS` / `CARD-UPDATE-IN-BODY: true` başlıklarıyla anında günceller.
+* **Zamanlanmış Otomatik Rapor Gönderimi (Scheduled Reports Engine):**
+  - Admin panelinden **Günlük (`DAILY`), Haftalık (`WEEKLY`), Aylık (`MONTHLY`)** periyotlarda, belirlenen saatte (`09:00`, `18:00` vb.) ve seçilen alıcı listesine otomatik HTML + Adaptive Card rapor gönderimi tanımlama imkanı sağlandı.
+  - **4 Rapor Türü:** Yönetici Özeti & KPI (`EXECUTIVE_SUMMARY`), Personel Performans Karnesi (`PERFORMANCE_SCORECARD` - `100 * (0.70*Z + 0.30*T)`), Darboğaz & Kritik Yol Analizi (`BOTTLENECK_ANALYSIS`) ve Tam kapsamlı paket (`FULL_PACKAGE`).
+  - **"🚀 Şimdi Gönder" (`POST /api/admin/scheduled-reports/:id/send-now`):** Zamanlama saatini beklemeden tek tıkla anında raporu derleyip tüm alıcılara gönderme özelliği eklendi.
+* **Tekstil 5 Kişilik Ekip Senaryosu & Test Doğrulaması:**
+  - Seed veritabanı 5 kişilik tekstil ekibi (*"2027 İlkbahar/Yaz Tekstil Koleksiyonu - Tasarım Onayı & Numune Sunumu"*) ve hazır zamanlanmış rapor kurallarıyla zenginleştirildi.
+  - **22/22 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.

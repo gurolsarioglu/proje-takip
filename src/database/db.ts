@@ -15,6 +15,9 @@ import {
   Notification,
   PushSubscriptionData,
   MicrosoftTodoItem,
+  SmtpConfig,
+  ScheduledReportJob,
+  EmailOutboxItem,
   UUID
 } from '../core/types.js';
 
@@ -33,6 +36,9 @@ export interface DatabaseState {
   notifications: Notification[];
   push_subscriptions: PushSubscriptionData[];
   microsoft_todos: MicrosoftTodoItem[];
+  smtp_configs: SmtpConfig[];
+  scheduled_reports: ScheduledReportJob[];
+  email_outbox: EmailOutboxItem[];
 }
 
 export class Database {
@@ -52,6 +58,15 @@ export class Database {
         };
         if (!Array.isArray(this.state.microsoft_todos)) {
           this.state.microsoft_todos = [];
+        }
+        if (!Array.isArray(this.state.smtp_configs)) {
+          this.state.smtp_configs = [];
+        }
+        if (!Array.isArray(this.state.scheduled_reports)) {
+          this.state.scheduled_reports = [];
+        }
+        if (!Array.isArray(this.state.email_outbox)) {
+          this.state.email_outbox = [];
         }
         if (Array.isArray(this.state.users)) {
           this.state.users = this.state.users.map(u => {
@@ -90,7 +105,10 @@ export class Database {
       delay_records: [],
       notifications: [],
       push_subscriptions: [],
-      microsoft_todos: []
+      microsoft_todos: [],
+      smtp_configs: [],
+      scheduled_reports: [],
+      email_outbox: []
     };
   }
 
@@ -390,5 +408,89 @@ export class Database {
     this.state.microsoft_todos.splice(idx, 1);
     this.save();
     return true;
+  }
+
+  // --- Exchange Online / SMTP Config ---
+  public getSmtpConfig(tenant_id: UUID): SmtpConfig | undefined {
+    if (!Array.isArray(this.state.smtp_configs)) this.state.smtp_configs = [];
+    return this.state.smtp_configs.find(c => c.tenant_id === tenant_id);
+  }
+
+  public upsertSmtpConfig(config: SmtpConfig): SmtpConfig {
+    if (!Array.isArray(this.state.smtp_configs)) this.state.smtp_configs = [];
+    const idx = this.state.smtp_configs.findIndex(c => c.tenant_id === config.tenant_id);
+    if (idx === -1) {
+      this.state.smtp_configs.push(config);
+    } else {
+      this.state.smtp_configs[idx] = { ...this.state.smtp_configs[idx], ...config };
+    }
+    this.save();
+    return this.getSmtpConfig(config.tenant_id)!;
+  }
+
+  // --- Scheduled Reports ---
+  public getScheduledReports(tenant_id: UUID): ScheduledReportJob[] {
+    if (!Array.isArray(this.state.scheduled_reports)) this.state.scheduled_reports = [];
+    return this.state.scheduled_reports.filter(j => j.tenant_id === tenant_id);
+  }
+
+  public getScheduledReportById(tenant_id: UUID, id: UUID): ScheduledReportJob | undefined {
+    if (!Array.isArray(this.state.scheduled_reports)) this.state.scheduled_reports = [];
+    return this.state.scheduled_reports.find(j => j.tenant_id === tenant_id && j.id === id);
+  }
+
+  public insertScheduledReport(job: ScheduledReportJob): ScheduledReportJob {
+    if (!Array.isArray(this.state.scheduled_reports)) this.state.scheduled_reports = [];
+    this.state.scheduled_reports.push(job);
+    this.save();
+    return job;
+  }
+
+  public updateScheduledReport(tenant_id: UUID, id: UUID, updates: Partial<ScheduledReportJob>): ScheduledReportJob | undefined {
+    if (!Array.isArray(this.state.scheduled_reports)) this.state.scheduled_reports = [];
+    const job = this.state.scheduled_reports.find(j => j.tenant_id === tenant_id && j.id === id);
+    if (!job) return undefined;
+    Object.assign(job, updates);
+    this.save();
+    return job;
+  }
+
+  public deleteScheduledReport(tenant_id: UUID, id: UUID): boolean {
+    if (!Array.isArray(this.state.scheduled_reports)) this.state.scheduled_reports = [];
+    const idx = this.state.scheduled_reports.findIndex(j => j.tenant_id === tenant_id && j.id === id);
+    if (idx === -1) return false;
+    this.state.scheduled_reports.splice(idx, 1);
+    this.save();
+    return true;
+  }
+
+  // --- Email Outbox & Actionable Cards Log ---
+  public getEmailOutbox(tenant_id: UUID, limit = 50): EmailOutboxItem[] {
+    if (!Array.isArray(this.state.email_outbox)) this.state.email_outbox = [];
+    return this.state.email_outbox
+      .filter(e => e.tenant_id === tenant_id)
+      .sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime())
+      .slice(0, limit);
+  }
+
+  public getEmailOutboxById(tenant_id: UUID, id: UUID): EmailOutboxItem | undefined {
+    if (!Array.isArray(this.state.email_outbox)) this.state.email_outbox = [];
+    return this.state.email_outbox.find(e => e.tenant_id === tenant_id && e.id === id);
+  }
+
+  public insertEmailOutbox(item: EmailOutboxItem): EmailOutboxItem {
+    if (!Array.isArray(this.state.email_outbox)) this.state.email_outbox = [];
+    this.state.email_outbox.push(item);
+    this.save();
+    return item;
+  }
+
+  public updateEmailOutbox(tenant_id: UUID, id: UUID, updates: Partial<EmailOutboxItem>): EmailOutboxItem | undefined {
+    if (!Array.isArray(this.state.email_outbox)) this.state.email_outbox = [];
+    const item = this.state.email_outbox.find(e => e.tenant_id === tenant_id && e.id === id);
+    if (!item) return undefined;
+    Object.assign(item, updates);
+    this.save();
+    return item;
   }
 }

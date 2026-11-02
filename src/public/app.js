@@ -2059,13 +2059,14 @@ function switchView(viewId) {
     'view-board': 'İş Panosu (Kanban)',
     'view-team': 'Ekip & Personel',
     'view-report-builder': 'Özel Rapor Oluşturucu (Sürükle-Bırak)',
-    'view-microsoft-todo': 'Microsoft To Do & Outlook Görevleri'
+    'view-microsoft-todo': 'Microsoft To Do & Outlook Görevleri',
+    'view-email-automation': 'Exchange Online (SMTP) & Otomatik Raporlar'
   };
   document.getElementById('currentViewTitle').textContent = titles[viewId] || 'Panel';
 
   // Proje seçici göster/gizle
   const projContainer = document.getElementById('projectSelectorContainer');
-  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo') {
+  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo' || viewId === 'view-email-automation') {
     projContainer.style.display = 'none';
   } else {
     projContainer.style.display = 'flex';
@@ -2081,6 +2082,10 @@ function switchView(viewId) {
 
   if (viewId === 'view-microsoft-todo') {
     loadAndRenderMicrosoftTodo();
+  }
+
+  if (viewId === 'view-email-automation') {
+    loadEmailAutomationDashboard();
   }
 }
 
@@ -4006,3 +4011,455 @@ applyTheme(getActiveTheme());
 
 
 
+
+
+
+// ================= EXCHANGE ONLINE (SMTP), OUTLOOK ACTIONABLE CARDS & ZAMANLANMIŞ RAPORLAR =================
+let emailAutoState = {
+  smtpConfig: null,
+  scheduledReports: [],
+  outboxItems: [],
+  selectedOutboxId: null
+};
+
+async function loadEmailAutomationDashboard() {
+  try {
+    const [smtpCfg, schedList, outboxList] = await Promise.all([
+      apiCall('/api/admin/smtp-config'),
+      apiCall('/api/admin/scheduled-reports'),
+      apiCall('/api/email/outbox')
+    ]);
+
+    emailAutoState.smtpConfig = smtpCfg;
+    emailAutoState.scheduledReports = schedList || [];
+    emailAutoState.outboxItems = outboxList || [];
+
+    renderSmtpConfigForm(smtpCfg);
+    renderScheduledReportFormOptions();
+    renderScheduledReportsList();
+    renderEmailOutboxList();
+  } catch (err) {
+    console.warn('Email automation dashboard load warning:', err);
+  }
+}
+
+function renderSmtpConfigForm(cfg) {
+  if (!cfg) return;
+  const hostEl = document.getElementById('smtpHostInput');
+  const portEl = document.getElementById('smtpPortInput');
+  const userEl = document.getElementById('smtpUsernameInput');
+  const passEl = document.getElementById('smtpPasswordInput');
+  const fromNameEl = document.getElementById('smtpFromNameInput');
+  const baseUrlEl = document.getElementById('smtpBaseUrlInput');
+  const enableCardsEl = document.getElementById('smtpEnableActionableCards');
+  const badgeEl = document.getElementById('smtpStatusBadge');
+  const hintEl = document.getElementById('smtpLastSavedInfo');
+  const testRecipEl = document.getElementById('smtpTestRecipientInput');
+
+  if (hostEl) hostEl.value = cfg.host || 'smtp.office365.com';
+  if (portEl) portEl.value = cfg.port || 587;
+  if (userEl) userEl.value = cfg.username || 'bildirim@fggroup.com.tr';
+  if (passEl) passEl.value = cfg.has_password ? '••••••••' : '';
+  if (fromNameEl) fromNameEl.value = cfg.from_name || 'FG Group Proje Sistemi';
+  if (baseUrlEl) baseUrlEl.value = cfg.public_base_url || window.location.origin;
+  if (enableCardsEl) enableCardsEl.checked = cfg.enable_actionable_cards !== false;
+  if (testRecipEl && !testRecipEl.value) {
+    testRecipEl.value = state.currentUser?.email || 'ahmet@fggroup.com.tr';
+  }
+
+  if (badgeEl) {
+    if (cfg.has_password) {
+      badgeEl.className = 'smtp-status-pill live';
+      badgeEl.textContent = `🟢 Canlı Exchange Online SMTP Aktif (${cfg.username} ➔ ${cfg.host}:${cfg.port})`;
+    } else {
+      badgeEl.className = 'smtp-status-pill simulated';
+      badgeEl.textContent = '🟡 Yerel Outbox Simülasyon Modu (Exchange Şifresi Girildiğinde Canlı SMTP Aktif Olur)';
+    }
+  }
+
+  if (hintEl && cfg.updated_at) {
+    hintEl.textContent = `Son güncelleme: ${new Date(cfg.updated_at).toLocaleString('tr-TR')}`;
+  }
+}
+
+function renderScheduledReportFormOptions() {
+  const projSel = document.getElementById('schedProjectSelect');
+  if (projSel) {
+    const currentVal = projSel.value || 'all';
+    projSel.innerHTML = '<option value="all">Tüm Projeler (Konsolide)</option>' +
+      state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.title)}</option>`).join('');
+    projSel.value = currentVal;
+  }
+
+  const chipsEl = document.getElementById('schedQuickRecipients');
+  const recipInput = document.getElementById('schedRecipients');
+  if (chipsEl && recipInput) {
+    if (!recipInput.value) {
+      recipInput.value = 'admin@fggroup.com.tr, ahmet@fggroup.com.tr';
+    }
+    chipsEl.innerHTML = state.personnelList.map(u => `
+      <button type="button" class="recipient-chip-btn" data-email="${escapeHtml(u.email)}">
+        + ${escapeHtml(u.name)} (${escapeHtml(u.email)})
+      </button>
+    `).join('');
+
+    chipsEl.querySelectorAll('.recipient-chip-btn').forEach(btn => {
+      btn.onclick = () => {
+        const email = btn.dataset.email;
+        const existing = recipInput.value.split(',').map(s => s.trim()).filter(Boolean);
+        if (!existing.includes(email)) {
+          existing.push(email);
+          recipInput.value = existing.join(', ');
+        }
+      };
+    });
+  }
+}
+
+function renderScheduledReportsList() {
+  const container = document.getElementById('scheduledReportsList');
+  if (!container) return;
+
+  const jobs = emailAutoState.scheduledReports || [];
+  if (jobs.length === 0) {
+    container.innerHTML = '<div style="padding:14px; text-align:center; color:var(--text-tertiary); font-size:0.82rem;">Henüz zamanlanmış otomatik rapor kuralı eklenmemiş.</div>';
+    return;
+  }
+
+  const freqMap = { DAILY: 'Her Gün', WEEKLY: 'Her Hafta', MONTHLY: 'Her Ay' };
+  const typeMap = {
+    EXECUTIVE_SUMMARY: 'Yönetici & İlerleme Özeti',
+    PERFORMANCE_SCORECARD: 'Ekip Performans Karnesi',
+    BOTTLENECK_DELAY: 'Darboğaz & Gecikme Raporu',
+    FULL_REPORT: 'Kapsamlı Tam Rapor'
+  };
+
+  container.innerHTML = jobs.map(job => {
+    const proj = state.projects.find(p => p.id === job.project_id);
+    const scopeName = proj ? proj.title : 'Tüm Projeler';
+    const lastSent = job.last_sent_at ? new Date(job.last_sent_at).toLocaleString('tr-TR') : 'Henüz gönderilmedi';
+
+    return `
+      <div class="sched-job-row">
+        <div class="sched-job-info">
+          <strong>${escapeHtml(job.name)}</strong>
+          <div class="sched-job-meta">
+            <span>📁 ${escapeHtml(scopeName)}</span> •
+            <span>📑 ${typeMap[job.report_type] || job.report_type}</span> •
+            <span>⏰ ${freqMap[job.frequency] || job.frequency} Saat <strong>${escapeHtml(job.send_time)}</strong></span>
+          </div>
+          <div class="sched-job-meta">
+            <span>📩 Alıcılar: ${escapeHtml((job.recipients || []).join(', '))}</span> •
+            <span>Son Gönderim: ${lastSent}</span>
+          </div>
+        </div>
+        <div class="sched-job-actions">
+          <button type="button" class="action-btn primary-btn sm-btn btn-send-sched-now" data-id="${job.id}" title="Bu raporu hemen üret ve alıcılara gönder">
+            🚀 Şimdi Gönder
+          </button>
+          <button type="button" class="action-btn secondary-btn sm-btn btn-toggle-sched" data-id="${job.id}" data-active="${job.is_active}">
+            ${job.is_active ? '🟢 Aktif' : '⚪ Pasif'}
+          </button>
+          <button type="button" class="action-btn danger-bare-btn sm-btn btn-del-sched" data-id="${job.id}" title="Kuralı Sil">
+            🗑️
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.btn-send-sched-now').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Gönderiliyor...';
+        const res = await apiCall(`/api/admin/scheduled-reports/${id}/send-now`, 'POST');
+        showToast('📊 Zamanlanmış rapor başarıyla oluşturuldu ve gönderildi!', 'success');
+        if (res.item) {
+          emailAutoState.selectedOutboxId = res.item.id;
+        }
+        await loadEmailAutomationDashboard();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '🚀 Şimdi Gönder';
+      }
+    };
+  });
+
+  container.querySelectorAll('.btn-toggle-sched').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      const isActive = btn.dataset.active === 'true';
+      await apiCall(`/api/admin/scheduled-reports/${id}`, 'PATCH', { is_active: !isActive });
+      showToast(!isActive ? 'Rapor zamanlaması aktifleştirildi.' : 'Rapor zamanlaması duraklatıldı.', 'info');
+      await loadEmailAutomationDashboard();
+    };
+  });
+
+  container.querySelectorAll('.btn-del-sched').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      await apiCall(`/api/admin/scheduled-reports/${id}`, 'DELETE');
+      showToast('Zamanlanmış rapor kuralı silindi.', 'info');
+      await loadEmailAutomationDashboard();
+    };
+  });
+}
+
+function renderEmailOutboxList() {
+  const listEl = document.getElementById('emailOutboxList');
+  if (!listEl) return;
+
+  const items = emailAutoState.outboxItems || [];
+  if (items.length === 0) {
+    listEl.innerHTML = '<div style="padding:24px; text-align:center; color:var(--text-tertiary);">Henüz gönderilmiş e-posta veya Actionable Card bulunmuyor.</div>';
+    return;
+  }
+
+  if (!emailAutoState.selectedOutboxId || !items.some(i => i.id === emailAutoState.selectedOutboxId)) {
+    emailAutoState.selectedOutboxId = items[0].id;
+  }
+
+  const catLabels = {
+    ACTIONABLE_TASK_CARD: '🔔 Sıra Sizde (Adaptive Card)',
+    DELAY_EXPLANATION_CARD: '⚠️ Gecikme Mazereti Kartı',
+    APPROVAL_CARD: '👁️ Yönetici Onay Kartı',
+    SCHEDULED_REPORT: '📊 Zamanlanmış Otomatik Rapor',
+    SMTP_TEST: '🧪 Exchange SMTP Testi'
+  };
+
+  listEl.innerHTML = items.map(item => {
+    const isSelected = item.id === emailAutoState.selectedOutboxId;
+    const modeLabel = item.delivery_mode === 'SMTP_LIVE'
+      ? (item.status === 'SENT' ? '🟢 SMTP Gönderildi' : '🔴 SMTP Hatası')
+      : '🟡 Yerel Outbox';
+    const timeStr = new Date(item.sent_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+    return `
+      <div class="outbox-mail-item ${isSelected ? 'active' : ''}" data-id="${item.id}">
+        <div class="outbox-mail-top">
+          <span class="outbox-cat-badge">${catLabels[item.category] || item.category}</span>
+          <span style="font-size:0.7rem; color:var(--text-tertiary);">${modeLabel} • ${timeStr}</span>
+        </div>
+        <div class="outbox-mail-subj">${escapeHtml(item.subject)}</div>
+        <div class="outbox-mail-to">Kime: ${escapeHtml((item.to || []).join(', '))}</div>
+        ${item.action_taken ? `<div style="margin-top:4px; font-size:0.72rem; color:#059669; font-weight:600;">✓ ${escapeHtml(item.action_taken)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  listEl.querySelectorAll('.outbox-mail-item').forEach(el => {
+    el.onclick = () => {
+      emailAutoState.selectedOutboxId = el.dataset.id;
+      renderEmailOutboxList();
+      renderSelectedOutboxPreview();
+    };
+  });
+
+  renderSelectedOutboxPreview();
+}
+
+function renderSelectedOutboxPreview() {
+  const previewEl = document.getElementById('liveAdaptiveCardPreview');
+  if (!previewEl) return;
+
+  const item = (emailAutoState.outboxItems || []).find(i => i.id === emailAutoState.selectedOutboxId);
+  if (!item) {
+    previewEl.innerHTML = '<div class="outbox-empty-preview"><span>📩</span><p>Önizlemek için sol listeden bir e-posta seçin.</p></div>';
+    return;
+  }
+
+  const card = item.adaptive_card_json;
+  let cardHtml = '';
+
+  if (card && Array.isArray(card.body)) {
+    const bodyBlocks = card.body.map(block => {
+      if (block.type === 'TextBlock') {
+        const isLarge = block.size === 'Large';
+        const isSmall = block.size === 'Small';
+        const colorStyle = block.color === 'Accent' ? 'color:#2563eb;' : (block.color === 'Warning' ? 'color:#d97706;' : '');
+        return `<div style="${isLarge ? 'font-size:1.05rem;font-weight:700;margin:4px 0;' : isSmall ? 'font-size:0.74rem;font-weight:700;text-transform:uppercase;' : 'font-size:0.84rem;color:var(--text-secondary);margin-bottom:8px;'}${colorStyle}">${escapeHtml(block.text || '')}</div>`;
+      }
+      if (block.type === 'FactSet' && Array.isArray(block.facts)) {
+        return `
+          <div class="ac-fact-grid">
+            ${block.facts.map(f => `
+              <div class="ac-fact-title">${escapeHtml(f.title)}</div>
+              <div class="ac-fact-val">${escapeHtml(f.value)}</div>
+            `).join('')}
+          </div>
+        `;
+      }
+      if (block.type === 'Input.Text') {
+        return `
+          <div style="margin-top:8px;">
+            <input type="text" id="acLiveInput_${item.id}" class="styled-input" placeholder="${escapeHtml(block.placeholder || 'Açıklama yazınız...')}">
+          </div>
+        `;
+      }
+      return '';
+    }).join('');
+
+    const actionsHtml = Array.isArray(card.actions) ? card.actions.map((act, idx) => {
+      if (act.type === 'Action.OpenUrl') {
+        return `<a href="${escapeHtml(act.url)}" class="action-btn secondary-btn sm-btn" style="text-decoration:none;">${escapeHtml(act.title)}</a>`;
+      }
+      const btnClass = act.title.includes('Tamamla') || act.title.includes('Onayla')
+        ? 'primary-btn'
+        : (act.title.includes('Reddet') ? 'danger-bare-btn' : 'secondary-btn');
+      return `
+        <button type="button" class="action-btn ${btnClass} sm-btn btn-exec-ac-action" data-idx="${idx}">
+          ${escapeHtml(act.title)}
+        </button>
+      `;
+    }).join('') : '';
+
+    cardHtml = `
+      <div class="adaptive-card-simulator-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <span class="ac-header-tag">⚡ Microsoft Outlook Actionable Message (Adaptive Card v1.4)</span>
+          <span style="font-size:0.72rem; color:var(--text-tertiary);">Alıcı: ${escapeHtml((item.to || []).join(', '))}</span>
+        </div>
+        ${bodyBlocks}
+        ${item.action_taken ? `
+          <div style="margin-top:10px; padding:10px 12px; border-radius:8px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); color:#059669; font-size:0.82rem; font-weight:600;">
+            ${escapeHtml(item.action_taken)}
+          </div>
+        ` : ''}
+        ${actionsHtml ? `<div class="ac-actions-bar">${actionsHtml}</div>` : ''}
+      </div>
+    `;
+  }
+
+  previewEl.innerHTML = `
+    ${item.error_message ? `
+      <div style="margin-bottom:12px; padding:10px 12px; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); color:#dc2626; font-size:0.8rem;">
+        <strong>SMTP Uyarı Notu:</strong> ${escapeHtml(item.error_message)} (E-posta yerel Outbox'a kaydedildi, aşağıdaki karttan canlı test edebilirsiniz.)
+      </div>
+    ` : ''}
+    ${cardHtml}
+    <div style="margin-top:10px;">
+      <div style="font-size:0.75rem; font-weight:700; color:var(--text-tertiary); margin-bottom:6px; text-transform:uppercase;"> Gönderilen E-posta HTML Gövdesi Önizlemesi:</div>
+      <div style="background:#ffffff; color:#0f172a; border-radius:8px; border:1px solid var(--border-color); padding:12px;">
+        ${item.html_preview || ''}
+      </div>
+    </div>
+  `;
+
+  previewEl.querySelectorAll('.btn-exec-ac-action').forEach(btn => {
+    btn.onclick = async () => {
+      const idx = Number(btn.dataset.idx);
+      const act = card.actions[idx];
+      if (!act || !act.body) return;
+
+      try {
+        const payload = JSON.parse(act.body);
+        payload.outboxId = item.id;
+        const liveInput = document.getElementById(`acLiveInput_${item.id}`);
+        if (liveInput && liveInput.value.trim()) {
+          payload.explanation_text = liveInput.value.trim();
+        }
+
+        btn.disabled = true;
+        const res = await apiCall('/api/outlook/action', 'POST', payload);
+        showToast(res.message || 'Outlook kart aksiyonu uygulandı!', 'success');
+
+        await loadEmailAutomationDashboard();
+        if (state.currentProjectId) {
+          await loadProjectTasks(state.currentProjectId);
+        }
+        await loadNotifications();
+      } catch (err) {
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Hızlı geçiş butonları
+  document.getElementById('gotoEmailAutomationFromTeamBtn')?.addEventListener('click', () => {
+    switchView('view-email-automation');
+  });
+  document.getElementById('gotoScheduledReportsBtn')?.addEventListener('click', () => {
+    switchView('view-email-automation');
+  });
+  document.getElementById('refreshOutboxBtn')?.addEventListener('click', () => {
+    loadEmailAutomationDashboard();
+  });
+
+  // Exchange Online SMTP Kaydet Formu
+  const smtpForm = document.getElementById('smtpConfigForm');
+  if (smtpForm) {
+    smtpForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        host: document.getElementById('smtpHostInput').value.trim(),
+        port: Number(document.getElementById('smtpPortInput').value) || 587,
+        username: document.getElementById('smtpUsernameInput').value.trim(),
+        password: document.getElementById('smtpPasswordInput').value,
+        from_name: document.getElementById('smtpFromNameInput').value.trim(),
+        public_base_url: document.getElementById('smtpBaseUrlInput').value.trim(),
+        enable_actionable_cards: document.getElementById('smtpEnableActionableCards').checked
+      };
+      const saved = await apiCall('/api/admin/smtp-config', 'PUT', body);
+      emailAutoState.smtpConfig = saved;
+      renderSmtpConfigForm(saved);
+      showToast('💾 Exchange Online Plan 1 (SMTP) ayarları başarıyla kaydedildi!', 'success');
+    });
+  }
+
+  // Test Canlı Görev Kartı Gönder
+  const testCardBtn = document.getElementById('sendTestActionableCardBtn');
+  if (testCardBtn) {
+    testCardBtn.addEventListener('click', async () => {
+      const recipient_email = document.getElementById('smtpTestRecipientInput')?.value.trim() || state.currentUser?.email;
+      testCardBtn.disabled = true;
+      try {
+        const res = await apiCall('/api/admin/smtp-test', 'POST', { recipient_email });
+        if (res.item) {
+          emailAutoState.selectedOutboxId = res.item.id;
+          if (res.item.status === 'SENT') {
+            showToast(`✅ Canlı Görev Kartı Exchange Online üzerinden (${recipient_email}) adresine gönderildi!`, 'success');
+          } else {
+            showToast(`📩 Canlı Görev Kartı oluşturuldu ve Giden Kutusu Simülatöründe açıldı!`, 'info');
+          }
+        }
+        await loadEmailAutomationDashboard();
+      } finally {
+        testCardBtn.disabled = false;
+      }
+    });
+  }
+
+  // Zamanlanmış Rapor Kuralı Ekle Formu
+  const schedForm = document.getElementById('scheduledReportForm');
+  if (schedForm) {
+    schedForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('schedReportName').value.trim();
+      const project_id = document.getElementById('schedProjectSelect').value;
+      const report_type = document.getElementById('schedReportType').value;
+      const frequency = document.getElementById('schedFrequency').value;
+      const send_time = document.getElementById('schedSendTime').value || '09:00';
+      const recipientsRaw = document.getElementById('schedRecipients').value;
+      const include_adaptive_card = document.getElementById('schedIncludeAdaptiveCard').checked;
+
+      const recipients = recipientsRaw.split(',').map(s => s.trim()).filter(Boolean);
+      await apiCall('/api/admin/scheduled-reports', 'POST', {
+        name,
+        project_id,
+        report_type,
+        frequency,
+        send_time,
+        recipients,
+        include_adaptive_card
+      });
+
+      document.getElementById('schedReportName').value = '';
+      showToast('⏰ Yeni zamanlanmış otomatik rapor kuralı eklendi!', 'success');
+      await loadEmailAutomationDashboard();
+    });
+  }
+});

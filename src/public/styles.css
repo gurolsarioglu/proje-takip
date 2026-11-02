@@ -5212,3 +5212,302 @@ html, body {
 }
 
 
+
+
+/* ================= EXCHANGE ONLINE (SMTP), OUTLOOK ACTIONABLE CARDS & ZAMANLANMIŞ RAPORLAR ================= */
+.email-auto-hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 22px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.email-hero-left h3 {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 6px 0 4px 0;
+}
+.email-hero-left p {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.email-hero-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.smtp-status-pill {
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.smtp-status-pill.live {
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.smtp-status-pill.simulated {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.smtp-quick-test-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.email-automation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.email-config-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.email-card-header h4 {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+}
+.email-card-header p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.smtp-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.smtp-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+.smtp-saved-hint {
+  font-size: 0.76rem;
+  color: var(--text-tertiary);
+}
+.quick-recipient-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.recipient-chip-btn {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.recipient-chip-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+.scheduled-jobs-section {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+.scheduled-reports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.sched-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface-secondary);
+}
+.sched-job-info strong {
+  display: block;
+  font-size: 0.84rem;
+  color: var(--text-primary);
+}
+.sched-job-meta {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.sched-job-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.outbox-explorer-card {
+  padding: 20px;
+}
+.outbox-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.outbox-header-bar h4 {
+  font-size: 0.98rem;
+  font-weight: 700;
+  margin: 0 0 3px 0;
+}
+.outbox-header-bar p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.outbox-split-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 16px;
+  min-height: 360px;
+}
+@media (max-width: 1024px) {
+  .outbox-split-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.outbox-list-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.outbox-mail-item {
+  padding: 11px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.outbox-mail-item:hover,
+.outbox-mail-item.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.06);
+}
+.outbox-mail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.outbox-cat-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
+.outbox-mail-subj {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.outbox-mail-to {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+.outbox-preview-pane {
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-surface-secondary);
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 460px;
+}
+.outbox-empty-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 260px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.outbox-empty-preview span {
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+}
+.adaptive-card-simulator-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+.ac-header-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  padding: 3px 9px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+.ac-fact-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 5px 10px;
+  font-size: 0.8rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-surface-secondary);
+  border: 1px solid var(--border-color);
+  margin: 10px 0;
+}
+.ac-fact-title {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.ac-fact-val {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.ac-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}

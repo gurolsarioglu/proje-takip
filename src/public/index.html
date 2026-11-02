@@ -144,6 +144,11 @@
           <span class="nav-icon">👥</span>
           <span class="nav-text" data-i18n="nav_team">Ekip & Personel</span>
         </button>
+        <button class="nav-item admin-only" id="navEmailAutomationBtn" data-nav="view-email-automation">
+          <span class="nav-icon">📧</span>
+          <span class="nav-text">E-posta & Otomatik Rapor</span>
+          <span class="nav-badge gold-badge">Exchange</span>
+        </button>
       </nav>
 
       <!-- Alt Profil ve Dil Alanı -->
@@ -438,7 +443,10 @@
       <section id="view-team" class="view-section">
         <div class="section-intro-actions">
           <p class="intro-desc" data-i18n="team_intro">Şirket personellerinin iletişim kartları, ülkeleri, dilleri ve proje açma yetkileri.</p>
-          <button id="newPersonnelBtn" class="action-btn primary-btn sm-btn">+ Yeni Personel Ekle</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" id="gotoEmailAutomationFromTeamBtn" class="action-btn secondary-btn sm-btn">📧 Exchange (SMTP) & Otomatik Rapor Ayarları</button>
+            <button id="newPersonnelBtn" class="action-btn primary-btn sm-btn">+ Yeni Personel Ekle</button>
+          </div>
         </div>
 
         <div class="card clean-card">
@@ -510,6 +518,9 @@
 
               <button id="saveReportLayoutBtn" class="action-btn secondary-btn sm-btn" title="Rapor Düzenini Kaydet">
                 💾 Kaydet
+              </button>
+              <button type="button" id="gotoScheduledReportsBtn" class="action-btn outline-btn sm-btn admin-only" title="Bu raporu otomatik e-posta olarak zamanla">
+                ⏰ Otomatik E-posta Zamanla
               </button>
               <button id="clearReportCanvasBtn" class="action-btn danger-bare-btn sm-btn" title="Tuvali Temizle">
                 🗑️ Temizle
@@ -714,6 +725,183 @@
               <span class="ms-badge-counter" id="msCompletedCount">0</span>
             </button>
             <div id="msCompletedTodoList" class="ms-items-wrapper" style="display:none;"></div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ================= GÖRÜNÜM 8: EXCHANGE ONLINE (SMTP), OUTLOOK ACTIONABLE CARDS & ZAMANLANMIŞ RAPORLAR ================= -->
+      <section id="view-email-automation" class="view-section">
+        <!-- Üst Durum & Hızlı Test Barı -->
+        <div class="card email-auto-hero-card">
+          <div class="email-hero-left">
+            <div class="email-hero-badge-row">
+              <span class="report-badge">EXCHANGE ONLINE PLAN 1</span>
+              <span id="smtpStatusBadge" class="smtp-status-pill simulated">🟡 Yerel Outbox Simülasyon Modu (Şifre Girildiğinde Canlı SMTP Aktif Olur)</span>
+            </div>
+            <h3>📧 Exchange Online (SMTP), Outlook Actionable Messages & Zamanlanmış Rapor Merkezi</h3>
+            <p>Personellere giden etkileşimli görev kartlarını (Adaptive Cards), Exchange Online Plan 1 mail hesabınızı ve otomatik zamanlanmış yönetici raporlarını buradan yönetin.</p>
+          </div>
+          <div class="email-hero-right">
+            <div class="smtp-quick-test-box">
+              <input type="email" id="smtpTestRecipientInput" class="styled-input sm-input" placeholder="Test alıcı (örn: ahmet@fggroup.com.tr)" style="min-width:220px;">
+              <button type="button" id="sendTestActionableCardBtn" class="action-btn primary-btn sm-btn">
+                🚀 Örnek Canlı Görev Kartı Gönder
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- İki Sütunlu Yönetim Alanı: Sol SMTP Ayarları + Sağ Zamanlanmış Raporlar -->
+        <div class="email-automation-grid">
+          <!-- SOL KART: Exchange Online Plan 1 SMTP Yapılandırması -->
+          <div class="card clean-card email-config-card">
+            <div class="email-card-header">
+              <div>
+                <h4>⚙️ Exchange Online Plan 1 (SMTP) Hesap Ayarları</h4>
+                <p>Microsoft 365 / Exchange Online kullanıcı adı ve şifrenizi girerek gerçek e-posta gönderimini aktifleştirin.</p>
+              </div>
+            </div>
+
+            <form id="smtpConfigForm" class="smtp-config-form">
+              <div class="form-row">
+                <div class="form-group" style="flex:2;">
+                  <label for="smtpHostInput">SMTP Sunucusu (Host) *</label>
+                  <input type="text" id="smtpHostInput" class="styled-input" value="smtp.office365.com" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label for="smtpPortInput">Port (STARTTLS) *</label>
+                  <input type="number" id="smtpPortInput" class="styled-input" value="587" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="smtpUsernameInput">Mail Kullanıcı Adı (Exchange E-posta) *</label>
+                  <input type="email" id="smtpUsernameInput" class="styled-input" placeholder="bildirim@fggroup.com.tr" required>
+                </div>
+                <div class="form-group">
+                  <label for="smtpPasswordInput">Mail Şifresi / Uygulama Şifresi</label>
+                  <input type="password" id="smtpPasswordInput" class="styled-input" placeholder="Exchange Online şifrenizi giriniz">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="smtpFromNameInput">Gönderici Görünür Adı</label>
+                  <input type="text" id="smtpFromNameInput" class="styled-input" value="FG Group Proje Sistemi">
+                </div>
+                <div class="form-group">
+                  <label for="smtpBaseUrlInput">Ağ Geri Dönüş Adresi (Callback Base URL) *</label>
+                  <input type="text" id="smtpBaseUrlInput" class="styled-input" value="http://10.1.0.45:3000" required title="Outlook içindeki Görevi Başlat / Tamamla butonlarının istek atacağı sunucu adresi">
+                </div>
+              </div>
+
+              <div class="form-group permission-box" style="margin-top:6px;">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="smtpEnableActionableCards" checked>
+                  <span><strong>Outlook Actionable Messages (Canlı E-posta Kartları) Aktif:</strong> Görev kilidi açıldığında (<code>READY</code>), gecikme mazereti gerektiğinde (<code>KAB07</code>) ve görünürlük taleplerinde (<code>KAB03</code>) e-posta içine canlı butonlar gömülür.</span>
+                </label>
+              </div>
+
+              <div class="smtp-form-footer">
+                <span id="smtpLastSavedInfo" class="smtp-saved-hint">Varsayılan: smtp.office365.com:587 (STARTTLS)</span>
+                <button type="submit" class="action-btn primary-btn sm-btn">💾 SMTP Ayarlarını Kaydet</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- SAĞ KART: Zamanlanmış Otomatik Raporlar (Scheduled Reports) -->
+          <div class="card clean-card email-config-card">
+            <div class="email-card-header">
+              <div>
+                <h4>⏰ Zamanlanmış Otomatik Rapor Gönderimi</h4>
+                <p>Belirlediğiniz gün ve saatlerde proje ilerleme, darboğaz ve performans raporlarını otomatik e-posta olarak gönderin.</p>
+              </div>
+            </div>
+
+            <form id="scheduledReportForm" class="smtp-config-form">
+              <div class="form-row">
+                <div class="form-group" style="flex:1.4;">
+                  <label for="schedReportName">Rapor Başlığı *</label>
+                  <input type="text" id="schedReportName" class="styled-input" placeholder="Örn: Günlük Tekstil Koleksiyonu Özeti" required>
+                </div>
+                <div class="form-group" style="flex:1;">
+                  <label for="schedProjectSelect">Proje Kapsamı</label>
+                  <select id="schedProjectSelect" class="styled-select">
+                    <option value="all">Tüm Projeler (Konsolide)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="schedReportType">Rapor İçeriği / Şablonu</label>
+                  <select id="schedReportType" class="styled-select">
+                    <option value="EXECUTIVE_SUMMARY">💼 Yönetici & İlerleme Özeti (KPI + Kilometre Taşları)</option>
+                    <option value="PERFORMANCE_SCORECARD">👥 Ekip Performans Karnesi (100 * (0.70*Z + 0.30*T))</option>
+                    <option value="BOTTLENECK_DELAY">⚠️ Darboğaz & Gecikme Mazeretleri Raporu</option>
+                    <option value="FULL_REPORT">📋 Kapsamlı Tam Rapor</option>
+                  </select>
+                </div>
+                <div class="form-group" style="max-width:130px;">
+                  <label for="schedFrequency">Periyot</label>
+                  <select id="schedFrequency" class="styled-select">
+                    <option value="DAILY">Her Gün</option>
+                    <option value="WEEKLY">Her Hafta</option>
+                    <option value="MONTHLY">Her Ay</option>
+                  </select>
+                </div>
+                <div class="form-group" style="max-width:110px;">
+                  <label for="schedSendTime">Saat *</label>
+                  <input type="time" id="schedSendTime" class="styled-input" value="09:00" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="schedRecipients">Alıcı E-posta Adresleri (Virgülle ayırın) *</label>
+                <input type="text" id="schedRecipients" class="styled-input" placeholder="admin@fggroup.com.tr, ahmet@fggroup.com.tr" required>
+                <div id="schedQuickRecipients" class="quick-recipient-chips"></div>
+              </div>
+
+              <div class="smtp-form-footer" style="margin-top:8px;">
+                <label class="checkbox-label" style="font-size:0.8rem;">
+                  <input type="checkbox" id="schedIncludeAdaptiveCard" checked>
+                  <span>E-posta içine <strong>Outlook Adaptive Card Özeti</strong> ekle</span>
+                </label>
+                <button type="submit" class="action-btn primary-btn sm-btn">+ Zamanlanmış Rapor Ekle</button>
+              </div>
+            </form>
+
+            <!-- Mevcut Zamanlanmış Rapor Kuralları Listesi -->
+            <div class="scheduled-jobs-section">
+              <div class="op-section-title" style="margin-bottom:8px;">📋 Aktif Zamanlanmış Rapor Kuralları</div>
+              <div id="scheduledReportsList" class="scheduled-reports-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ALT TAM GENİŞLİK KART: Giden E-posta Kutusu & Canlı Outlook Adaptive Card Önizleyici -->
+        <div class="card clean-card outbox-explorer-card">
+          <div class="outbox-header-bar">
+            <div>
+              <h4>📬 Giden E-posta Kutusu & Canlı Outlook Adaptive Card Simülatörü</h4>
+              <p>Sistemin gönderdiği tüm Actionable Message e-postalarını ve zamanlanmış raporları inceleyin; sağ panelde <strong>Outlook içindeymiş gibi butonlara tıklayarak</strong> canlı test edin.</p>
+            </div>
+            <button type="button" id="refreshOutboxBtn" class="action-btn outline-btn sm-btn">🔄 Listeyi Yenile</button>
+          </div>
+
+          <div class="outbox-split-layout">
+            <!-- Sol: Gönderilen E-postalar Listesi -->
+            <div class="outbox-list-pane" id="emailOutboxList"></div>
+
+            <!-- Sağ: Seçili E-postanın Canlı Outlook Adaptive Card + HTML Önizlemesi -->
+            <div class="outbox-preview-pane" id="liveAdaptiveCardPreview">
+              <div class="outbox-empty-preview">
+                <span>📩</span>
+                <p>Önizlemek ve canlı butonlarını test etmek için sol listeden bir e-posta seçin.</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>

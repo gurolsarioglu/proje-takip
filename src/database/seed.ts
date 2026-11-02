@@ -4,9 +4,11 @@ import { ProjectService } from '../modules/project/project.service.js';
 import { TaskService } from '../modules/task/task.service.js';
 import { DependencyService } from '../modules/dependency/dependency.service.js';
 import { DelayService } from '../modules/delay/delay.service.js';
+import { NotificationService } from '../modules/notification/notification.service.js';
+import { EmailAndAutomationService } from '../modules/email/email.service.js';
 
 export function seedDatabase(db: Database) {
-  // Always initialize fresh 5-person team & solo projects on server boot
+  // Always initialize fresh 5-person team & projects on server boot
   db.reset();
 
   const authService = new AuthService(db);
@@ -14,6 +16,8 @@ export function seedDatabase(db: Database) {
   const dependencyService = new DependencyService(db);
   const delayService = new DelayService(db);
   const taskService = new TaskService(db, dependencyService, delayService);
+  const notificationService = new NotificationService(db);
+  const emailService = new EmailAndAutomationService(db, taskService, delayService, projectService, notificationService);
 
   // 1. Ana Şirket: FG Group
   const tenantFG = authService.createTenant('FG Group', 'entra-fggroup-prod-001');
@@ -46,9 +50,9 @@ export function seedDatabase(db: Database) {
       country: 'Türkiye',
       password: '123',
       system_role: 'USER',
-      can_create_project: true, // Proje oluşturabilir
-      can_build_reports: true,  // Rapor oluşturma yetkili
-      department: 'Yazılım & Teknoloji'
+      can_create_project: true,
+      can_build_reports: true,
+      department: 'Koleksiyon & Proje Yönetimi'
     }
   );
 
@@ -62,9 +66,9 @@ export function seedDatabase(db: Database) {
       country: 'Türkiye',
       password: '123',
       system_role: 'USER',
-      can_create_project: true, // Kendi solo projesini tek başına yürütebilir
+      can_create_project: true,
       can_build_reports: true,
-      department: 'Ürün & UX Tasarım'
+      department: 'Moda Tasarım & Modelhane'
     }
   );
 
@@ -78,9 +82,9 @@ export function seedDatabase(db: Database) {
       country: 'Türkiye',
       password: '123',
       system_role: 'USER',
-      can_create_project: true, // Kendi solo siber güvenlik projesini yürütebilir
+      can_create_project: true,
       can_build_reports: false,
-      department: 'Siber Güvenlik & DevOps'
+      department: 'Numune Dikim Atölyesi'
     }
   );
 
@@ -94,9 +98,9 @@ export function seedDatabase(db: Database) {
       country: 'Almanya',
       password: '123',
       system_role: 'USER',
-      can_create_project: false, // Standart çalışan
+      can_create_project: false,
       can_build_reports: false,
-      department: 'Mühendislik'
+      department: 'Kumaş & Tedarik Mühendisliği'
     }
   );
 
@@ -110,9 +114,9 @@ export function seedDatabase(db: Database) {
       country: 'İngiltere',
       password: '123',
       system_role: 'USER',
-      can_create_project: false, // Standart çalışan
+      can_create_project: false,
       can_build_reports: false,
-      department: 'Operasyon & QA'
+      department: 'Kalite Kontrol & Showroom'
     }
   );
 
@@ -120,8 +124,113 @@ export function seedDatabase(db: Database) {
   const authAhmet = { tenant_id: tenantFG.id, user_id: ahmet.id, email: ahmet.email, name: ahmet.name };
   const authZeynep = { tenant_id: tenantFG.id, user_id: zeynep.id, email: zeynep.email, name: zeynep.name };
   const authEmre = { tenant_id: tenantFG.id, user_id: emre.id, email: emre.email, name: emre.name };
+  const authHans = { tenant_id: tenantFG.id, user_id: hans.id, email: hans.email, name: hans.name };
+  const authSarah = { tenant_id: tenantFG.id, user_id: sarah.id, email: sarah.email, name: sarah.name };
 
-  // 4. ORTAK EKİP PROJESİ (5 Kişinin Birlikte Çalıştığı Ana Proje): Dijital Dönüşüm & ERP Entegrasyonu
+  // 4. PROJE 1 (5 Kişilik Tekstil Ekibi - Müşteri Tasarım Onayı & Numune Sunumu)
+  const textileProj = projectService.createProject(
+    authAhmet,
+    '2027 İlkbahar/Yaz Tekstil Koleksiyonu - Tasarım Onayı & Numune Sunumu',
+    '5 kişilik tekstil ekibiyle müşteri sunumu için koleksiyon tasarımlarının beğeniye sunulması, kumaş/kalıp hazırlığı, prototip numune dikimi ve showroom final sunumu.',
+    '2026-10-15T09:00:00Z',
+    '2026-11-22T18:00:00Z'
+  );
+  projectService.addOrUpdateMember(authAhmet, textileProj.id, zeynep.id, 'EDITOR');
+  projectService.addOrUpdateMember(authAhmet, textileProj.id, hans.id, 'VIEWER');
+  projectService.addOrUpdateMember(authAhmet, textileProj.id, sarah.id, 'VIEWER');
+
+  const tx1 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '1. Koleksiyon Moodboard, Renk Kartelası ve Eskiz Tasarımları',
+    '2026-10-15T09:00:00Z',
+    '2026-10-20T18:00:00Z',
+    zeynep.id,
+    'Müşteri beklentilerine uygun 12 parçalık kapsül koleksiyonun teknik çizim ve kumaş tuşe önerilerinin hazırlanması.',
+    { type: 'TASK', priority: 'HIGH' }
+  );
+  const tx2 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '2. Müşteri Tasarım Sunumu ve Model Beğeni Onayı',
+    '2026-10-21T09:00:00Z',
+    '2026-10-24T18:00:00Z',
+    ahmet.id,
+    'Hazırlanan eskizlerin müşteriye sunulması, beğenilen modellerin seçilmesi ve numune üretimi için tasarım onayının alınması.',
+    { type: 'MILESTONE', priority: 'HIGH' }
+  );
+  const tx3 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '3. Onaylanan Tasarımlar İçin Numune Kumaş ve Aksesuar Tedariki',
+    '2026-10-25T09:00:00Z',
+    '2026-10-29T18:00:00Z',
+    hans.id,
+    'Müşterinin beğendiği tasarımlar için organik pamuklu/ipek kumaşların, düğme ve fermuarların tedarik edilmesi.',
+    { type: 'TASK', priority: 'HIGH' }
+  );
+  const tx4 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '4. Baz Kalıp Çıkarma, Serileme ve Pastal Planı Hazırlığı',
+    '2026-10-25T09:00:00Z',
+    '2026-10-28T18:00:00Z',
+    zeynep.id,
+    'Beğenilen modellerin Gerber/Lectra sisteminde 38 beden baz kalıplarının çıkarılması ve kesim planının hazırlanması.',
+    { type: 'TASK', priority: 'NORMAL' }
+  );
+  const tx5 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '5. Prototip Numunelerin Kesim ve Dikimi (Atölye)',
+    '2026-10-30T09:00:00Z',
+    '2026-11-04T18:00:00Z',
+    emre.id,
+    'Gelen kumaşların kalıplara göre kesilmesi ve 5 kombin prototip numunenin müşteri sunumu için atölyede dikilmesi.',
+    { type: 'TASK', priority: 'HIGH' }
+  );
+  const tx6 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '6. Numune Kalite Kontrol, Ölçü Provası ve Ütü/Askı Hazırlığı',
+    '2026-11-05T09:00:00Z',
+    '2026-11-08T18:00:00Z',
+    sarah.id,
+    'Dikilen numunelerin canlı manken üzerinde ölçü/duruş provası, dikiş hata kontrolü ve sunum askı hazırlığı.',
+    { type: 'BUG', priority: 'HIGH' }
+  );
+  const tx7 = taskService.createTask(
+    authAhmet,
+    textileProj.id,
+    '7. Hazırlanan Numunelerin Müşteriye Showroom Sunumu',
+    '2026-11-09T09:00:00Z',
+    '2026-11-12T18:00:00Z',
+    ahmet.id,
+    'Beğenilen tasarımların fiziksel numunelerinin müşteriye canlı sunumu ve nihai koleksiyon onayı.',
+    { type: 'MILESTONE', priority: 'HIGH' }
+  );
+
+  dependencyService.addDependency(authAhmet, tx1.id, tx2.id);
+  dependencyService.addDependency(authAhmet, tx2.id, tx3.id);
+  dependencyService.addDependency(authAhmet, tx2.id, tx4.id);
+  dependencyService.addDependency(authAhmet, tx3.id, tx5.id);
+  dependencyService.addDependency(authAhmet, tx4.id, tx5.id);
+  dependencyService.addDependency(authAhmet, tx5.id, tx6.id);
+  dependencyService.addDependency(authAhmet, tx6.id, tx7.id);
+
+  // tx1 (Eskiz), tx2 (Tasarım Beğenisi), tx3 (Kumaş) ve tx4 (Kalıp) tamamlandı -> tx5 (Numune Dikimi - Emre) şu an READY!
+  taskService.startTask(authZeynep, tx1.id);
+  taskService.completeTask(authZeynep, tx1.id);
+  taskService.startTask(authAhmet, tx2.id);
+  taskService.updateTaskPlan(authAhmet, tx2.id, '2026-10-21T09:00:00Z', '2026-10-25T18:00:00Z', 'Müşteri ön sunumda keten ceket modelinde yaka revizyonu talep etti.');
+  taskService.completeTask(authAhmet, tx2.id);
+  taskService.startTask(authZeynep, tx4.id);
+  taskService.completeTask(authZeynep, tx4.id);
+  taskService.startTask(authHans, tx3.id);
+  delayService.submitExplanation(authHans, tx3.id, 'İpek/keten kumaşın boyahane renk tutturma (lab-dip) onayı 1 gün sürdü, kumaşlar atölyeye teslim edildi.');
+  taskService.completeTask(authHans, tx3.id);
+
+  // 5. ORTAK EKİP PROJESİ 2: Dijital Dönüşüm & ERP Entegrasyonu
   const proj = projectService.createProject(
     authAdmin,
     'Dijital Dönüşüm & ERP Entegrasyonu',
@@ -134,9 +243,7 @@ export function seedDatabase(db: Database) {
   projectService.addOrUpdateMember(authAdmin, proj.id, zeynep.id, 'EDITOR');
   projectService.addOrUpdateMember(authAdmin, proj.id, hans.id, 'VIEWER');
   projectService.addOrUpdateMember(authAdmin, proj.id, sarah.id, 'VIEWER');
-  // Not: Emre bu ortak projede sadece kendine atanan görevden sorumlu (KAB02 kısıtlı görünüm & KAB03 görünürlük talebi testi için)
 
-  // Ortak Proje Görevleri (5 Kişiye Dağıtılmış DAG Zinciri)
   const t1 = taskService.createTask(
     authAdmin,
     proj.id,
@@ -198,7 +305,6 @@ export function seedDatabase(db: Database) {
     { type: 'MILESTONE', priority: 'HIGH' }
   );
 
-  // Bağımlılıklar (Finish-to-Start DAG)
   dependencyService.addDependency(authAdmin, t1.id, t2.id);
   dependencyService.addDependency(authAdmin, t1.id, t3.id);
   dependencyService.addDependency(authAdmin, t2.id, t4.id);
@@ -206,7 +312,6 @@ export function seedDatabase(db: Database) {
   dependencyService.addDependency(authAdmin, t4.id, t5.id);
   dependencyService.addDependency(authAdmin, t5.id, t6.id);
 
-  // t1 zamanında tamamlandı -> t2 (Hans) ve t3 (Zeynep) otomatik READY oldu!
   taskService.startTask(authAhmet, t1.id);
   taskService.completeTask(authAhmet, t1.id);
   db.updateTask(tenantFG.id, t1.id, {
@@ -214,16 +319,14 @@ export function seedDatabase(db: Database) {
     actual_completion_date: '2026-10-09T16:00:00Z'
   });
 
-  // t2 başladı (Hans) ve %60 ilerledi, vadesi (2026-10-30) geçtiği için gecikme açıklaması girdi
   taskService.startTask(authAdmin, t2.id);
   db.updateTask(tenantFG.id, t2.id, { progress: 60, actual_start_date: '2026-10-12T09:00:00Z' });
   delayService.submitExplanation(authAdmin, t2.id, 'Veritabanı replikasyon testleri sırasında ek güvenlik yaması uygulandı.');
 
-  // t3 başladı (Zeynep) ve %80 ilerledi (takvimde)
   taskService.startTask(authZeynep, t3.id);
   db.updateTask(tenantFG.id, t3.id, { progress: 80, actual_start_date: '2026-10-16T09:00:00Z' });
 
-  // 5. SOLO PROJE 1 (Zeynep Kaya Tek Başına Yürütüyor): FG Kurumsal Tasarım Sistemi
+  // 6. SOLO PROJE 1 (Zeynep Kaya)
   const soloProjZeynep = projectService.createProject(
     authZeynep,
     'FG Kurumsal Tasarım Sistemi (Design System v2)',
@@ -249,7 +352,7 @@ export function seedDatabase(db: Database) {
     '2026-10-13T09:00:00Z',
     '2026-11-12T18:00:00Z',
     zeynep.id,
-    'Tüm FG Group ürünlerinde ürünlerde kullanılacak atomik bileşen setinin inşası',
+    'Tüm FG Group ürünlerinde kullanılacak atomik bileşen setinin inşası',
     { type: 'TASK', priority: 'NORMAL' }
   );
   const zt3 = taskService.createTask(
@@ -267,14 +370,10 @@ export function seedDatabase(db: Database) {
 
   taskService.startTask(authZeynep, zt1.id);
   taskService.completeTask(authZeynep, zt1.id);
-  db.updateTask(tenantFG.id, zt1.id, {
-    actual_start_date: '2026-10-05T10:00:00Z',
-    actual_completion_date: '2026-10-11T15:00:00Z'
-  });
   taskService.startTask(authZeynep, zt2.id);
   db.updateTask(tenantFG.id, zt2.id, { progress: 65, actual_start_date: '2026-10-13T10:00:00Z' });
 
-  // 6. SOLO PROJE 2 (Emre Demir Tek Başına Yürütüyor): ISO 27001 & Zero-Trust Siber Denetimi
+  // 7. SOLO PROJE 2 (Emre Demir)
   const soloProjEmre = projectService.createProject(
     authEmre,
     'ISO 27001 & Sıfır Güven (Zero-Trust) Siber Denetimi',
@@ -318,30 +417,10 @@ export function seedDatabase(db: Database) {
 
   taskService.startTask(authEmre, et1.id);
   taskService.completeTask(authEmre, et1.id);
-  db.updateTask(tenantFG.id, et1.id, {
-    actual_start_date: '2026-10-08T10:00:00Z',
-    actual_completion_date: '2026-10-15T15:00:00Z'
-  });
   taskService.startTask(authEmre, et2.id);
   db.updateTask(tenantFG.id, et2.id, { progress: 45, actual_start_date: '2026-10-17T10:00:00Z' });
 
-  // 7. Microsoft To Do & Outlook Başlangıç Eşitlemesi
-  db.insertTodoItem({
-    id: 'ms_todo_sample_01',
-    tenant_id: tenantFG.id,
-    user_id: admin.id,
-    title: 'Deneme Görev',
-    body_content: 'Outlook To Do üzerinden senkronize edilen kişisel kontrol maddesi',
-    is_completed: false,
-    due_date: '2025-07-24T18:00:00Z',
-    importance: 'high',
-    is_starred: true,
-    source: 'OUTLOOK_TODO',
-    synced_at: new Date().toISOString(),
-    created_at: new Date('2025-07-20T09:00:00Z').toISOString()
-  });
-
-  // Atanan FG Group görevlerinin To Do listesine otomatik aktarılması
+  // 8. Microsoft To Do & Outlook Başlangıç Eşitlemesi
   const allTasks = db.getTasks(tenantFG.id);
   for (const t of allTasks) {
     if (t.assignee_id) {
@@ -363,5 +442,34 @@ export function seedDatabase(db: Database) {
     }
   }
 
-  console.log('FG Group 5 kişilik ekip, ortak proje ve solo projeler başarıyla yüklendi.');
+  // 9. Exchange Online Plan 1 (SMTP), Zamanlanmış Raporlar ve Başlangıç Outlook Actionable Cards
+  emailService.getSmtpConfig(tenantFG.id);
+
+  const job1 = emailService.createScheduledReport(authAdmin, {
+    name: 'Günlük Tekstil Koleksiyonu & Darboğaz Özeti',
+    project_id: textileProj.id,
+    report_type: 'EXECUTIVE_SUMMARY',
+    frequency: 'DAILY',
+    send_time: '09:00',
+    recipients: ['admin@fggroup.com.tr', 'ahmet@fggroup.com.tr', 'zeynep@fggroup.com.tr'],
+    include_adaptive_card: true
+  });
+
+  emailService.createScheduledReport(authAdmin, {
+    name: 'Haftalık 5 Kişilik Ekip Performans Karnesi (Şartname v0.3)',
+    project_id: 'all',
+    report_type: 'PERFORMANCE_SCORECARD',
+    frequency: 'WEEKLY',
+    day_of_week: 5,
+    send_time: '17:00',
+    recipients: ['admin@fggroup.com.tr', 'ahmet@fggroup.com.tr'],
+    include_adaptive_card: true
+  });
+
+  // Başlangıç örnek Actionable Card e-postaları (Emre'nin hazır numune dikimi görevi, Hans'ın gecikme kartı ve örnek otomatik rapor)
+  void emailService.sendTaskReadyActionableCard(tenantFG.id, tx5.id);
+  void emailService.sendDelayExplanationActionableCard(tenantFG.id, t2.id);
+  void emailService.executeScheduledReportJob(tenantFG.id, job1.id);
+
+  console.log('FG Group 5 kişilik ekip, Tekstil & ERP projeleri ve Exchange Online / Actionable Cards başarıyla yüklendi.');
 }
