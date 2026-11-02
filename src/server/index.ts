@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Database } from '../database/db.js';
 import { seedDatabase } from '../database/seed.js';
@@ -19,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -1078,7 +1079,7 @@ app.use((req, res) => {
 });
 
 // Listen on PORT
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(` Görev & Bağımlılık Yönetim Sistemi (v0.3) Aktif!`);
   console.log(` URL: http://localhost:${PORT}`);

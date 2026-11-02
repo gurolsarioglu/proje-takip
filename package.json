@@ -5,8 +5,8 @@
   "type": "module",
   "main": "dist/server/index.js",
   "scripts": {
-    "dev": "tsx watch src/server/index.ts",
-    "build": "tsc && node -e \"require('fs').cpSync('src/public', 'dist/public', {recursive: true})\"",
+    "dev": "tsx src/server/index.ts",
+    "build": "tsc && node -e \"import('fs').then(fs => fs.cpSync('src/public', 'dist/public', {recursive: true}))\"",
     "start": "node dist/server/index.js",
     "test": "tsx --test tests/**/*.test.ts"
   },
