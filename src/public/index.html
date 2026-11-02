@@ -782,7 +782,10 @@
                 </div>
                 <div class="form-group">
                   <label for="smtpPasswordInput">Mail Şifresi / Uygulama Şifresi</label>
-                  <input type="password" id="smtpPasswordInput" class="styled-input" placeholder="Exchange Online şifrenizi giriniz">
+                  <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="password" id="smtpPasswordInput" class="styled-input" placeholder="Exchange Online şifrenizi giriniz" style="flex:1;">
+                    <button type="button" id="toggleSmtpPassBtn" class="action-btn secondary-btn sm-btn" title="Şifreyi Göster / Gizle" style="padding:8px 10px;">👁️</button>
+                  </div>
                 </div>
               </div>
 
@@ -804,10 +807,32 @@
                 </label>
               </div>
 
-              <div class="smtp-form-footer">
-                <span id="smtpLastSavedInfo" class="smtp-saved-hint">Varsayılan: smtp.office365.com:587 (STARTTLS)</span>
-                <button type="submit" class="action-btn primary-btn sm-btn">💾 SMTP Ayarlarını Kaydet</button>
+              <!-- Doğrudan Kart İçi Canlı Bağlantı & Gönderim Test Alanı -->
+              <div style="margin-top:10px; padding:12px 14px; border-radius:10px; background:var(--surface-hover, #f8fafc); border:1px dashed var(--border-color, #cbd5e1);">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                  <div style="flex:1; min-width:200px;">
+                    <label for="smtpInlineTestRecipient" style="display:block; font-size:0.76rem; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">
+                      🧪 Bağlantı Doğrulama & Test E-postası Alıcısı:
+                    </label>
+                    <input type="email" id="smtpInlineTestRecipient" class="styled-input sm-input" placeholder="Test mailinin gönderileceği e-posta (örn: kendi adresiniz)" style="width:100%;">
+                  </div>
+                  <div style="display:flex; align-items:flex-end; padding-top:18px;">
+                    <button type="button" id="verifySmtpConnectionBtn" class="action-btn sm-btn" style="background:linear-gradient(135deg, #059669, #047857); color:#ffffff; border:none; font-weight:700; padding:9px 16px; box-shadow:0 2px 6px rgba(5,150,105,0.25);">
+                      🔌 Bağlantıyı Test Et & Test Maili Gönder
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              <div class="smtp-form-footer" style="margin-top:12px;">
+                <span id="smtpLastSavedInfo" class="smtp-saved-hint">Varsayılan: smtp.office365.com:587 (STARTTLS)</span>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <button type="submit" class="action-btn primary-btn sm-btn">💾 SMTP Ayarlarını Kaydet</button>
+                </div>
+              </div>
+
+              <!-- Canlı SMTP Bağlantı ve Kimlik Doğrulama Sonuç Kutusu -->
+              <div id="smtpDiagnosticResultBox" style="display:none; margin-top:12px;"></div>
             </form>
           </div>
 

@@ -1179,6 +1179,16 @@ app.put('/api/admin/smtp-config', (req, res) => {
   }
 });
 
+app.post('/api/admin/smtp-verify', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const result = await emailService.verifyAndTestSmtpConnection(auth, req.body);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/smtp-test', async (req, res) => {
   try {
     const auth = getAuthContext(req);

@@ -4066,6 +4066,10 @@ function renderSmtpConfigForm(cfg) {
   if (testRecipEl && !testRecipEl.value) {
     testRecipEl.value = state.currentUser?.email || 'ahmet@fggroup.com.tr';
   }
+  const inlineTestEl = document.getElementById('smtpInlineTestRecipient');
+  if (inlineTestEl && !inlineTestEl.value) {
+    inlineTestEl.value = cfg.username || state.currentUser?.email || 'admin@fggroup.com.tr';
+  }
 
   if (badgeEl) {
     if (cfg.has_password) {
@@ -4377,6 +4381,73 @@ function renderSelectedOutboxPreview() {
   });
 }
 
+function renderSmtpDiagnosticResult(res) {
+  const box = document.getElementById('smtpDiagnosticResultBox');
+  const badgeEl = document.getElementById('smtpStatusBadge');
+  if (!box) return;
+
+  box.style.display = 'block';
+
+  if (res.verified && res.mail_sent) {
+    if (badgeEl) {
+      badgeEl.className = 'smtp-status-pill live';
+      badgeEl.textContent = `🟢 Canlı Exchange Online SMTP Doğrulandı (${res.username} ➔ ${res.host}:${res.port})`;
+    }
+    box.innerHTML = `
+      <div style="padding:14px 16px; border-radius:10px; background:#ecfdf5; border:1px solid #10b981; color:#065f46; font-size:0.84rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong style="font-size:0.92rem; color:#047857;">✅ Exchange Online Plan 1 (SMTP) Bağlantısı & Gönderim Başarılı!</strong>
+          <span style="font-size:0.75rem; font-weight:700; background:#d1fae5; padding:2px 8px; border-radius:999px;">${res.duration_ms || 0} ms</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid rgba(16,185,129,0.25); font-size:0.8rem;">
+          <div><strong>Sunucu:</strong> ${escapeHtml(res.host)}:${escapeHtml(String(res.port))} (STARTTLS)</div>
+          <div><strong>Kimlik Doğrulama:</strong> ${escapeHtml(res.username)} ✓</div>
+          <div><strong>Test Alıcısı:</strong> ${escapeHtml(res.recipient)}</div>
+          <div><strong>Sunucu Yanıtı:</strong> ${escapeHtml(res.smtp_response || '250 OK')}</div>
+        </div>
+      </div>
+    `;
+  } else if (res.mode === 'SIMULATED') {
+    if (badgeEl) {
+      badgeEl.className = 'smtp-status-pill simulated';
+      badgeEl.textContent = '🟡 Yerel Outbox Simülasyon Modu (Exchange Şifresi Girilmedi)';
+    }
+    box.innerHTML = `
+      <div style="padding:14px 16px; border-radius:10px; background:#fffbeb; border:1px solid #f59e0b; color:#92400e; font-size:0.84rem;">
+        <div style="font-weight:700; font-size:0.9rem; margin-bottom:4px;">🟡 Şifre Girilmediği İçin Simülasyon Modunda Çalıştı</div>
+        <div style="margin-bottom:6px;">${escapeHtml(res.error_message || '')}</div>
+        <div style="padding:8px 10px; background:rgba(245,158,11,0.12); border-radius:6px; font-size:0.79rem;">
+          <strong>💡 Bilgi:</strong> ${escapeHtml(res.troubleshooting_hint || '')}
+        </div>
+      </div>
+    `;
+  } else {
+    if (badgeEl) {
+      badgeEl.className = 'smtp-status-pill simulated';
+      badgeEl.style.background = 'rgba(239, 68, 68, 0.14)';
+      badgeEl.style.color = '#ef4444';
+      badgeEl.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+      badgeEl.textContent = `🔴 Exchange Online SMTP Bağlantı Hatası (${res.host}:${res.port})`;
+    }
+    box.innerHTML = `
+      <div style="padding:14px 16px; border-radius:10px; background:#fef2f2; border:1px solid #ef4444; color:#991b1b; font-size:0.84rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong style="font-size:0.92rem; color:#b91c1c;">❌ Exchange Online SMTP Bağlantı / Kimlik Doğrulama Hatası!</strong>
+          <span style="font-size:0.75rem; font-weight:700; background:#fee2e2; padding:2px 8px; border-radius:999px;">${res.duration_ms || 0} ms</span>
+        </div>
+        <div style="margin-bottom:8px; font-family:'JetBrains Mono', monospace; font-size:0.78rem; background:#ffffff; padding:8px 10px; border-radius:6px; border:1px solid #fecaca; color:#dc2626; word-break:break-word;">
+          <strong>Sunucu Hata Mesajı:</strong> ${escapeHtml(res.error_message || 'Bağlantı kurulamadı')}
+        </div>
+        ${res.troubleshooting_hint ? `
+          <div style="padding:10px 12px; background:#fff1f2; border-left:3px solid #e11d48; border-radius:6px; font-size:0.8rem; color:#881337; line-height:1.45;">
+            <strong>💡 Nasıl Çözülür?</strong><br>${escapeHtml(res.troubleshooting_hint)}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Hızlı geçiş butonları
   document.getElementById('gotoEmailAutomationFromTeamBtn')?.addEventListener('click', () => {
@@ -4388,6 +4459,96 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('refreshOutboxBtn')?.addEventListener('click', () => {
     loadEmailAutomationDashboard();
   });
+
+  // Şifre Göster / Gizle Butonu
+  const togglePassBtn = document.getElementById('toggleSmtpPassBtn');
+  const passInput = document.getElementById('smtpPasswordInput');
+  if (togglePassBtn && passInput) {
+    togglePassBtn.addEventListener('click', () => {
+      if (passInput.type === 'password') {
+        passInput.type = 'text';
+        togglePassBtn.textContent = '🙈';
+      } else {
+        passInput.type = 'password';
+        togglePassBtn.textContent = '👁️';
+      }
+    });
+    passInput.addEventListener('focus', () => {
+      if (passInput.value === '••••••••') {
+        passInput.select();
+      }
+    });
+  }
+
+  // Kart İçi Doğrudan "🔌 Bağlantıyı Test Et & Test Maili Gönder" Butonu
+  const verifySmtpBtn = document.getElementById('verifySmtpConnectionBtn');
+  if (verifySmtpBtn) {
+    verifySmtpBtn.addEventListener('click', async () => {
+      const diagBox = document.getElementById('smtpDiagnosticResultBox');
+      const host = document.getElementById('smtpHostInput')?.value.trim() || 'smtp.office365.com';
+      const port = Number(document.getElementById('smtpPortInput')?.value) || 587;
+      const username = document.getElementById('smtpUsernameInput')?.value.trim() || '';
+      const password = document.getElementById('smtpPasswordInput')?.value || '';
+      const from_name = document.getElementById('smtpFromNameInput')?.value.trim() || 'FG Group Proje Sistemi';
+      const public_base_url = document.getElementById('smtpBaseUrlInput')?.value.trim() || window.location.origin;
+      const enable_actionable_cards = document.getElementById('smtpEnableActionableCards')?.checked !== false;
+      const test_recipient = document.getElementById('smtpInlineTestRecipient')?.value.trim() || username || state.currentUser?.email;
+
+      verifySmtpBtn.disabled = true;
+      const origText = verifySmtpBtn.innerHTML;
+      verifySmtpBtn.innerHTML = '⏳ Sunucu Doğrulanıyor...';
+
+      if (diagBox) {
+        diagBox.style.display = 'block';
+        diagBox.innerHTML = `
+          <div style="padding:12px 16px; border-radius:10px; background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; font-size:0.84rem;">
+            ⏳ <strong>${escapeHtml(host)}:${port}</strong> sunucusuna bağlanılıyor, STARTTLS el sıkışması ve <strong>${escapeHtml(username)}</strong> kimlik doğrulaması test ediliyor...
+          </div>
+        `;
+      }
+
+      try {
+        const res = await apiCall('/api/admin/smtp-verify', 'POST', {
+          host,
+          port,
+          username,
+          password,
+          from_name,
+          public_base_url,
+          enable_actionable_cards,
+          test_recipient
+        });
+
+        renderSmtpDiagnosticResult(res);
+
+        if (res.outbox_item) {
+          emailAutoState.selectedOutboxId = res.outbox_item.id;
+        }
+
+        if (res.verified && res.mail_sent) {
+          showToast(`✅ Exchange Online SMTP bağlantısı doğrulandı ve test maili (${res.recipient}) adresine gönderildi!`, 'success');
+        } else if (res.mode === 'SIMULATED') {
+          showToast('🟡 Şifre girilmediği için test simülasyon modunda çalıştı.', 'info');
+        } else {
+          showToast(`❌ SMTP Bağlantı Hatası: ${res.error_message || 'Kimlik doğrulama başarısız'}`, 'error');
+        }
+
+        await loadEmailAutomationDashboard();
+      } catch (err) {
+        if (diagBox) {
+          diagBox.style.display = 'block';
+          diagBox.innerHTML = `
+            <div style="padding:12px 16px; border-radius:10px; background:#fef2f2; border:1px solid #ef4444; color:#991b1b; font-size:0.84rem;">
+              ❌ <strong>Test sırasında hata oluştu:</strong> ${escapeHtml(err.message || 'Bilinmeyen hata')}
+            </div>
+          `;
+        }
+      } finally {
+        verifySmtpBtn.disabled = false;
+        verifySmtpBtn.innerHTML = origText;
+      }
+    });
+  }
 
   // Exchange Online SMTP Kaydet Formu
   const smtpForm = document.getElementById('smtpConfigForm');

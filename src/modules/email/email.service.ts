@@ -23,7 +23,7 @@ export class EmailAndAutomationService {
     private delayService: DelayService,
     private projectService: ProjectService,
     private notificationService: NotificationService
-  ) {}
+  ) { }
 
   public getSmtpConfig(tenant_id: UUID): SmtpConfig {
     const existing = this.db.getSmtpConfig(tenant_id);
@@ -70,6 +70,225 @@ export class EmailAndAutomationService {
   }
 
   /**
+   * Exchange Online Plan 1 (SMTP) bağlantısını ve kimlik bilgilerini canlı doğrular (transporter.verify)
+   * ve başarılıysa gerçek bir test e-postası (Adaptive Card gömülü) gönderir.
+   */
+  public async verifyAndTestSmtpConnection(
+    auth: AuthContext,
+    input: Partial<SmtpConfig> & { test_recipient?: string }
+  ): Promise<{
+    verified: boolean;
+    mail_sent: boolean;
+    mode: 'SMTP_LIVE' | 'SIMULATED';
+    duration_ms: number;
+    host: string;
+    port: number;
+    username: string;
+    recipient: string;
+    smtp_response?: string;
+    error_message?: string;
+    troubleshooting_hint?: string;
+    outbox_item?: EmailOutboxItem;
+  }> {
+    const startTime = Date.now();
+    // Önce formdan gelen güncel ayarları kaydet
+    const config = this.saveSmtpConfig(auth, input);
+    const recipient = (input.test_recipient || config.username || auth.email).trim();
+
+    if (!config.password || config.password.trim().length === 0) {
+      const simItem = await this.dispatchEmail({
+        tenant_id: auth.tenant_id,
+        to: [recipient],
+        subject: `🧪 [Simülasyon Testi] Exchange Online & Adaptive Card Kontrolü`,
+        category: 'SMTP_TEST',
+        htmlBody: `<div style="padding:18px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;">
+          <h3 style="margin-top:0;color:#0f172a;">🟡 Yerel Outbox Simülasyon Testi</h3>
+          <p>Şifre alanı boş bırakıldığı için bu e-posta gerçek Exchange Online yerine yerel Giden Kutusu Simülatörüne kaydedildi.</p>
+        </div>`
+      });
+
+      return {
+        verified: false,
+        mail_sent: false,
+        mode: 'SIMULATED',
+        duration_ms: Date.now() - startTime,
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        recipient,
+        error_message: 'Mail şifresi girilmediği için gerçek Exchange Online (SMTP) sunucusuna bağlanılmadı.',
+        troubleshooting_hint: 'Gerçek e-posta gönderimini test etmek için "Mail Şifresi / Uygulama Şifresi" kutusuna Exchange Online şifrenizi yazıp tekrar "🔌 Bağlantıyı Test Et" butonuna basın.',
+        outbox_item: simItem
+      };
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.port === 465 ? true : config.secure,
+      auth: {
+        user: config.username,
+        pass: config.password
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000
+    });
+
+    try {
+      // 1. Adım: SMTP Sunucusu ve Kimlik Doğrulama (Handshake + STARTTLS + AUTH LOGIN)
+      await transporter.verify();
+
+      // 2. Adım: Gerçek Test E-postasını (Adaptive Card ile) Gönder
+      const tasks = this.db.getTasks(auth.tenant_id);
+      const sampleTask = tasks.find(t => t.work_status === 'READY' && t.assignee_id) || tasks[0];
+      const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+
+      const adaptiveCard = {
+        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+        type: 'AdaptiveCard',
+        version: '1.4',
+        originator: 'fg-group-proje-sistemi',
+        body: [
+          { type: 'TextBlock', text: '✅ EXCHANGE ONLINE PLAN 1 • BAĞLANTI DOĞRULANDI', weight: 'Bolder', color: 'Good', size: 'Small' },
+          { type: 'TextBlock', text: sampleTask ? sampleTask.title : 'Exchange Online SMTP Canlı Test Görevi', weight: 'Bolder', size: 'Large', wrap: true },
+          {
+            type: 'FactSet',
+            facts: [
+              { title: 'SMTP Sunucusu:', value: `${config.host}:${config.port} (STARTTLS)` },
+              { title: 'Gönderici Hesap:', value: config.username },
+              { title: 'Test Alıcısı:', value: recipient },
+              { title: 'Doğrulama Zamanı:', value: new Date().toLocaleString('tr-TR') }
+            ]
+          },
+          { type: 'Input.Text', id: 'explanationText', placeholder: 'Outlook içinden test notu göndermek için yazın...', isMultiline: true }
+        ],
+        actions: sampleTask ? [
+          {
+            type: 'Action.Http',
+            title: '▶️ Görevi Başlat',
+            method: 'POST',
+            url: `${baseUrl}/api/outlook/action`,
+            body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: sampleTask.id, user_id: auth.user_id, action: 'START_TASK' })
+          },
+          {
+            type: 'Action.Http',
+            title: '✅ Tamamlandı İşaretle',
+            method: 'POST',
+            url: `${baseUrl}/api/outlook/action`,
+            body: JSON.stringify({ tenant_id: auth.tenant_id, task_id: sampleTask.id, user_id: auth.user_id, action: 'COMPLETE_TASK' })
+          }
+        ] : []
+      };
+
+      const htmlBody = `
+        <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #10b981;border-radius:12px;padding:24px;">
+          <div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:6px;">
+            ✅ Exchange Online Plan 1 (SMTP) Doğrulama Başarılı
+          </div>
+          <h2 style="margin:0 0 10px 0;font-size:18px;color:#0f172a;">FG Group Proje Sistemi - Canlı SMTP Test E-postası</h2>
+          <p style="margin:0 0 14px 0;font-size:14px;color:#334155;">
+            Tebrikler! <strong>${config.username}</strong> hesabınız üzerinden <strong>${config.host}:${config.port}</strong> sunucusuna bağlantı ve kimlik doğrulama başarıyla tamamlandı.
+          </p>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:13px;color:#166534;">
+            <div><strong>Sunucu:</strong> ${config.host}:${config.port} (STARTTLS)</div>
+            <div><strong>Gönderici:</strong> ${config.from_name} &lt;${config.username}&gt;</div>
+            <div><strong>Alıcı:</strong> ${recipient}</div>
+            <div><strong>Callback Adresi:</strong> ${baseUrl}</div>
+          </div>
+        </div>
+      `;
+
+      const outboxItem = await this.dispatchEmail({
+        tenant_id: auth.tenant_id,
+        to: [recipient],
+        subject: `✅ [SMTP Doğrulandı] FG Group Exchange Online Test E-postası`,
+        category: 'SMTP_TEST',
+        htmlBody,
+        adaptiveCardJson: adaptiveCard,
+        linked_task_id: sampleTask?.id
+      });
+
+      const duration_ms = Date.now() - startTime;
+      if (outboxItem.status === 'SENT') {
+        return {
+          verified: true,
+          mail_sent: true,
+          mode: 'SMTP_LIVE',
+          duration_ms,
+          host: config.host,
+          port: config.port,
+          username: config.username,
+          recipient,
+          smtp_response: `250 2.0.0 OK (${config.host}:${config.port} üzerinden canlı teslim edildi)`,
+          outbox_item: outboxItem
+        };
+      } else {
+        return {
+          verified: true,
+          mail_sent: false,
+          mode: 'SMTP_LIVE',
+          duration_ms,
+          host: config.host,
+          port: config.port,
+          username: config.username,
+          recipient,
+          error_message: outboxItem.error_message || 'E-posta gönderimi sırasında hata oluştu.',
+          troubleshooting_hint: this.buildSmtpTroubleshootingHint(outboxItem.error_message || '', config),
+          outbox_item: outboxItem
+        };
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || 'Exchange Online SMTP bağlantı hatası';
+      const duration_ms = Date.now() - startTime;
+
+      // Hata durumunu Outbox'a da kaydet ki kullanıcı geçmişte görsün
+      const failedItem = this.db.insertEmailOutbox({
+        id: crypto.randomUUID(),
+        tenant_id: auth.tenant_id,
+        to: [recipient],
+        subject: `❌ [SMTP Bağlantı Hatası] ${config.host}:${config.port}`,
+        category: 'SMTP_TEST',
+        delivery_mode: 'SMTP_LIVE',
+        status: 'FAILED',
+        error_message: errMsg,
+        html_preview: `<div style="padding:16px;color:#dc2626;"><strong>SMTP Hatası:</strong> ${errMsg}</div>`,
+        sent_at: new Date().toISOString()
+      });
+
+      return {
+        verified: false,
+        mail_sent: false,
+        mode: 'SMTP_LIVE',
+        duration_ms,
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        recipient,
+        error_message: errMsg,
+        troubleshooting_hint: this.buildSmtpTroubleshootingHint(errMsg, config),
+        outbox_item: failedItem
+      };
+    }
+  }
+
+  private buildSmtpTroubleshootingHint(errMsg: string, config: SmtpConfig): string {
+    const lower = errMsg.toLowerCase();
+    if (lower.includes('5.7.139') || lower.includes('smtpclientauthentication is disabled')) {
+      return `Microsoft 365 üzerinde bu hesap veya Tenant için "Authenticated SMTP (Kimliği Doğrulanmış SMTP)" kapalı. Çözüm: Microsoft 365 Admin Center (admin.microsoft.com) ➔ Kullanıcılar ➔ Aktif Kullanıcılar ➔ ${config.username} ➔ Posta (Mail) sekmesi ➔ "E-posta uygulamalarını yönet (Manage email apps)" ➔ "Kimliği doğrulanmış SMTP (Authenticated SMTP)" seçeneğini işaretleyip kaydedin.`;
+    }
+    if (lower.includes('535') || lower.includes('authentication unsuccessful') || lower.includes('invalid login') || lower.includes('5.7.3')) {
+      return `Kullanıcı adı (${config.username}) veya şifre Microsoft Exchange Online tarafından reddedildi. 1) Şifrenizi doğru yazdığınızdan emin olun (👁️ ikonuna basarak kontrol edebilirsiniz). 2) Hesapta Çok Faktörlü Kimlik Doğrulama (MFA) aktifse normal şifre yerine Microsoft 365 Güvenlik sayfasından bir "Uygulama Şifresi (App Password)" oluşturup girin. 3) Microsoft 365 Admin Center'dan bu kullanıcı için "Authenticated SMTP" izninin açık olduğunu doğrulayın.`;
+    }
+    if (lower.includes('timed out') || lower.includes('etimedout') || lower.includes('econnrefused') || lower.includes('enotfound')) {
+      return `${config.host}:${config.port} adresine ağ üzerinden ulaşılamadı. Sunucu adresini, Port numarasını (587) ve güvenlik duvarınızın (Firewall) 587 numaralı TCP portuna çıkış izni verdiğini kontrol edin.`;
+    }
+    return `Exchange Online (${config.host}:${config.port}) ayarlarınızı, kullanıcı e-posta adresinizi ve şifrenizi kontrol edip tekrar deneyin.`;
+  }
+
+  /**
    * Hem gerçek Exchange Online Plan 1 (SMTP) gönderimi yapar
    * hem de Outbox günlüğüne (canlı Adaptive Card önizlemesiyle) kaydeder.
    */
@@ -95,7 +314,7 @@ export class EmailAndAutomationService {
             const parsed = JSON.parse(act.body);
             parsed.outboxId = outboxId;
             act.body = JSON.stringify(parsed);
-          } catch {}
+          } catch { }
         }
         return act;
       });
@@ -869,3 +1088,4 @@ export class EmailAndAutomationService {
     return sentItem;
   }
 }
+
