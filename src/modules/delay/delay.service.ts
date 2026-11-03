@@ -11,7 +11,7 @@ import {
 } from '../../core/types.js';
 
 export class DelayService {
-  constructor(private db: Database) {}
+  constructor(private db: Database) { }
 
   /**
    * Görevin gecikmesini değerlendirir.

@@ -261,6 +261,22 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Sisteme yeni bir kullanıcı (personel) eklendiğinde karşılama bildirimi
+   */
+  public notifyUserWelcome(
+    tenant_id: UUID,
+    new_user_id: UUID,
+    user_name: string,
+    email: string
+  ): void {
+    const event_id = `welcome_user_${new_user_id}`;
+    const title = `🎉 FG Group Sistemine Hoş Geldiniz, ${user_name}!`;
+    const message = `Hesabınız (${email}) aktif edildi. Sol alttaki profil menüsünden kendi şifrenizi oluşturabilir/değiştirebilir ve profil fotoğrafınızı yükleyebilirsiniz.`;
+    this.createNotification(tenant_id, new_user_id, event_id, 'IN_APP', title, message);
+    this.createNotification(tenant_id, new_user_id, event_id, 'EMAIL', title, message);
+  }
+
   // --- Push Subscription Yönetimi (WEB01-WEB05) ---
   public registerPushSubscription(
     auth: AuthContext,

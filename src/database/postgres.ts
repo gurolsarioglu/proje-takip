@@ -111,6 +111,9 @@ export class PostgresEngine {
     if (fs.existsSync(activeSchemaPath)) {
       const ddl = fs.readFileSync(activeSchemaPath, 'utf-8');
       await this.execSql(ddl);
+      try {
+        await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`);
+      } catch (e) {}
     }
 
     // 2. Eğer PostgreSQL içinde daha önceden kaydedilmiş smtp_configs varsa belleğe geri yükle
@@ -195,18 +198,19 @@ export class PostgresEngine {
     for (const u of state.users) {
       const encUserPass = u.password ? CryptoVault.encrypt(u.password) : null;
       await this.querySql(
-        `INSERT INTO users (id, tenant_id, entra_oid, name, email, phone, country, language, password, system_role, can_create_project, can_build_reports, department, theme, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        `INSERT INTO users (id, tenant_id, entra_oid, name, email, phone, country, language, password, system_role, can_create_project, can_build_reports, department, theme, avatar_url, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name, email = EXCLUDED.email, phone = EXCLUDED.phone,
            country = EXCLUDED.country, language = EXCLUDED.language, password = EXCLUDED.password,
            system_role = EXCLUDED.system_role, can_create_project = EXCLUDED.can_create_project,
-           can_build_reports = EXCLUDED.can_build_reports, department = EXCLUDED.department, theme = EXCLUDED.theme`,
+           can_build_reports = EXCLUDED.can_build_reports, department = EXCLUDED.department,
+           theme = EXCLUDED.theme, avatar_url = EXCLUDED.avatar_url`,
         [
           u.id, u.tenant_id, u.entra_oid, u.name, u.email, u.phone || null,
           u.country, u.language, encUserPass, u.system_role,
           !!u.can_create_project, !!u.can_build_reports, u.department || null,
-          u.theme || 'light', u.created_at
+          u.theme || 'light', u.avatar_url || null, u.created_at
         ]
       );
     }

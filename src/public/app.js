@@ -265,23 +265,77 @@ function toggleTheme() {
   showToast(next === 'dark' ? '🌙 Koyu tema aktif edildi.' : '☀️ Açık tema aktif edildi.', 'info');
 }
 
+function applyAvatarToElement(el, user) {
+  if (!el) return;
+  if (user && user.avatar_url) {
+    el.innerHTML = `<img src="${user.avatar_url}" alt="${escapeHtml(user.name || 'Profil')}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">`;
+    el.style.overflow = 'hidden';
+    el.style.padding = '0';
+  } else {
+    el.innerHTML = '';
+    el.textContent = (user?.name || '?').slice(0, 1).toUpperCase();
+  }
+}
+
+function compressAvatarImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('Görsel dosyası okunamadı.'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('Dosya okuma hatası.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function openUserProfileModal() {
   const u = state.currentUser;
   if (!u) return;
 
   const avatar = document.getElementById('modalUserAvatar');
+  const removeAvatarBtn = document.getElementById('removeProfileAvatarBtn');
   const name = document.getElementById('modalUserName');
   const email = document.getElementById('modalUserEmail');
   const role = document.getElementById('modalUserRole');
   const dept = document.getElementById('modalUserDept');
   const langSelect = document.getElementById('modalLangSelect');
 
-  if (avatar) avatar.textContent = u.name.slice(0, 1).toUpperCase();
+  applyAvatarToElement(avatar, u);
+  if (removeAvatarBtn) {
+    removeAvatarBtn.style.display = u.avatar_url ? 'inline-flex' : 'none';
+  }
   if (name) name.textContent = u.name;
   if (email) email.textContent = u.email;
   if (role) role.textContent = u.system_role === 'ADMIN' ? 'Sistem Yöneticisi (Admin)' : 'Personel';
   if (dept) dept.textContent = u.department || 'Genel';
   if (langSelect) langSelect.value = state.currentLang || u.language || 'tr';
+
+  // Şifre alanlarını sıfırla
+  const curPassEl = document.getElementById('profileCurrentPassword');
+  const newPassEl = document.getElementById('profileNewPassword');
+  const confPassEl = document.getElementById('profileConfirmPassword');
+  const passMsgEl = document.getElementById('profilePasswordStatusMsg');
+  if (curPassEl) curPassEl.value = '';
+  if (newPassEl) newPassEl.value = '';
+  if (confPassEl) confPassEl.value = '';
+  if (passMsgEl) {
+    passMsgEl.textContent = 'Kendi belirlediğiniz şifre anında güvenli olarak kaydedilir.';
+    passMsgEl.style.color = 'var(--text-secondary)';
+  }
 
   const currentTheme = getActiveTheme();
   document.querySelectorAll('#userProfileModal .theme-choice-card').forEach(card => {
@@ -341,7 +395,7 @@ function onLoginSuccess(user, tenant, token) {
   document.getElementById('appContainer').style.display = 'flex';
 
   document.getElementById('userNameDisplay').textContent = user.name;
-  document.getElementById('userAvatar').textContent = user.name.slice(0, 1).toUpperCase();
+  applyAvatarToElement(document.getElementById('userAvatar'), user);
   document.getElementById('welcomeUserText').textContent = `Hoş geldiniz, ${user.name}!`;
 
   const roleTitle = user.system_role === 'ADMIN'
@@ -1800,12 +1854,13 @@ async function openTaskDrawer(taskId) {
     const phoneEl = document.getElementById('wpAssigneePhone');
 
     if (assignee) {
-      avatar.textContent = assignee.name.slice(0, 1).toUpperCase();
+      applyAvatarToElement(avatar, assignee);
       nameEl.textContent = assignee.name;
       deptEl.textContent = `${assignee.department || 'Genel'} (${assignee.country || 'Türkiye'})`;
       emailEl.textContent = assignee.email;
       phoneEl.textContent = assignee.phone || 'Telefon belirtilmemiş';
     } else {
+      avatar.innerHTML = '';
       avatar.textContent = '?';
       nameEl.textContent = 'Atanmamış';
       deptEl.textContent = '-';
@@ -1996,10 +2051,13 @@ function renderPersonnelTable() {
   state.personnelList.forEach(u => {
     const isSelf = u.id === state.currentUser?.id;
     const tr = document.createElement('tr');
+    const avatarContent = u.avatar_url
+      ? `<img src="${u.avatar_url}" alt="${escapeHtml(u.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">`
+      : u.name.slice(0, 1).toUpperCase();
     tr.innerHTML = `
       <td>
         <div style="display:flex; align-items:center; gap:8px;">
-          <div class="profile-avatar" style="width:28px; height:28px; font-size:0.75rem;">${u.name.slice(0, 1).toUpperCase()}</div>
+          <div class="profile-avatar" style="width:30px; height:30px; font-size:0.75rem; overflow:hidden; padding:0;">${avatarContent}</div>
           <strong>${u.name}</strong> ${isSelf ? '<span class="nav-badge neutral">Siz</span>' : ''}
         </div>
       </td>
@@ -2158,6 +2216,120 @@ function setupEventListeners() {
     }
     document.getElementById('userProfileModal')?.classList.remove('open');
     showToast('Profil ve tema tercihleri uygulandı.', 'success');
+  });
+
+  // 📷 Profil Fotoğrafı Yükleme / Değiştirme / Kaldırma
+  const avatarFileInput = document.getElementById('profileAvatarFileInput');
+  document.getElementById('uploadProfileAvatarBtn')?.addEventListener('click', () => {
+    avatarFileInput?.click();
+  });
+  document.getElementById('modalUserAvatar')?.addEventListener('click', () => {
+    avatarFileInput?.click();
+  });
+
+  if (avatarFileInput) {
+    avatarFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        showToast('Lütfen geçerli bir görsel dosyası (PNG, JPG, WEBP) seçiniz.', 'error');
+        return;
+      }
+      try {
+        const compressedDataUrl = await compressAvatarImageFile(file);
+        const res = await apiCall('/api/profile/avatar', 'PUT', { avatar_url: compressedDataUrl });
+        if (state.currentUser) {
+          state.currentUser.avatar_url = res.user?.avatar_url || compressedDataUrl;
+          localStorage.setItem('fg_user', JSON.stringify(state.currentUser));
+        }
+        applyAvatarToElement(document.getElementById('userAvatar'), state.currentUser);
+        applyAvatarToElement(document.getElementById('modalUserAvatar'), state.currentUser);
+        const removeBtn = document.getElementById('removeProfileAvatarBtn');
+        if (removeBtn) removeBtn.style.display = 'inline-flex';
+        await loadPersonnel();
+        showToast('📷 Profil fotoğrafınız başarıyla yüklendi ve kaydedildi!', 'success');
+      } catch (err) {
+        showToast('Profil resmi yüklenemedi: ' + err.message, 'error');
+      } finally {
+        avatarFileInput.value = '';
+      }
+    });
+  }
+
+  document.getElementById('removeProfileAvatarBtn')?.addEventListener('click', async () => {
+    try {
+      await apiCall('/api/profile/avatar', 'PUT', { avatar_url: '' });
+      if (state.currentUser) {
+        delete state.currentUser.avatar_url;
+        localStorage.setItem('fg_user', JSON.stringify(state.currentUser));
+      }
+      applyAvatarToElement(document.getElementById('userAvatar'), state.currentUser);
+      applyAvatarToElement(document.getElementById('modalUserAvatar'), state.currentUser);
+      const removeBtn = document.getElementById('removeProfileAvatarBtn');
+      if (removeBtn) removeBtn.style.display = 'none';
+      await loadPersonnel();
+      showToast('🗑️ Profil fotoğrafınız kaldırıldı.', 'info');
+    } catch (err) {
+      showToast('Profil resmi kaldırılamadı: ' + err.message, 'error');
+    }
+  });
+
+  // 🔐 Kullanıcı Kendi Şifresini Oluşturma / Değiştirme
+  document.getElementById('toggleProfilePasswordVisBtn')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    const fields = ['profileCurrentPassword', 'profileNewPassword', 'profileConfirmPassword']
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+    const isPass = fields[0]?.type === 'password';
+    fields.forEach(f => { f.type = isPass ? 'text' : 'password'; });
+    btn.textContent = isPass ? '🙈 Gizle' : '👁️ Göster';
+  });
+
+  document.getElementById('changeUserPasswordBtn')?.addEventListener('click', async () => {
+    const curEl = document.getElementById('profileCurrentPassword');
+    const newEl = document.getElementById('profileNewPassword');
+    const confEl = document.getElementById('profileConfirmPassword');
+    const msgEl = document.getElementById('profilePasswordStatusMsg');
+
+    const current_password = (curEl?.value || '').trim();
+    const new_password = (newEl?.value || '').trim();
+    const confirm_password = (confEl?.value || '').trim();
+
+    if (!current_password) {
+      showToast('⚠️ Lütfen mevcut (veya ilk giriş) şifrenizi giriniz.', 'error');
+      curEl?.focus();
+      return;
+    }
+    if (new_password.length < 3) {
+      showToast('⚠️ Yeni şifreniz en az 3 karakter olmalıdır.', 'error');
+      newEl?.focus();
+      return;
+    }
+    if (new_password !== confirm_password) {
+      showToast('⚠️ Yeni şifre ile şifre tekrarı birbiriyle eşleşmiyor!', 'error');
+      confEl?.focus();
+      return;
+    }
+
+    try {
+      const res = await apiCall('/api/profile/password', 'PUT', {
+        current_password,
+        new_password
+      });
+      if (curEl) curEl.value = '';
+      if (newEl) newEl.value = '';
+      if (confEl) confEl.value = '';
+      if (msgEl) {
+        msgEl.textContent = '✅ Şifreniz başarıyla güncellendi! Bir sonraki girişinizde yeni şifreniz geçerlidir.';
+        msgEl.style.color = '#059669';
+      }
+      showToast(res.message || '🔑 Şifreniz başarıyla güncellendi!', 'success');
+    } catch (err) {
+      if (msgEl) {
+        msgEl.textContent = '❌ ' + (err.message || 'Şifre güncellenemedi.');
+        msgEl.style.color = '#dc2626';
+      }
+    }
   });
 
   // Dil Değiştirici
@@ -2603,11 +2775,18 @@ function setupEventListeners() {
       showToast('Personel bilgileri güncellendi.', 'success');
       editingPersonnelId = null;
     } else {
-      await apiCall('/api/admin/personnel', 'POST', body);
-      showToast('Personel kartı eklendi.', 'success');
+      const created = await apiCall('/api/admin/personnel', 'POST', body);
+      if (created?.welcome_outbox_id) {
+        emailAutoState.selectedOutboxId = created.welcome_outbox_id;
+      }
+      showToast(
+        `🎉 ${body.name} eklendi ve "${body.email}" adresine Sistem Erişim Bilgileri & İlk Giriş Şifresi içeren Karşılama E-postası otomatik gönderildi!`,
+        'success'
+      );
     }
     document.getElementById('personnelModal').classList.remove('open');
     await loadPersonnel();
+    await loadNotifications();
   });
 
   // Personel Yetki Toggles (Proje Açma & Rapor Oluşturma)
@@ -4309,6 +4488,7 @@ function renderEmailOutboxList() {
     ACTIONABLE_TASK_CARD: '🔔 Sıra Sizde (Adaptive Card)',
     TASK_ASSIGNED_CARD: '📌 Yeni Görev Atandı Kartı',
     PROJECT_MEMBER_CARD: '📁 Projeye Dahil Edildiniz',
+    USER_WELCOME_CARD: '🎉 Yeni Kullanıcı Karşılama & Erişim Maili',
     TASK_COMPLETED_MANAGER_CARD: '✅ İş Tamamlandı (Yetkili Bilgi)',
     TASK_PROGRESS_MANAGER_CARD: '📊 %40-%60 İlerleme & Not (Yetkili Bilgi)',
     DELAY_EXPLANATION_CARD: '⚠️ Gecikme Mazereti Kartı (Sorumlu)',

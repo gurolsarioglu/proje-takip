@@ -26,7 +26,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // Veritabanı ve Modül Başlatma (PostgreSQL + AES-256-GCM Şifre Kasası)
 const dbPath = path.resolve(__dirname, '../../.work/data.json');
@@ -115,6 +115,30 @@ app.put('/api/profile/theme', (req, res) => {
   }
 });
 
+// Kullanıcının kendi şifresini oluşturması / değiştirmesi
+app.put('/api/profile/password', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { current_password, new_password } = req.body;
+    authService.changeOwnPassword(auth, current_password, new_password);
+    res.json({ success: true, message: 'Şifreniz güvenli bir şekilde güncellendi.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Kullanıcının kendi profil resmini (avatar_url) yüklemesi / kaldırması
+app.put('/api/profile/avatar', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { avatar_url } = req.body;
+    const updatedUser = authService.updateOwnAvatar(auth, avatar_url);
+    res.json({ success: true, user: updatedUser });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Admin Personel Kartı Yönetimi
 app.get('/api/admin/personnel', (req, res) => {
   try {
@@ -130,7 +154,7 @@ app.get('/api/admin/personnel', (req, res) => {
   }
 });
 
-app.post('/api/admin/personnel', (req, res) => {
+app.post('/api/admin/personnel', async (req, res) => {
   try {
     const auth = getAuthContext(req);
     const caller = db.getUserById(auth.tenant_id, auth.user_id);
@@ -138,7 +162,7 @@ app.post('/api/admin/personnel', (req, res) => {
       return res.status(403).json({ error: 'Yetkisiz İşlem: Yeni personel kartı yalnızca Sistem Yöneticisi tarafından oluşturulabilir.' });
     }
 
-    const { name, email, phone, country, password, can_create_project, can_build_reports, department, system_role } = req.body;
+    const { name, email, phone, country, password, can_create_project, can_build_reports, department, system_role, avatar_url } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'Ad Soyad ve E-posta alanları zorunludur.' });
     }
@@ -148,18 +172,33 @@ app.post('/api/admin/personnel', (req, res) => {
       return res.status(400).json({ error: 'Bu e-posta adresine sahip bir personel zaten mevcut.' });
     }
 
+    const initialPassword = String(password || '123').trim() || '123';
     const newUser = authService.createUser(auth.tenant_id, name, email, undefined, {
       phone,
       country: country || 'Türkiye',
-      password: password || '123',
+      password: initialPassword,
       can_create_project: !!can_create_project,
       can_build_reports: !!can_build_reports,
       department: department || 'Genel',
-      system_role: system_role || 'USER'
+      system_role: system_role || 'USER',
+      avatar_url: avatar_url || undefined
     });
 
+    // Yeni eklenen kullanıcıya otomatik Karşılama & Sistem Erişim Bilgisi E-postası (Adaptive Card v1.4) gönder
+    const welcomeMail = await emailService.sendUserWelcomeCard(
+      auth.tenant_id,
+      newUser.id,
+      initialPassword,
+      auth.user_id
+    );
+
     const { password: _, ...safeUser } = newUser;
-    res.status(201).json(safeUser);
+    res.status(201).json({
+      ...safeUser,
+      welcome_email_sent: !!welcomeMail,
+      welcome_email_status: welcomeMail?.status || 'SIMULATED',
+      welcome_outbox_id: welcomeMail?.id
+    });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -1492,6 +1531,8 @@ app.post('/api/admin/trigger-card-scenario', async (req, res) => {
       );
     } else if (scenario === 'TASK_OVERDUE_ALERT' && overdueOrActiveTask) {
       item = await emailService.sendDelayExplanationActionableCard(auth.tenant_id, overdueOrActiveTask.id);
+    } else if (scenario === 'USER_WELCOME' && targetUser) {
+      item = await emailService.sendUserWelcomeCard(auth.tenant_id, targetUser.id, targetUser.password || '123', auth.user_id);
     }
 
     res.json({ success: true, scenario, item });

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
   can_build_reports BOOLEAN NOT NULL DEFAULT FALSE,
   department TEXT,
   theme TEXT DEFAULT 'light',
+  avatar_url TEXT,
   created_at TEXT NOT NULL
 );
 

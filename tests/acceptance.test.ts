@@ -869,4 +869,62 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     );
     assert.ok(completedManagerCards.length >= 1, 'Görev tamamlandığında proje yetkililerine tamamlama raporu gitmeli');
   });
+
+  await t.test('YENİ KULLANICI KARŞILAMA MAİLİ, KENDİ ŞİFRESİNİ DEĞİŞTİRME VE PROFİL RESMİ (AVATAR) YÜKLEME', async () => {
+    // 1. Yeni personel eklendiğinde otomatik karşılama ve erişim bilgisi e-postası (USER_WELCOME_CARD) gönderimi
+    const newPerson = authService.createUser(tenantA.id, 'Selin Arslan', 'selin@acme.com', undefined, {
+      password: 'IlkGiris!2026',
+      department: 'Tasarım & Ar-Ge',
+      country: 'Türkiye',
+      can_create_project: true
+    });
+
+    const welcomeCard = await emailService.sendUserWelcomeCard(
+      tenantA.id,
+      newPerson.id,
+      'IlkGiris!2026',
+      authManagerA.user_id
+    );
+    assert.ok(welcomeCard);
+    assert.equal(welcomeCard.category, 'USER_WELCOME_CARD');
+    assert.ok(welcomeCard.to.includes('selin@acme.com'));
+    assert.ok(welcomeCard.subject.includes('Hoş Geldiniz'));
+    assert.ok(welcomeCard.html_preview.includes('IlkGiris!2026'));
+
+    // 2. İlk giriş şifresi ile giriş ve kendi şifresini değiştirme
+    const firstLogin = authService.login('selin@acme.com', 'IlkGiris!2026');
+    assert.equal(firstLogin.user.email, 'selin@acme.com');
+
+    const selinAuth = {
+      tenant_id: tenantA.id,
+      user_id: newPerson.id,
+      email: newPerson.email,
+      name: newPerson.name
+    };
+
+    // Hatalı mevcut şifre reddedilmeli
+    assert.throws(() => {
+      authService.changeOwnPassword(selinAuth, 'YanlisSifre', 'YeniGucluSifre#99');
+    }, /Mevcut şifrenizi hatalı girdiniz/);
+
+    // Doğru mevcut şifre ile yeni şifre belirleme
+    authService.changeOwnPassword(selinAuth, 'IlkGiris!2026', 'YeniGucluSifre#99');
+
+    // Eski şifreyle giriş artık reddedilmeli, yeni şifreyle başarılı olmalı
+    assert.throws(() => {
+      authService.login('selin@acme.com', 'IlkGiris!2026');
+    }, /Hatalı şifre/);
+
+    const secondLogin = authService.login('selin@acme.com', 'YeniGucluSifre#99');
+    assert.equal(secondLogin.user.id, newPerson.id);
+
+    // 3. Kullanıcının kendi profil resmini (avatar_url) yüklemesi ve kaldırması
+    const sampleAvatarDataUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/';
+    const updatedProfile = authService.updateOwnAvatar(selinAuth, sampleAvatarDataUrl);
+    assert.equal(updatedProfile.avatar_url, sampleAvatarDataUrl);
+    assert.equal(db.getUserById(tenantA.id, newPerson.id)?.avatar_url, sampleAvatarDataUrl);
+
+    const clearedProfile = authService.updateOwnAvatar(selinAuth, '');
+    assert.equal(clearedProfile.avatar_url, undefined);
+  });
 });

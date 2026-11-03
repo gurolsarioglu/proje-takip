@@ -1704,6 +1704,145 @@ export class EmailAndAutomationService {
   }
 
   /**
+   * 3.5. Yeni Kullanıcı (Personel) Eklendiğinde Otomatik Karşılama & Sistem Erişim Bilgisi Kartı (USER_WELCOME_CARD)
+   */
+  public async sendUserWelcomeCard(
+    tenant_id: UUID,
+    new_user_id: UUID,
+    plain_password: string,
+    created_by_user_id?: UUID
+  ): Promise<EmailOutboxItem | null> {
+    const newUser = this.db.getUserById(tenant_id, new_user_id);
+    if (!newUser || !newUser.email) return null;
+
+    const creator = created_by_user_id ? this.db.getUserById(tenant_id, created_by_user_id) : undefined;
+    const config = this.getSmtpConfig(tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+    const initialPass = plain_password || newUser.password || '123';
+
+    this.notificationService.notifyUserWelcome(tenant_id, newUser.id, newUser.name, newUser.email);
+
+    const roleLabel = newUser.system_role === 'ADMIN' ? 'Sistem Yöneticisi (ADMIN)' : 'Personel / Kullanıcı (USER)';
+    const permsLabel = [
+      newUser.can_create_project ? 'Yeni Proje Açabilir' : null,
+      newUser.can_build_reports ? 'Özel Rapor Oluşturabilir' : null
+    ].filter(Boolean).join(', ') || 'Standart Görev & Proje Kullanımı';
+
+    const adaptiveCard = {
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      hideOriginalBody: true,
+      body: [
+        {
+          type: 'TextBlock',
+          text: '🎉 FG GROUP PROJE & GÖREV SİSTEMİ • HOŞ GELDİNİZ',
+          weight: 'Bolder',
+          color: 'Accent',
+          size: 'Small'
+        },
+        {
+          type: 'TextBlock',
+          text: `Merhaba ${newUser.name}, Sistem Hesabınız Oluşturuldu!`,
+          weight: 'Bolder',
+          size: 'Large',
+          wrap: true
+        },
+        {
+          type: 'TextBlock',
+          text: 'FG Group Proje ve Görev Takip Sistemine erişim bilgileriniz aşağıda yer almaktadır. Giriş yaptıktan sonra kendi şifrenizi belirleyebilir ve profil fotoğrafınızı ekleyebilirsiniz.',
+          wrap: true,
+          isSubtle: true
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: '🌐 Sistem Giriş Adresi:', value: baseUrl },
+            { title: '📧 Kullanıcı E-Posta:', value: newUser.email },
+            { title: '🔑 İlk Giriş Şifreniz:', value: initialPass },
+            { title: '🏢 Departman & Ülke:', value: `${newUser.department || 'Genel'} (${newUser.country})` },
+            { title: '🛡️ Sistem Rolü:', value: roleLabel },
+            { title: '⚡ Tanımlı Yetkiler:', value: permsLabel },
+            { title: '👤 Kaydı Oluşturan:', value: creator ? `${creator.name} (${creator.email})` : 'Sistem Yöneticisi' }
+          ]
+        },
+        {
+          type: 'TextBlock',
+          text: '🔐 Şifre Değiştirme & Profil Resmi: Sisteme giriş yaptıktan sonra sol alt köşedeki isminize tıklayarak açılan "👤 Kullanıcı Profili & Tercihler" penceresinden kendi şifrenizi oluşturabilir/değiştirebilir ve profil resminizi yükleyebilirsiniz.',
+          wrap: true,
+          size: 'Small',
+          color: 'Good'
+        }
+      ],
+      actions: [
+        {
+          type: 'Action.OpenUrl',
+          title: '🚀 Sisteme Giriş Yap & Şifreni Belirle',
+          url: baseUrl
+        }
+      ]
+    };
+
+    const htmlBody = `
+      <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;font-family:'Segoe UI',Arial,sans-serif;">
+        <div style="display:inline-block;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:12px;padding:4px 10px;border-radius:999px;margin-bottom:10px;">
+          🎉 HOŞ GELDİNİZ • SİSTEM ERİŞİM BİLGİLERİNİZ
+        </div>
+        <h2 style="margin:0 0 8px 0;font-size:20px;color:#0f172a;">Merhaba ${newUser.name},</h2>
+        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;line-height:1.5;">
+          <strong>FG Group Proje ve Görev Takip Sistemi</strong> üzerindeki kullanıcı hesabınız oluşturuldu. Aşağıdaki erişim bilgilerinizle hemen giriş yapabilirsiniz:
+        </p>
+
+        <div style="background:#f8fafc;border:1px solid #cbd5e1;border-left:4px solid #2563eb;border-radius:10px;padding:16px;margin-bottom:18px;">
+          <div style="font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:10px;">🔐 Giriş Kimlik Bilgileriniz</div>
+          <table style="width:100%;font-size:14px;color:#1e293b;border-collapse:collapse;">
+            <tr>
+              <td style="padding:5px 0;color:#64748b;width:170px;">🌐 Sistem Giriş Adresi:</td>
+              <td style="padding:5px 0;font-weight:700;"><a href="${baseUrl}" style="color:#2563eb;text-decoration:none;">${baseUrl}</a></td>
+            </tr>
+            <tr>
+              <td style="padding:5px 0;color:#64748b;">📧 Kullanıcı Adı (E-posta):</td>
+              <td style="padding:5px 0;font-weight:700;">${newUser.email}</td>
+            </tr>
+            <tr>
+              <td style="padding:5px 0;color:#64748b;">🔑 İlk Giriş Şifreniz:</td>
+              <td style="padding:5px 0;"><code style="background:#e2e8f0;padding:3px 8px;border-radius:6px;font-weight:800;color:#0f172a;font-size:14px;">${initialPass}</code></td>
+            </tr>
+            <tr>
+              <td style="padding:5px 0;color:#64748b;">🏢 Departman / Rol:</td>
+              <td style="padding:5px 0;">${newUser.department || 'Genel'} — <strong>${roleLabel}</strong></td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:18px;font-size:13px;color:#166534;line-height:1.5;">
+          <strong>💡 İlk Girişten Sonra Ne Yapmalısınız?</strong>
+          <ol style="margin:6px 0 0 0;padding-left:18px;">
+            <li>Yukarıdaki e-posta ve ilk giriş şifrenizle sisteme giriş yapın.</li>
+            <li>Sol alt köşedeki isminize tıklayarak <strong>👤 Kullanıcı Profili & Tercihler</strong> penceresini açın.</li>
+            <li><strong>🔐 Şifre Oluştur / Değiştir</strong> bölümünden sadece sizin bildiğiniz yeni şifrenizi kaydedin.</li>
+            <li>İsterseniz <strong>📷 Profil Resmi Yükle</strong> butonuyla kendi fotoğrafınızı ekleyin.</li>
+          </ol>
+        </div>
+
+        <a href="${baseUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:700;font-size:14px;">
+          🚀 Sisteme Giriş Yap & Profilini Düzenle
+        </a>
+      </div>
+    `;
+
+    return this.dispatchEmail({
+      tenant_id,
+      to: [newUser.email],
+      subject: `🎉 [Hoş Geldiniz] FG Group Proje Sistemine Erişim Bilgileriniz (${newUser.name})`,
+      category: 'USER_WELCOME_CARD',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard
+    });
+  }
+
+  /**
    * 4. Outlook Actionable Message HTTP Callback İşleyicisi (/api/outlook/action)
    * E-postanın içindeki butonlara tıklandığında çalışır, ZORUNLU NOT kuralını denetler,
    * yönetici bilgilendirme maillerini gönderir ve kartı anında günceller!

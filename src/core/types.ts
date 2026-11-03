@@ -53,6 +53,7 @@ export interface User {
   can_build_reports: boolean;
   department?: string;
   theme?: 'light' | 'dark';
+  avatar_url?: string;
   created_at: string;
 }
 
@@ -78,6 +79,7 @@ export interface PersonnelCardDTO {
   can_build_reports?: boolean;
   department?: string;
   theme?: 'light' | 'dark';
+  avatar_url?: string;
 }
 
 export interface CustomReportLayout {
@@ -364,6 +366,7 @@ export type EmailOutboxCategory =
   | 'ACTIONABLE_TASK_CARD'
   | 'TASK_ASSIGNED_CARD'
   | 'PROJECT_MEMBER_CARD'
+  | 'USER_WELCOME_CARD'
   | 'TASK_COMPLETED_MANAGER_CARD'
   | 'TASK_PROGRESS_MANAGER_CARD'
   | 'DELAY_EXPLANATION_CARD'

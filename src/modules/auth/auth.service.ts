@@ -87,6 +87,7 @@ export class AuthService {
       can_create_project: options?.can_create_project ?? false,
       can_build_reports: options?.can_build_reports ?? (options?.system_role === 'ADMIN'),
       department: options?.department || 'Genel',
+      avatar_url: options?.avatar_url || undefined,
       created_at: new Date().toISOString()
     };
     return this.db.insertUser(user);
@@ -139,6 +140,40 @@ export class AuthService {
     }
 
     const updated = this.db.updateUser(auth.tenant_id, user_id, patch);
+    const { password: _, ...safeUser } = updated!;
+    return safeUser;
+  }
+
+  public changeOwnPassword(
+    auth: AuthContext,
+    current_password: string,
+    new_password: string
+  ): void {
+    const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user) {
+      throw new Error('Kullanıcı bulunamadı.');
+    }
+    const cleanNew = String(new_password || '').trim();
+    if (cleanNew.length < 3) {
+      throw new Error('Yeni şifreniz en az 3 karakter olmalıdır.');
+    }
+    if (user.password && user.password !== String(current_password || '')) {
+      throw new Error('Mevcut şifrenizi hatalı girdiniz.');
+    }
+    this.db.updateUser(auth.tenant_id, auth.user_id, { password: cleanNew });
+  }
+
+  public updateOwnAvatar(
+    auth: AuthContext,
+    avatar_url?: string
+  ): Omit<User, 'password'> {
+    const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user) {
+      throw new Error('Kullanıcı bulunamadı.');
+    }
+    const updated = this.db.updateUser(auth.tenant_id, auth.user_id, {
+      avatar_url: avatar_url || undefined
+    });
     const { password: _, ...safeUser } = updated!;
     return safeUser;
   }

@@ -221,3 +221,13 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 * **Canlı Senaryo Merkezi (`POST /api/admin/trigger-card-scenario` & `#view-email-automation`):**
   - `outlook_adaptive_cards_rehberi.md` dokümanındaki tüm 5 senaryoyu Exchange Online (SMTP) ve Canlı Outlook Kart Simülatörü üzerinde tek tıkla test edebilen **"📘 Outlook Adaptive Cards Rehberi v1.4 & Canlı Senaryo Merkezi"** paneli eklendi.
   - **24/24 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
+
+### 20. Yeni Kullanıcı Karşılama & Sistem Erişim E-postası (`USER_WELCOME_CARD`), Kendi Şifresini Oluşturma/Değiştirme ve Profil Resmi (`avatar_url`)
+* **Yeni Kullanıcı Eklendiğinde Otomatik Karşılama Maili (`EmailAndAutomationService.sendUserWelcomeCard` & `POST /api/admin/personnel`):**
+  - Yönetici yeni bir personel kartı eklediğinde (`POST /api/admin/personnel`), eklenen personelin e-posta adresine otomatik olarak **Sistem Giriş Adresi (`URL`), Kullanıcı E-posta Adresi, İlk Giriş Şifresi, Departman/Rol Yetkileri** ve şifre/profil resmi güncelleme adımlarını içeren **HTML + Adaptive Card v1.4 (`USER_WELCOME_CARD`)** e-postası gönderilir.
+* **Kullanıcıların Giriş Yaptıktan Sonra Kendi Şifrelerini Oluşturması / Değiştirmesi (`PUT /api/profile/password` & `#userProfileModal`):**
+  - Sol alttaki kullanıcı profiline tıklandığında açılan **👤 Kullanıcı Profili & Tercihler (`#userProfileModal`)** penceresine **"🔐 Şifre Oluştur / Değiştir"** bölümü eklendi (`Mevcut Şifre`, `Yeni Şifre`, `Yeni Şifre Tekrar`, `👁️ Göster/Gizle`).
+  - [`AuthService.changeOwnPassword`](file:///y:/gorevler1/src/modules/auth/auth.service.ts) ile şifre doğrulaması yapılarak yeni şifre hem yerel veritabanına hem de PostgreSQL `users` tablosuna (`AES-256-GCM` şifreli) kaydedilir.
+* **Kullanıcı Profil Resmi Yükleme / Kaldırma (`PUT /api/profile/avatar` & `users.avatar_url`):**
+  - Kullanıcılar **👤 Kullanıcı Profili & Tercihler** penceresinden **"📷 Profil Resmi Yükle / Değiştir"** butonuyla kendi fotoğraflarını seçebilir; görsel tarayıcıda otomatik olarak `256x256` kare formata kırpılıp sıkıştırılarak veritabanına (`users.avatar_url`) kaydedilir ve sol menüde, personel tablosunda ve görev detay çekmecesinde görüntülenir.
+  - **25/25 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
