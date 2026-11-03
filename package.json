@@ -11,15 +11,18 @@
     "test": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.14",
     "@types/nodemailer": "^8.0.2",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "nodemailer": "^10.3.1"
+    "nodemailer": "^10.3.1",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

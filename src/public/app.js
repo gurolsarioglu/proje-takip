@@ -4024,17 +4024,19 @@ let emailAutoState = {
 
 async function loadEmailAutomationDashboard() {
   try {
-    const [smtpCfg, schedList, outboxList] = await Promise.all([
+    const [smtpCfg, schedList, outboxList, dbStatus] = await Promise.all([
       apiCall('/api/admin/smtp-config'),
       apiCall('/api/admin/scheduled-reports'),
-      apiCall('/api/email/outbox')
+      apiCall('/api/email/outbox'),
+      apiCall('/api/admin/db-status').catch(() => null)
     ]);
 
     emailAutoState.smtpConfig = smtpCfg;
     emailAutoState.scheduledReports = schedList || [];
     emailAutoState.outboxItems = outboxList || [];
+    emailAutoState.dbStatus = dbStatus;
 
-    renderSmtpConfigForm(smtpCfg);
+    renderSmtpConfigForm(smtpCfg, dbStatus);
     renderScheduledReportFormOptions();
     renderScheduledReportsList();
     renderEmailOutboxList();
@@ -4043,7 +4045,7 @@ async function loadEmailAutomationDashboard() {
   }
 }
 
-function renderSmtpConfigForm(cfg) {
+function renderSmtpConfigForm(cfg, dbStatus) {
   if (!cfg) return;
   const hostEl = document.getElementById('smtpHostInput');
   const portEl = document.getElementById('smtpPortInput');
@@ -4082,7 +4084,34 @@ function renderSmtpConfigForm(cfg) {
   }
 
   if (hintEl && cfg.updated_at) {
-    hintEl.textContent = `Son güncelleme: ${new Date(cfg.updated_at).toLocaleString('tr-TR')}`;
+    const encText = cfg.is_encrypted_at_rest
+      ? ' • 🔐 Şifre AES-256-GCM Kasasında Kalıcı Kayıtlı'
+      : '';
+    hintEl.textContent = `Son güncelleme: ${new Date(cfg.updated_at).toLocaleString('tr-TR')}${encText}`;
+  }
+
+  const pgBadge = document.getElementById('pgVaultStatusBadge');
+  if (pgBadge && (dbStatus || emailAutoState.dbStatus)) {
+    const st = dbStatus || emailAutoState.dbStatus;
+    const modeName = st.engine === 'EXTERNAL_POSTGRES'
+      ? 'Harici PostgreSQL Sunucusu (DATABASE_URL)'
+      : 'Gömülü PostgreSQL 16 (PGlite .work/pgdata)';
+    pgBadge.textContent = `🐘 ${modeName} • 🔐 ${st.vault_encryption || 'AES-256-GCM'} Şifre Kasası Aktif`;
+  }
+
+  const vaultTag = document.getElementById('smtpVaultEncTag');
+  if (vaultTag) {
+    if (cfg.has_password) {
+      vaultTag.textContent = '🔐 AES-256-GCM Kasada Kayıtlı (Unutulmaz)';
+      vaultTag.style.color = '#059669';
+      vaultTag.style.background = '#ecfdf5';
+      vaultTag.style.borderColor = '#a7f3d0';
+    } else {
+      vaultTag.textContent = '🔐 AES-256-GCM Şifreleme Hazır';
+      vaultTag.style.color = '#2563eb';
+      vaultTag.style.background = '#eff6ff';
+      vaultTag.style.borderColor = '#bfdbfe';
+    }
   }
 }
 

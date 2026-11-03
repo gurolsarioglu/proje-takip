@@ -765,10 +765,13 @@
         <!-- Üst Durum & Hızlı Test Barı -->
         <div class="card email-auto-hero-card">
           <div class="email-hero-left">
-            <div class="email-hero-badge-row">
+            <div class="email-hero-badge-row" style="flex-wrap:wrap; gap:8px;">
               <span class="report-badge">EXCHANGE ONLINE PLAN 1</span>
               <span id="smtpStatusBadge" class="smtp-status-pill simulated">🟡 Yerel Outbox Simülasyon Modu (Şifre
                 Girildiğinde Canlı SMTP Aktif Olur)</span>
+              <span id="pgVaultStatusBadge" class="smtp-status-pill live" style="background:rgba(37,99,235,0.12); color:#1d4ed8; border:1px solid rgba(37,99,235,0.3);">
+                🐘 PostgreSQL Aktif & 🔐 AES-256-GCM Kasa Korumalı
+              </span>
             </div>
             <h3>📧 Exchange Online (SMTP), Outlook Actionable Messages & Zamanlanmış Rapor Merkezi</h3>
             <p>Personellere giden etkileşimli görev kartlarını (Adaptive Cards), Exchange Online Plan 1 mail hesabınızı
@@ -824,7 +827,10 @@
                     required>
                 </div>
                 <div class="form-group">
-                  <label for="smtpPasswordInput">Mail Şifresi / Uygulama Şifresi</label>
+                  <label for="smtpPasswordInput" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>Mail Şifresi / Uygulama Şifresi</span>
+                    <span id="smtpVaultEncTag" style="font-size:0.68rem; font-weight:700; color:#059669; background:#ecfdf5; padding:2px 6px; border-radius:999px; border:1px solid #a7f3d0;">🔐 AES-256-GCM Korumalı</span>
+                  </label>
                   <div style="display:flex; gap:6px; align-items:center;">
                     <input type="password" id="smtpPasswordInput" class="styled-input"
                       placeholder="Exchange Online şifrenizi giriniz" style="flex:1;">

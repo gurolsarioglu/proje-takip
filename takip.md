@@ -193,3 +193,16 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 * **Tekstil 5 Kişilik Ekip Senaryosu & Test Doğrulaması:**
   - Seed veritabanı 5 kişilik tekstil ekibi (*"2027 İlkbahar/Yaz Tekstil Koleksiyonu - Tasarım Onayı & Numune Sunumu"*) ve hazır zamanlanmış rapor kurallarıyla zenginleştirildi.
   - **22/22 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
+
+### 18. PostgreSQL İlişkisel Veritabanı Motoru (`PGlite` + `pg`) & `AES-256-GCM` Şifreli SMTP Kasası (Vault)
+* **Çift Modlu PostgreSQL Veritabanı Mimarisi (`src/database/postgres.ts` & `src/database/schema.sql`):**
+  - **Gömülü PostgreSQL 18 (`@electric-sql/pglite`):** Kurulum gerektirmeden `.work/pgdata` dizininde gerçek ilişkisel PostgreSQL motoru çalıştırıldı.
+  - **Harici PostgreSQL Sunucu Desteği (`pg` / `node-postgres`):** İleride harici bir PostgreSQL sunucusuna geçilmek istendiğinde kod değiştirmeden yalnızca `DATABASE_URL=postgresql://kullanici:sifre@sunucu:5432/veritabani` ortam değişkeni veya `.work/pg-external.json` tanımlanarak anında geçiş yapılabilmesi sağlandı.
+  - **15 İlişkisel Tablo Şeması (`src/database/schema.sql`):** `tenants`, `users`, `projects`, `project_plan_changes`, `project_members`, `visibility_requests`, `tasks`, `task_assignments`, `task_plan_changes`, `task_dependencies`, `delay_records`, `notifications`, `push_subscriptions`, `microsoft_todos`, `smtp_configs`, `scheduled_reports` ve `email_outbox` tabloları indeksleriyle birlikte oluşturuldu ve Write-Through senkronizasyon bağlandı.
+* **`AES-256-GCM` Kurumsal Şifre Kasası (`src/core/crypto-vault.ts`):**
+  - Exchange Online (SMTP) şifresi diske ve PostgreSQL `smtp_configs.encrypted_password` sütununa asla düz metin (plaintext) olarak yazılmaz; `enc:v1:<iv>:<authTag>:<cipher>` formatında **`AES-256-GCM` Authenticated Encryption** ile şifrelenerek saklanır.
+  - 256-bit Master Key `.work/.vault.key` (veya `process.env.VAULT_MASTER_KEY`) üzerinden yönetilir ve `.gitignore` ile Git deposundan izole edilir.
+* **Yeniden Başlatmada (Restart) Şifre & Veri Koruma Garantisi (`src/database/seed.ts` & `src/database/db.ts`):**
+  - `seedDatabase(db, false)` idempotent hale getirildi; sunucu yeniden başlatıldığında mevcut projeler, görevler ve şifreli SMTP kimlik bilgileri asla sıfırlanmaz.
+  - Ek olarak `.work/smtp-vault.json` ve PostgreSQL `smtp_configs` tablosu üzerinden çift katmanlı otomatik geri yükleme (auto-restore) eklendi.
+  - **23/23 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.

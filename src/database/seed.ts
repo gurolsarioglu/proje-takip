@@ -7,12 +7,21 @@ import { DelayService } from '../modules/delay/delay.service.js';
 import { NotificationService } from '../modules/notification/notification.service.js';
 import { EmailAndAutomationService } from '../modules/email/email.service.js';
 
-export function seedDatabase(db: Database) {
-  // Kullanıcının daha önce kaydettiği SMTP ayarları varsa sunucu yeniden başlarken koru
+export function seedDatabase(db: Database, forceReset = false) {
   const existingTenants = db.getTenants();
   const prevSmtp = existingTenants.length > 0 ? db.getSmtpConfig(existingTenants[0].id) : undefined;
 
-  // Always initialize fresh 5-person team & projects on server boot
+  // Eğer veritabanında zaten aktif tenant ve projeler mevcutsa ve zorunlu sıfırlama istenmemişse, verileri ve SMTP şifresini koru!
+  if (!forceReset && existingTenants.length > 0) {
+    const tId = existingTenants[0].id;
+    const existingProjects = db.getProjects(tId);
+    if (existingProjects.length > 0) {
+      db.getSmtpConfig(tId);
+      console.log('Mevcut veritabanı kayıtları ve şifrelenmiş (AES-256-GCM) SMTP ayarları korundu.');
+      return;
+    }
+  }
+
   db.reset();
 
   const authService = new AuthService(db);
@@ -447,7 +456,14 @@ export function seedDatabase(db: Database) {
   }
 
   // 9. Exchange Online Plan 1 (SMTP), Zamanlanmış Raporlar ve Başlangıç Outlook Actionable Cards
-  emailService.getSmtpConfig(tenantFG.id);
+  if (prevSmtp) {
+    db.upsertSmtpConfig({
+      ...prevSmtp,
+      tenant_id: tenantFG.id
+    });
+  } else {
+    emailService.getSmtpConfig(tenantFG.id);
+  }
 
   const job1 = emailService.createScheduledReport(authAdmin, {
     name: 'Günlük Tekstil Koleksiyonu & Darboğaz Özeti',
@@ -475,15 +491,7 @@ export function seedDatabase(db: Database) {
     emailService.sendTaskReadyActionableCard(tenantFG.id, tx5.id),
     emailService.sendDelayExplanationActionableCard(tenantFG.id, t2.id),
     emailService.executeScheduledReportJob(tenantFG.id, job1.id)
-  ]).then(() => {
-    // Eğer kullanıcının daha önce kaydettiği Exchange Online ayarları varsa yeni tenant üzerine geri yükle
-    if (prevSmtp) {
-      db.upsertSmtpConfig({
-        ...prevSmtp,
-        tenant_id: tenantFG.id
-      });
-    }
-  });
+  ]);
 
   console.log('FG Group 5 kişilik ekip, Tekstil & ERP projeleri ve Exchange Online / Actionable Cards başarıyla yüklendi.');
 }

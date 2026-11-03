@@ -20,6 +20,7 @@ import {
   EmailOutboxItem,
   UUID
 } from '../core/types.js';
+import { CryptoVault } from '../core/crypto-vault.js';
 
 export interface DatabaseState {
   tenants: Tenant[];
@@ -44,6 +45,7 @@ export interface DatabaseState {
 export class Database {
   private state: DatabaseState;
   private filePath?: string;
+  private onSaveHook?: (state: DatabaseState) => void;
 
   constructor(filePath?: string) {
     this.filePath = filePath;
@@ -68,6 +70,15 @@ export class Database {
         if (!Array.isArray(this.state.email_outbox)) {
           this.state.email_outbox = [];
         }
+        // Düz metin kalmış SMTP şifresi varsa anında AES-256-GCM ile şifrele
+        let smtpMigrated = false;
+        this.state.smtp_configs = this.state.smtp_configs.map(c => {
+          if (c.password && c.password.length > 0 && !CryptoVault.isEncrypted(c.password)) {
+            smtpMigrated = true;
+            return { ...c, password: CryptoVault.encrypt(c.password) };
+          }
+          return c;
+        });
         if (Array.isArray(this.state.users)) {
           this.state.users = this.state.users.map(u => {
             let updated = false;
@@ -84,10 +95,26 @@ export class Database {
             return updated ? { ...u, country, language } : u;
           });
         }
+        if (smtpMigrated) {
+          this.save();
+        }
       } catch (e) {
         console.warn('Failed to load DB file, initializing clean state.', e);
       }
     }
+  }
+
+  public setOnSaveHook(fn: (state: DatabaseState) => void): void {
+    this.onSaveHook = fn;
+  }
+
+  public getRawState(): DatabaseState {
+    return this.state;
+  }
+
+  private getSmtpVaultPath(): string | undefined {
+    if (!this.filePath) return undefined;
+    return path.join(path.dirname(this.filePath), 'smtp-vault.json');
   }
 
   public getInitialState(): DatabaseState {
@@ -113,7 +140,14 @@ export class Database {
   }
 
   public reset(): void {
+    // Reset çağrılsa bile şifrelenmiş SMTP kasasını koru
+    const preservedSmtp = Array.isArray(this.state.smtp_configs)
+      ? this.state.smtp_configs.filter(c => c.password && c.password.length > 0)
+      : [];
     this.state = this.getInitialState();
+    if (preservedSmtp.length > 0) {
+      this.state.smtp_configs = preservedSmtp;
+    }
     this.save();
   }
 
@@ -128,6 +162,9 @@ export class Database {
       } catch (err) {
         console.error('Failed to save db state:', err);
       }
+    }
+    if (this.onSaveHook) {
+      this.onSaveHook(this.state);
     }
   }
 
@@ -410,20 +447,86 @@ export class Database {
     return true;
   }
 
-  // --- Exchange Online / SMTP Config ---
+  // --- Exchange Online / SMTP Config (AES-256-GCM Encrypted Vault) ---
+  public getStoredRawSmtpPassword(tenant_id: UUID): string {
+    if (!Array.isArray(this.state.smtp_configs)) return '';
+    const found = this.state.smtp_configs.find(c => c.tenant_id === tenant_id) || this.state.smtp_configs[0];
+    return found?.password || '';
+  }
+
   public getSmtpConfig(tenant_id: UUID): SmtpConfig | undefined {
     if (!Array.isArray(this.state.smtp_configs)) this.state.smtp_configs = [];
-    return this.state.smtp_configs.find(c => c.tenant_id === tenant_id);
+    let found = this.state.smtp_configs.find(c => c.tenant_id === tenant_id);
+
+    // Eğer aktif tenant için şifre boşsa ama kasada (veya önceki tenant kaydında) şifreli kayıt varsa otomatik bağla
+    if ((!found || !found.password) && this.filePath) {
+      const withPass = this.state.smtp_configs.find(c => c.password && c.password.length > 0);
+      if (withPass) {
+        found = { ...withPass, tenant_id };
+        const idx = this.state.smtp_configs.findIndex(c => c.tenant_id === tenant_id);
+        if (idx === -1) this.state.smtp_configs.push(found);
+        else this.state.smtp_configs[idx] = found;
+        this.save();
+      } else {
+        const vaultPath = this.getSmtpVaultPath();
+        if (vaultPath && fs.existsSync(vaultPath)) {
+          try {
+            const vaultData = JSON.parse(fs.readFileSync(vaultPath, 'utf-8'));
+            if (vaultData && vaultData.username) {
+              found = {
+                ...vaultData,
+                tenant_id,
+                password: CryptoVault.encrypt(vaultData.encrypted_password || vaultData.password || '')
+              };
+              this.state.smtp_configs.push(found!);
+              this.save();
+            }
+          } catch { }
+        }
+      }
+    }
+
+    if (!found) return undefined;
+    return {
+      ...found,
+      password: CryptoVault.decrypt(found.password)
+    };
   }
 
   public upsertSmtpConfig(config: SmtpConfig): SmtpConfig {
     if (!Array.isArray(this.state.smtp_configs)) this.state.smtp_configs = [];
+    const encryptedPassword = config.password ? CryptoVault.encrypt(config.password) : '';
+    const toStore: SmtpConfig = {
+      ...config,
+      password: encryptedPassword
+    };
+
     const idx = this.state.smtp_configs.findIndex(c => c.tenant_id === config.tenant_id);
     if (idx === -1) {
-      this.state.smtp_configs.push(config);
+      this.state.smtp_configs.push(toStore);
     } else {
-      this.state.smtp_configs[idx] = { ...this.state.smtp_configs[idx], ...config };
+      const existingPass = this.state.smtp_configs[idx].password;
+      this.state.smtp_configs[idx] = {
+        ...this.state.smtp_configs[idx],
+        ...toStore,
+        password: encryptedPassword || existingPass || ''
+      };
     }
+
+    // Şifre girilmişse kalıcı şifreli kasaya (.work/smtp-vault.json) da yedekle
+    const finalStored = this.state.smtp_configs.find(c => c.tenant_id === config.tenant_id)!;
+    if (this.filePath && finalStored.password && finalStored.password.length > 0) {
+      const vaultPath = this.getSmtpVaultPath();
+      if (vaultPath) {
+        try {
+          fs.writeFileSync(vaultPath, JSON.stringify({
+            ...finalStored,
+            encrypted_password: finalStored.password
+          }, null, 2), 'utf-8');
+        } catch { }
+      }
+    }
+
     this.save();
     return this.getSmtpConfig(config.tenant_id)!;
   }

@@ -10,6 +10,9 @@ import { NotificationService } from '../src/modules/notification/notification.se
 import { ReportingService } from '../src/modules/reporting/reporting.service.js';
 import { MicrosoftTodoService } from '../src/modules/microsoft_todo/microsoft_todo.service.js';
 import { EmailAndAutomationService } from '../src/modules/email/email.service.js';
+import { CryptoVault } from '../src/core/crypto-vault.js';
+import { seedDatabase } from '../src/database/seed.js';
+import { PostgresEngine } from '../src/database/postgres.js';
 
 test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryoları', async (t) => {
   const db = new Database(); // Fresh in-memory DB for tests
@@ -716,5 +719,49 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(reportMail.category, 'SCHEDULED_REPORT');
     assert.ok(reportMail.subject.includes('Günlük Tekstil Müşteri Sunumu İlerleme Raporu'));
     assert.ok(reportMail.adaptive_card_json);
+  });
+
+  await t.test('POSTGRESQL & AES-256-GCM VAULT: SMTP şifresinin şifreli saklanması, yeniden başlatmada korunması ve PostgreSQL senkronizasyonu', async () => {
+    // 1. CryptoVault AES-256-GCM şifreleme / çözme doğrulaması
+    const rawSecret = 'FgGroup!2026#ExchangePlan1';
+    const encrypted = CryptoVault.encrypt(rawSecret);
+    assert.ok(encrypted.startsWith('enc:v1:'), 'Şifreli metin enc:v1: önekiyle başlamalı');
+    assert.notEqual(encrypted, rawSecret, 'Düz metin ile şifreli metin aynı olmamalı');
+    assert.equal(CryptoVault.decrypt(encrypted), rawSecret, 'Çözülen şifre orijinal şifreyle birebir aynı olmalı');
+
+    // 2. Database katmanında SMTP şifresinin bellekte/diskte şifreli tutulması ve okurken çözülmesi
+    emailService.saveSmtpConfig(authManagerA, {
+      host: 'smtp.office365.com',
+      port: 587,
+      username: 'bildirim@fggroup.com.tr',
+      password: rawSecret,
+      from_name: 'FG Group Bildirim',
+      public_base_url: 'http://10.1.0.45:3000',
+      enable_actionable_cards: true
+    });
+
+    const rawStored = db.state.smtp_configs.find(c => c.tenant_id === tenantA.id);
+    assert.ok(rawStored?.password.startsWith('enc:v1:'), 'Veritabanı içinde şifre düz metin değil AES-256-GCM şifreli tutulmalı');
+
+    const decryptedCfg = db.getSmtpConfig(tenantA.id);
+    assert.equal(decryptedCfg?.password, rawSecret, 'Servis katmanı okuduğunda şifre otomatik çözülmeli');
+
+    // 3. Sunucu yeniden başlatıldığında (seedDatabase(db, false)) verilerin ve SMTP şifresinin asla silinmemesi
+    const projectCountBefore = db.getProjects(tenantA.id).length;
+    seedDatabase(db, false);
+    const projectCountAfter = db.getProjects(tenantA.id).length;
+    assert.equal(projectCountAfter, projectCountBefore, 'Normal sunucu yeniden başlatmasında mevcut projeler silinmemeli');
+    assert.equal(db.getSmtpConfig(tenantA.id)?.password, rawSecret, 'Yeniden başlatma sonrası SMTP şifresi korunmalı');
+
+    // 4. PostgreSQL (PGlite) motorunun ilişkisel tabloları oluşturması ve SMTP + proje verilerini senkronize etmesi
+    const pgEngine = new PostgresEngine(db, 'memory://');
+    await pgEngine.init();
+    const pgStatus = await pgEngine.getStatus();
+    assert.equal(pgStatus.connected, true);
+    assert.equal(pgStatus.engine, 'PGLITE_EMBEDDED');
+    assert.equal(pgStatus.vault_encryption, 'AES-256-GCM');
+    assert.equal(pgStatus.smtp_password_encrypted, true);
+    assert.ok(pgStatus.table_counts.projects >= 1);
+    await pgEngine.close();
   });
 });

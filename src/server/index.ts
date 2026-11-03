@@ -5,6 +5,8 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Database } from '../database/db.js';
+import { PostgresEngine } from '../database/postgres.js';
+import { CryptoVault } from '../core/crypto-vault.js';
 import { seedDatabase } from '../database/seed.js';
 import { AuthService } from '../modules/auth/auth.service.js';
 import { ProjectService } from '../modules/project/project.service.js';
@@ -26,10 +28,12 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Veritabanı ve Modül Başlatma
+// Veritabanı ve Modül Başlatma (PostgreSQL + AES-256-GCM Şifre Kasası)
 const dbPath = path.resolve(__dirname, '../../.work/data.json');
 const db = new Database(dbPath);
-seedDatabase(db);
+seedDatabase(db, false);
+const pgEngine = new PostgresEngine(db);
+void pgEngine.init();
 
 const authService = new AuthService(db);
 const projectService = new ProjectService(db);
@@ -1147,17 +1151,29 @@ app.post('/api/todo/azure-config', (req, res) => {
 
 
 // ==========================================
-// 10. Exchange Online (SMTP), Outlook Actionable Messages & Zamanlanmış Raporlar API
+// 10. Exchange Online (SMTP), PostgreSQL Durumu, Outlook Actionable Messages & Zamanlanmış Raporlar API
 // ==========================================
+app.get('/api/admin/db-status', async (_req, res) => {
+  try {
+    const status = await pgEngine.getStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/smtp-config', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const cfg = emailService.getSmtpConfig(auth.tenant_id);
+    const rawStored = db.getStoredRawSmtpPassword(auth.tenant_id);
     const { password, ...safeCfg } = cfg;
     res.json({
       ...safeCfg,
       has_password: !!(password && password.length > 0),
-      password_masked: password && password.length > 0 ? '••••••••' : ''
+      password_masked: password && password.length > 0 ? '••••••••' : '',
+      encryption_algorithm: 'AES-256-GCM',
+      is_encrypted_at_rest: CryptoVault.isEncrypted(rawStored)
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1168,11 +1184,14 @@ app.put('/api/admin/smtp-config', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const saved = emailService.saveSmtpConfig(auth, req.body);
+    const rawStored = db.getStoredRawSmtpPassword(auth.tenant_id);
     const { password, ...safeCfg } = saved;
     res.json({
       ...safeCfg,
       has_password: !!(password && password.length > 0),
-      password_masked: password && password.length > 0 ? '••••••••' : ''
+      password_masked: password && password.length > 0 ? '••••••••' : '',
+      encryption_algorithm: 'AES-256-GCM',
+      is_encrypted_at_rest: CryptoVault.isEncrypted(rawStored)
     });
   } catch (err: any) {
     res.status(403).json({ error: err.message });

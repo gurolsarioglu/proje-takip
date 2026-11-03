@@ -1,5 +1,4 @@
 node_modules/
 dist/
-.work/data.json
-.work/*.txt
+.work/
 *.log
