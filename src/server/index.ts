@@ -276,7 +276,7 @@ app.post('/api/projects', async (req, res) => {
         if (m && m.user_id && m.user_id !== auth.user_id) {
           const role = m.role || 'EDITOR';
           try {
-            projectService.assignMember(auth, project.id, m.user_id, role);
+            projectService.addOrUpdateMember(auth, project.id, m.user_id, role);
             const u = db.getUserById(auth.tenant_id, m.user_id);
             if (u) {
               notificationService.notifyProjectMemberAdded(auth.tenant_id, project.id, u.id, project.title, role, auth.name);
