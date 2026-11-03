@@ -609,6 +609,13 @@ export class EmailAndAutomationService {
       sent_at: new Date().toISOString()
     };
 
+    const hasCard = params.adaptiveCardJson ? 'AdaptiveCard:v1.4' : 'HTML-Only';
+    if (status === 'FAILED') {
+      console.error(`❌ [EMAIL-MONITOR] [${params.category}] (${hasCard}) GÖNDERİM HATASI -> Alıcı: ${params.to.join(', ')} | Konu: "${params.subject}" | Hata: ${error_message}`);
+    } else {
+      console.log(`📧 [EMAIL-MONITOR] [${params.category}] (${hasCard}) Durum: ${status} (${delivery_mode}) -> Alıcı: ${params.to.join(', ')} | Konu: "${params.subject}"`);
+    }
+
     return this.db.insertEmailOutbox(item);
   }
 

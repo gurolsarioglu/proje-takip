@@ -2698,6 +2698,30 @@ function setupEventListeners() {
 
   // Yeni Proje Modalı
   document.getElementById('newProjectBtn').addEventListener('click', () => {
+    const checklistEl = document.getElementById('newProjectMembersChecklist');
+    if (checklistEl) {
+      const otherUsers = (state.personnelList || []).filter(u => u.id !== state.currentUser?.id);
+      if (otherUsers.length === 0) {
+        checklistEl.innerHTML = '<div style="font-size:0.78rem; color:var(--text-tertiary);">Eklenebilecek başka personel bulunmuyor.</div>';
+      } else {
+        checklistEl.innerHTML = otherUsers.map(u => `
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; border-radius:8px; background:var(--surface, #ffffff); border:1px solid var(--border-color, #e2e8f0);">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; font-size:0.8rem; margin:0;">
+              <input type="checkbox" class="new-proj-member-cb" value="${u.id}">
+              <div>
+                <div style="font-weight:700; color:var(--text-primary);">${escapeHtml(u.name)} <span style="font-weight:400; color:var(--text-secondary);">(${escapeHtml(u.department || 'Genel')})</span></div>
+                <div style="font-size:0.73rem; color:var(--text-tertiary);">📧 ${escapeHtml(u.email)}</div>
+              </div>
+            </label>
+            <select class="styled-select sm-select new-proj-member-role" data-user-id="${u.id}" style="width:auto; min-width:130px; padding:4px 8px; font-size:0.75rem;">
+              <option value="EDITOR" selected>✏️ Düzenleyici (Editor)</option>
+              <option value="PROJECT_MANAGER">👑 Proje Yöneticisi</option>
+              <option value="VIEWER">👁️ Görüntüleyici (Viewer)</option>
+            </select>
+          </div>
+        `).join('');
+      }
+    }
     document.getElementById('projectModal').classList.add('open');
   });
 
@@ -2708,18 +2732,35 @@ function setupEventListeners() {
     const initial_start_date = new Date(document.getElementById('pStart').value).toISOString();
     const initial_due_date = new Date(document.getElementById('pDue').value).toISOString();
 
+    const members = [];
+    document.querySelectorAll('#newProjectMembersChecklist .new-proj-member-cb:checked').forEach(cb => {
+      const uid = cb.value;
+      const roleSel = document.querySelector(`#newProjectMembersChecklist .new-proj-member-role[data-user-id="${uid}"]`);
+      members.push({
+        user_id: uid,
+        role: roleSel ? roleSel.value : 'EDITOR'
+      });
+    });
+
     const newProj = await apiCall('/api/projects', 'POST', {
       title,
       description,
       initial_start_date,
-      initial_due_date
+      initial_due_date,
+      members
     });
 
-    showToast('Yeni proje oluşturuldu.', 'success');
+    showToast(
+      members.length > 0
+        ? `📁 Yeni proje oluşturuldu ve seçilen ${members.length} kişiye "Projeye Dahil Edildiniz" Adaptive Card e-postası gönderildi!`
+        : '📁 Yeni proje oluşturuldu.',
+      'success'
+    );
     document.getElementById('projectModal').classList.remove('open');
     e.target.reset();
     await loadProjects();
     await loadProjectTasks(newProj.id);
+    await loadNotifications();
   });
 
   let editingPersonnelId = null;

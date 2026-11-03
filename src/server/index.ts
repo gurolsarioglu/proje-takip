@@ -257,10 +257,10 @@ app.get('/api/projects', (req, res) => {
   }
 });
 
-app.post('/api/projects', (req, res) => {
+app.post('/api/projects', async (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { title, description, initial_start_date, initial_due_date } = req.body;
+    const { title, description, initial_start_date, initial_due_date, members } = req.body;
     const project = projectService.createProject(
       auth,
       title,
@@ -268,8 +268,31 @@ app.post('/api/projects', (req, res) => {
       initial_start_date,
       initial_due_date
     );
+    console.log(`📁 [PROJECT-MONITOR] Yeni Proje Oluşturuldu: "${project.title}" (${project.id}) | Oluşturan: ${auth.name} (${auth.email})`);
+
+    // Proje açılırken seçilen ekip üyelerini dahil et ve her birine otomatik Adaptive Card e-postası gönder
+    if (Array.isArray(members) && members.length > 0) {
+      for (const m of members) {
+        if (m && m.user_id && m.user_id !== auth.user_id) {
+          const role = m.role || 'EDITOR';
+          try {
+            projectService.assignMember(auth, project.id, m.user_id, role);
+            const u = db.getUserById(auth.tenant_id, m.user_id);
+            if (u) {
+              notificationService.notifyProjectMemberAdded(auth.tenant_id, project.id, u.id, project.title, role, auth.name);
+              void emailService.sendProjectMemberAddedCard(auth.tenant_id, project.id, u.id, role, auth.name);
+              console.log(`👥 [PROJECT-MONITOR] Projeye Üye Eklendi & Bildirim Tetiklendi: ${u.name} (${u.email}) -> Rol: ${role}`);
+            }
+          } catch (memberErr: any) {
+            console.warn(`⚠️ [PROJECT-MONITOR] Üye ekleme uyarısı (${m.user_id}):`, memberErr.message);
+          }
+        }
+      }
+    }
+
     res.status(201).json(project);
   } catch (err: any) {
+    console.error(`❌ [PROJECT-MONITOR] Proje oluşturma hatası:`, err.message);
     res.status(400).json({ error: err.message });
   }
 });
