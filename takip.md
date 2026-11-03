@@ -206,3 +206,18 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - `seedDatabase(db, false)` idempotent hale getirildi; sunucu yeniden başlatıldığında mevcut projeler, görevler ve şifreli SMTP kimlik bilgileri asla sıfırlanmaz.
   - Ek olarak `.work/smtp-vault.json` ve PostgreSQL `smtp_configs` tablosu üzerinden çift katmanlı otomatik geri yükleme (auto-restore) eklendi.
   - **23/23 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
+
+### 19. Tam Kapsamlı Outlook Adaptive Cards v1.4 Yaşam Döngüsü & Zorunlu Notlu İlerleme (`%40-%50-%60`) Otomasyonu
+* **5 Yeni Otomatik E-Posta & Outlook Adaptive Card v1.4 İş Akışı (`src/modules/email/email.service.ts`, `src/modules/notification/notification.service.ts`):**
+  1. **Projeye Dahil Edilme Bildirimi (`PROJECT_MEMBER_CARD`):** Bir kullanıcı projeye üye olarak eklendiğinde (`POST /api/projects/:id/members`) veya görünürlük talebi onaylandığında (`POST /api/projects/:id/visibility-decide`), kullanıcıya projedeki rolünü, proje takvimini ve kendisine atanan görevleri içeren canlı Adaptive Card e-postası otomatik gönderilir.
+  2. **Görev Atama Bildirimi (`TASK_ASSIGNED_CARD`):** Yeni bir görev oluşturulduğunda (`POST /api/tasks`, `POST /api/projects/:id/tasks/bulk`) veya mevcut görevin sorumlusu değiştirildiğinde (`POST /api/tasks/:id/assign`), atanan personele görevin durumu (`READY` veya `BLOCKED`), öncül bağımlılıkları ve canlı aksiyon butonlarını içeren Adaptive Card e-postası gönderilir.
+  3. **Zorunlu Not Kuralı ile `%20 / %40 / %50 / %60 / %80 / %100` İlerleme & Durum Güncellemesi (`ACTIONABLE_TASK_CARD` & `POST /api/tasks/:id/progress`):**
+     - Personel hem doğrudan Outlook e-postası içindeki Adaptive Card üzerinden (`Input.ChoiceSet` ile `%20`, `%40`, `%50`, `%60`, `%80`, `%100` seçerek) hem de web arayüzündeki İş Paketi Çekmecesi (`#workPackageDrawer`) üzerinden görevi başlatabilir (`IN_PROGRESS`), kısmi ilerleme bildirebilir veya tamamlayabilir (`COMPLETED`).
+     - **Zorunlu Not Kuralı (`TaskService.updateTaskProgressWithNote`):** Kısmi ilerleme (`%40`, `%50`, `%60` vb.) veya mazeret bildirilirken **açıklama/durum notu yazılması zorunludur**; boş not gönderildiğinde hem backend servisi hem de UI/Adaptive Card doğrulaması işlemi reddeder.
+  4. **Proje Yetkililerine Otomatik "İş Tamamlandı" ve "İlerleme Güncellendi" Maili (`TASK_COMPLETED_MANAGER_CARD` & `TASK_PROGRESS_MANAGER_CARD`):**
+     - Görev sorumlusu bir proje adımını tamamladığında (veya `%40/%50/%60` ilerleme + zorunlu not girdiğinde), projedeki yetkili kişilere (`PROJECT_MANAGER`, `EDITOR`, Proje Kurucusu ve `ADMIN`) *"Bu kişi bu işi tamamladı / ilerleme bildirdi"* başlıklı, girilen zorunlu notu, kilidi açılan yeni görevleri ve projenin güncel tamamlanma yüzdesini gösteren Adaptive Card e-postası otomatik gönderilir.
+  5. **Zamanında Yapılmayan (Geciken) Görev Uyarısı (`DELAY_EXPLANATION_CARD` & `OVERDUE_MANAGER_ALERT`):**
+     - Görev planlanan bitiş tarihinde tamamlanmadığında hem görev sorumlusuna zorunlu gecikme açıklaması + `%40/%50/%60` ilerleme kartı gönderilir, hem de projedeki yetkili kişilere (`PROJECT_MANAGER`, `EDITOR`, `ADMIN`) geciken görev ve darboğaz etkisi hakkında acil uyarı e-postası (`OVERDUE_MANAGER_ALERT`) iletilir.
+* **Canlı Senaryo Merkezi (`POST /api/admin/trigger-card-scenario` & `#view-email-automation`):**
+  - `outlook_adaptive_cards_rehberi.md` dokümanındaki tüm 5 senaryoyu Exchange Online (SMTP) ve Canlı Outlook Kart Simülatörü üzerinde tek tıkla test edebilen **"📘 Outlook Adaptive Cards Rehberi v1.4 & Canlı Senaryo Merkezi"** paneli eklendi.
+  - **24/24 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.

@@ -99,20 +99,21 @@ export class DelayService {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
 
-    // Sorumlu veya yönetici girebilir
+    // Sorumlu, proje yöneticisi/editörü veya sistem yöneticisi girebilir
     if (task.assignee_id !== auth.user_id) {
+      const caller = this.db.getUserById(auth.tenant_id, auth.user_id);
       const member = this.db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id);
-      if (member?.role !== 'PROJECT_MANAGER') {
+      if (caller?.system_role !== 'ADMIN' && member?.role !== 'PROJECT_MANAGER' && member?.role !== 'EDITOR') {
         throw new Error('Yalnızca görev sorumlusu veya proje yöneticisi açıklama girebilir.');
       }
     }
 
     const records = this.db.getDelayRecords(auth.tenant_id, task_id);
+    const pendingRequired = [...records].reverse().find(r => r.explanation_status === 'REQUIRED');
     let record: DelayRecord;
 
-    if (records.length > 0) {
-      record = records[records.length - 1];
-      this.db.updateDelayRecord(auth.tenant_id, record.id, {
+    if (pendingRequired) {
+      this.db.updateDelayRecord(auth.tenant_id, pendingRequired.id, {
         explanation_status: 'RECORDED',
         explanation_source: 'USER',
         explanation_text,
@@ -120,7 +121,7 @@ export class DelayService {
         reported_at: new Date().toISOString(),
         reason: explanation_text
       });
-      record = this.db.getDelayRecords(auth.tenant_id, task_id).find(r => r.id === record.id)!;
+      record = this.db.getDelayRecords(auth.tenant_id, task_id).find(r => r.id === pendingRequired.id)!;
     } else {
       record = {
         id: crypto.randomUUID(),

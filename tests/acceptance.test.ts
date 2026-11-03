@@ -678,7 +678,7 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.ok(outboxItem);
     assert.equal(outboxItem.category, 'ACTIONABLE_TASK_CARD');
     assert.equal(outboxItem.adaptive_card_json.type, 'AdaptiveCard');
-    assert.equal(outboxItem.adaptive_card_json.actions.length, 3);
+    assert.equal(outboxItem.adaptive_card_json.actions.length, 4);
 
     // 5. Outlook içinden [▶️ Görevi Başlat] butonuna tıklama simülasyonu
     const startRes = await emailService.handleOutlookCardAction({
@@ -763,5 +763,110 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(pgStatus.smtp_password_encrypted, true);
     assert.ok(pgStatus.table_counts.projects >= 1);
     await pgEngine.close();
+
+    // Test ortamında gerçek SMTP zaman aşımı yaşanmaması için test şifresini simülasyon moduna çek
+    if (rawStored) {
+      rawStored.password = '';
+    }
+  });
+
+  await t.test('OUTLOOK ADAPTIVE CARDS v1.4 YAŞAM DÖNGÜSÜ: Görev Atama, Projeye Dahil Edilme, %40-%50-%60 Zorunlu Notlu İlerleme, İş Tamamlandı Yetkili Maili ve Gecikme Uyarısı', async () => {
+    // 1. Projeye yeni üye dahil edildiğinde PROJECT_MEMBER_CARD gönderimi
+    const memberCard = await emailService.sendProjectMemberAddedCard(
+      tenantA.id,
+      projectA.id,
+      assigneeA.id,
+      'EDITOR',
+      authManagerA.user_id
+    );
+    assert.ok(memberCard);
+    assert.equal(memberCard.category, 'PROJECT_MEMBER_CARD');
+    assert.ok(memberCard.to.includes(assigneeA.email));
+    assert.ok(memberCard.subject.includes('Projeye Dahil Edildiniz'));
+
+    // 2. Yeni görev oluşturulduğunda / atandığında TASK_ASSIGNED_CARD gönderimi
+    const lifecycleTask = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Kumaş Boyahane Renk Onayı (Lifecycle Test)',
+      '2026-10-20T09:00:00Z',
+      '2026-10-25T18:00:00Z',
+      assigneeA.id
+    );
+    const assignedCard = await emailService.sendTaskAssignedActionableCard(
+      tenantA.id,
+      lifecycleTask.id,
+      authManagerA.user_id
+    );
+    assert.ok(assignedCard);
+    assert.equal(assignedCard.category, 'TASK_ASSIGNED_CARD');
+    assert.ok(assignedCard.to.includes(assigneeA.email));
+
+    // 3. %40 / %50 / %60 ilerleme bildiriminde ZORUNLU NOT kuralı (Not boşsa hata fırlatmalı!)
+    assert.throws(() => {
+      taskService.updateTaskProgressWithNote(authAssigneeA, lifecycleTask.id, 50, '');
+    }, /zorunludur/i);
+
+    await assert.rejects(async () => {
+      await emailService.handleOutlookCardAction({
+        tenant_id: tenantA.id,
+        task_id: lifecycleTask.id,
+        user_id: assigneeA.id,
+        outboxId: assignedCard.id,
+        action: 'UPDATE_PROGRESS',
+        progress_value: 50,
+        explanation_text: ' '
+      });
+    }, /Zorunlu Not Kuralı|zorunludur/i);
+
+    // 4. Not girilerek %50 ilerleme bildirildiğinde hem görev güncellenmeli hem de proje yetkililerine TASK_PROGRESS_MANAGER_CARD gitmeli
+    const progActionRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: lifecycleTask.id,
+      user_id: assigneeA.id,
+      outboxId: assignedCard.id,
+      action: 'UPDATE_PROGRESS',
+      progress_value: 50,
+      explanation_text: 'Lab-dip numunelerinin %50 renk onayı tamamlandı, 2. parti yıkama testinde.'
+    });
+    assert.equal(db.getTaskById(tenantA.id, lifecycleTask.id)?.progress, 50);
+    assert.equal(db.getTaskById(tenantA.id, lifecycleTask.id)?.work_status, 'IN_PROGRESS');
+    assert.ok(progActionRes.message.includes('%50'));
+
+    const progressManagerCards = db.getEmailOutbox(tenantA.id).filter(
+      m => m.category === 'TASK_PROGRESS_MANAGER_CARD' && m.linked_task_id === lifecycleTask.id
+    );
+    assert.ok(progressManagerCards.length >= 1, 'Proje yetkililerine %50 ilerleme ve zorunlu not maili gitmeli');
+
+    // 5. Görev zamanında yapılmadığında (Overdue) hem sorumluya DELAY_EXPLANATION_CARD hem de yetkililere OVERDUE_MANAGER_ALERT gitmeli
+    const delayOutbox = await emailService.sendDelayExplanationActionableCard(
+      tenantA.id,
+      lifecycleTask.id,
+      3
+    );
+    assert.ok(delayOutbox);
+    assert.equal(delayOutbox.category, 'DELAY_EXPLANATION_CARD');
+
+    const overdueManagerAlerts = db.getEmailOutbox(tenantA.id).filter(
+      m => m.category === 'OVERDUE_MANAGER_ALERT' && m.linked_task_id === lifecycleTask.id
+    );
+    assert.ok(overdueManagerAlerts.length >= 1, 'Proje yetkililerine geciken görev uyarısı (OVERDUE_MANAGER_ALERT) gitmeli');
+
+    // 6. Görev tamamlandığında proje yetkililerine TASK_COMPLETED_MANAGER_CARD gitmeli
+    const compActionRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: lifecycleTask.id,
+      user_id: assigneeA.id,
+      outboxId: assignedCard.id,
+      action: 'COMPLETE_TASK',
+      explanation_text: 'Tüm renk onayları alındı ve üretim bandına teslim edildi.'
+    });
+    assert.equal(db.getTaskById(tenantA.id, lifecycleTask.id)?.work_status, 'COMPLETED');
+    assert.ok(compActionRes.message.includes('TAMAMLANDI'));
+
+    const completedManagerCards = db.getEmailOutbox(tenantA.id).filter(
+      m => m.category === 'TASK_COMPLETED_MANAGER_CARD' && m.linked_task_id === lifecycleTask.id
+    );
+    assert.ok(completedManagerCards.length >= 1, 'Görev tamamlandığında proje yetkililerine tamamlama raporu gitmeli');
   });
 });

@@ -282,6 +282,7 @@ app.post('/api/projects/:id/members', (req, res) => {
     const auth = getAuthContext(req);
     const { user_id, role } = req.body;
     const member = projectService.addOrUpdateMember(auth, req.params.id, user_id, role);
+    void emailService.sendProjectMemberAddedCard(auth.tenant_id, req.params.id, user_id, role, auth.name);
     res.json(member);
   } catch (err: any) {
     res.status(403).json({ error: err.message });
@@ -304,6 +305,9 @@ app.post('/api/projects/:id/visibility-decide', (req, res) => {
     const auth = getAuthContext(req);
     const { request_id, approve } = req.body;
     const updated = projectService.decideVisibilityRequest(auth, request_id, approve);
+    if (approve) {
+      void emailService.sendProjectMemberAddedCard(auth.tenant_id, updated.project_id, updated.user_id, 'VIEWER', auth.name);
+    }
     res.json(updated);
   } catch (err: any) {
     res.status(403).json({ error: err.message });
@@ -406,8 +410,9 @@ app.post('/api/tasks', (req, res) => {
     }
 
     const createdWithStatus = db.getTaskById(auth.tenant_id, task.id);
-    if (createdWithStatus && createdWithStatus.assignee_id && createdWithStatus.work_status === "READY") {
-      void emailService.sendTaskReadyActionableCard(auth.tenant_id, createdWithStatus.id);
+    if (createdWithStatus && createdWithStatus.assignee_id) {
+      // Kullanıcıya görev atandığında hem atama bilgisini hem de canlı Adaptive Card'ı gönder
+      void emailService.sendTaskAssignedActionableCard(auth.tenant_id, createdWithStatus.id, auth.name);
     }
     res.status(201).json(createdWithStatus || task);
   } catch (err: any) {
@@ -430,6 +435,11 @@ app.post('/api/projects/:id/tasks/bulk', (req, res) => {
     }
 
     const result = taskService.bulkCreateTasks(auth, projectId, tasks);
+    for (const ct of result.createdTasks) {
+      if (ct.assignee_id) {
+        void emailService.sendTaskAssignedActionableCard(auth.tenant_id, ct.id, auth.name);
+      }
+    }
     res.status(201).json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -511,7 +521,25 @@ app.patch('/api/tasks/:id', (req, res) => {
     const task = db.getTaskById(auth.tenant_id, req.params.id);
     if (!task) return res.status(404).json({ error: 'Görev bulunamadı.' });
 
-    const { progress, type, priority, description, title } = req.body;
+    const { progress, type, priority, description, title, note_text } = req.body;
+
+    if (typeof progress === 'number' && note_text && String(note_text).trim().length >= 2) {
+      const updRes = taskService.updateTaskProgressWithNote(auth, req.params.id, progress, String(note_text).trim());
+      if (progress >= 100) {
+        for (const readyId of updRes.newlyReadyTaskIds || []) {
+          const t = db.getTaskById(auth.tenant_id, readyId);
+          if (t && t.assignee_id) {
+            notificationService.notifyTaskReady(auth.tenant_id, t.id, t.assignee_id, t.title);
+            void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
+          }
+        }
+        void emailService.sendTaskCompletedToManagersCard(auth.tenant_id, updRes.task.id, auth.user_id, String(note_text).trim(), updRes.newlyReadyTaskIds || []);
+      } else {
+        void emailService.sendTaskProgressUpdateToManagersCard(auth.tenant_id, updRes.task.id, auth.user_id, updRes.task.progress || progress, String(note_text).trim());
+      }
+      return res.json(updRes.task);
+    }
+
     const updates: Partial<Task> = {};
     if (typeof progress === 'number') updates.progress = Math.max(0, Math.min(100, progress));
     if (type) updates.type = type;
@@ -526,11 +554,40 @@ app.patch('/api/tasks/:id', (req, res) => {
   }
 });
 
+// Zorunlu Notlu İlerleme (%40, %50, %60 vb.) Kayıt Endpoint'i
+app.post('/api/tasks/:id/progress', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { progress, note_text } = req.body;
+    const updRes = taskService.updateTaskProgressWithNote(auth, req.params.id, Number(progress), String(note_text || ''));
+
+    if (Number(progress) >= 100) {
+      for (const readyId of updRes.newlyReadyTaskIds || []) {
+        const t = db.getTaskById(auth.tenant_id, readyId);
+        if (t && t.assignee_id) {
+          notificationService.notifyTaskReady(auth.tenant_id, t.id, t.assignee_id, t.title);
+          void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
+        }
+      }
+      void emailService.sendTaskCompletedToManagersCard(auth.tenant_id, updRes.task.id, auth.user_id, String(note_text).trim(), updRes.newlyReadyTaskIds || []);
+    } else {
+      void emailService.sendTaskProgressUpdateToManagersCard(auth.tenant_id, updRes.task.id, auth.user_id, updRes.task.progress || Number(progress), String(note_text).trim());
+    }
+
+    res.json(updRes);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/tasks/:id/assign', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const { assignee_id } = req.body;
     const task = taskService.assignTask(auth, req.params.id, assignee_id);
+    if (assignee_id) {
+      void emailService.sendTaskAssignedActionableCard(auth.tenant_id, task.id, auth.name);
+    }
     res.json(task);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -551,7 +608,11 @@ app.post('/api/tasks/:id/plan', (req, res) => {
 app.post('/api/tasks/:id/start', (req, res) => {
   try {
     const auth = getAuthContext(req);
+    const { note_text } = req.body || {};
     const task = taskService.startTask(auth, req.params.id);
+    if (note_text && String(note_text).trim().length >= 2) {
+      delayService.submitExplanation(auth, task.id, `[Görev Başlatma Notu]: ${String(note_text).trim()}`);
+    }
     res.json(task);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -561,16 +622,31 @@ app.post('/api/tasks/:id/start', (req, res) => {
 app.post('/api/tasks/:id/complete', (req, res) => {
   try {
     const auth = getAuthContext(req);
+    const { note_text } = req.body || {};
     const result = taskService.completeTask(auth, req.params.id);
 
-    // Yeni READY olan görevlerin sorumlularına bildirim gönder
+    const cleanedNote = note_text ? String(note_text).trim() : '';
+    if (cleanedNote.length >= 2) {
+      delayService.submitExplanation(auth, result.task.id, `[%100 Tamamlandı Notu]: ${cleanedNote}`);
+    }
+
+    // Yeni READY olan görevlerin sorumlularına bildirim ve canlı Adaptive Card gönder
     for (const readyId of result.newlyReadyTaskIds) {
       const t = db.getTaskById(auth.tenant_id, readyId);
       if (t && t.assignee_id) {
         notificationService.notifyTaskReady(auth.tenant_id, t.id, t.assignee_id, t.title);
-          void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
+        void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
       }
     }
+
+    // Projedeki yetkili kişilere (Proje Yöneticileri, Editörler, Admin) "bu kişi bu işi tamamladı" maili gönder!
+    void emailService.sendTaskCompletedToManagersCard(
+      auth.tenant_id,
+      result.task.id,
+      auth.user_id,
+      cleanedNote || undefined,
+      result.newlyReadyTaskIds
+    );
 
     res.json(result);
   } catch (err: any) {
@@ -581,7 +657,7 @@ app.post('/api/tasks/:id/complete', (req, res) => {
 app.post('/api/tasks/:id/status', (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { status } = req.body;
+    const { status, note_text } = req.body;
     if (!status || !['TODO', 'IN_PROGRESS', 'COMPLETED'].includes(status)) {
       return res.status(400).json({ error: 'Geçersiz veya eksik hedef durum (TODO, IN_PROGRESS, COMPLETED bekleniyor).' });
     }
@@ -597,6 +673,16 @@ app.post('/api/tasks/:id/status', (req, res) => {
           void emailService.sendTaskReadyActionableCard(auth.tenant_id, t.id);
         }
       }
+    }
+
+    if (status === 'COMPLETED') {
+      void emailService.sendTaskCompletedToManagersCard(
+        auth.tenant_id,
+        result.task.id,
+        auth.user_id,
+        note_text ? String(note_text).trim() : undefined,
+        result.newlyReadyTaskIds || []
+      );
     }
 
     res.json(result);
@@ -665,7 +751,11 @@ app.post('/api/tasks/:id/explanation', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const { explanation_text } = req.body;
-    const record = delayService.submitExplanation(auth, req.params.id, explanation_text);
+    const cleaned = String(explanation_text || '').trim();
+    if (cleaned.length < 2) {
+      return res.status(400).json({ error: 'Açıklama veya durum notu boş bırakılamaz (Zorunlu alan).' });
+    }
+    const record = delayService.submitExplanation(auth, req.params.id, cleaned);
 
     const task = db.getTaskById(auth.tenant_id, req.params.id);
     if (task) {
@@ -675,8 +765,9 @@ app.post('/api/tasks/:id/explanation', (req, res) => {
         task.id,
         auth.name,
         task.title,
-        explanation_text
+        cleaned
       );
+      void emailService.sendTaskProgressUpdateToManagersCard(auth.tenant_id, task.id, auth.user_id, task.progress || 0, cleaned);
     }
 
     res.json(record);
@@ -1066,7 +1157,21 @@ app.patch('/api/todo/items/:id', (req, res) => {
       // Eğer FG Group görevine bağlıysa ve tamamlandıysa ana görevi de tamamla!
       if (updated.linked_task_id && is_completed) {
         try {
-          taskService.completeTask(auth, updated.linked_task_id);
+          const comp = taskService.completeTask(auth, updated.linked_task_id);
+          for (const readyId of comp.newlyReadyTaskIds) {
+            const rt = db.getTaskById(auth.tenant_id, readyId);
+            if (rt && rt.assignee_id) {
+              notificationService.notifyTaskReady(auth.tenant_id, rt.id, rt.assignee_id, rt.title);
+              void emailService.sendTaskReadyActionableCard(auth.tenant_id, rt.id);
+            }
+          }
+          void emailService.sendTaskCompletedToManagersCard(
+            auth.tenant_id,
+            comp.task.id,
+            auth.user_id,
+            noteText ? String(noteText).trim() : 'Microsoft To Do üzerinden tamamlandı.',
+            comp.newlyReadyTaskIds
+          );
         } catch (e) {
           // Görev öncül bekliyor veya tamamlanamaz durumda olabilir
         }
@@ -1079,7 +1184,7 @@ app.patch('/api/todo/items/:id', (req, res) => {
       if (updated.linked_task_id) {
         try {
           delayService.submitExplanation(auth, updated.linked_task_id, noteText);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -1235,11 +1340,13 @@ app.post('/api/admin/smtp-test', async (req, res) => {
       body: [
         { type: 'TextBlock', text: '🧪 EXCHANGE ONLINE PLAN 1 • CANLI KART TESTİ', weight: 'Bolder', color: 'Accent', size: 'Small' },
         { type: 'TextBlock', text: sampleTask.title, weight: 'Bolder', size: 'Large', wrap: true },
-        { type: 'FactSet', facts: [
-          { title: 'SMTP Sunucusu:', value: cfg.host + ':' + cfg.port },
-          { title: 'Gönderici Hesap:', value: cfg.username },
-          { title: 'Alıcı:', value: toEmail }
-        ]},
+        {
+          type: 'FactSet', facts: [
+            { title: 'SMTP Sunucusu:', value: cfg.host + ':' + cfg.port },
+            { title: 'Gönderici Hesap:', value: cfg.username },
+            { title: 'Alıcı:', value: toEmail }
+          ]
+        },
         { type: 'Input.Text', id: 'explanationText', placeholder: 'Test notu veya gecikme açıklaması yazınız...', isMultiline: true }
       ],
       actions: targetTask ? [
@@ -1339,6 +1446,57 @@ app.get('/api/email/outbox', (req, res) => {
     res.json(db.getEmailOutbox(auth.tenant_id, 50));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Outlook Adaptive Cards Rehberi (outlook_adaptive_cards_rehberi.md) Canlı Senaryo Tetikleyici
+app.post('/api/admin/trigger-card-scenario', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { scenario } = req.body;
+    const tasks = db.getTasks(auth.tenant_id);
+    const projects = db.getProjects(auth.tenant_id);
+    const users = db.getUsers(auth.tenant_id);
+
+    const readyTask = tasks.find(t => t.work_status === 'READY' && t.assignee_id) || tasks.find(t => t.assignee_id) || tasks[0];
+    const overdueOrActiveTask = tasks.find(t => t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date() && t.assignee_id)
+      || readyTask;
+    const completedTask = tasks.find(t => t.work_status === 'COMPLETED') || readyTask;
+    const targetProject = projects[0];
+    const targetUser = (readyTask?.assignee_id && db.getUserById(auth.tenant_id, readyTask.assignee_id))
+      || users.find(u => u.system_role !== 'ADMIN')
+      || users[0];
+
+    let item = null;
+    if (scenario === 'TASK_READY' && readyTask) {
+      item = await emailService.sendTaskReadyActionableCard(auth.tenant_id, readyTask.id);
+    } else if (scenario === 'TASK_ASSIGNED' && readyTask) {
+      item = await emailService.sendTaskAssignedActionableCard(auth.tenant_id, readyTask.id, auth.name);
+    } else if (scenario === 'PROJECT_MEMBER_ADDED' && targetProject && targetUser) {
+      item = await emailService.sendProjectMemberAddedCard(auth.tenant_id, targetProject.id, targetUser.id, 'EDITOR', auth.name);
+    } else if (scenario === 'TASK_PROGRESS_NOTE' && readyTask && targetUser) {
+      item = await emailService.sendTaskProgressUpdateToManagersCard(
+        auth.tenant_id,
+        readyTask.id,
+        targetUser.id,
+        60,
+        'Numune kesim ve ilk dikim aşamaları %60 oranında tamamlandı; yarın aksesuar montajına geçilecek.'
+      );
+    } else if (scenario === 'TASK_COMPLETED_MANAGER' && completedTask) {
+      item = await emailService.sendTaskCompletedToManagersCard(
+        auth.tenant_id,
+        completedTask.id,
+        completedTask.completed_by_user_id || completedTask.assignee_id || auth.user_id,
+        'Tüm kalite kontrol ve ölçü testleri başarıyla tamamlandı, bir sonraki adıma devredildi.',
+        []
+      );
+    } else if (scenario === 'TASK_OVERDUE_ALERT' && overdueOrActiveTask) {
+      item = await emailService.sendDelayExplanationActionableCard(auth.tenant_id, overdueOrActiveTask.id);
+    }
+
+    res.json({ success: true, scenario, item });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 

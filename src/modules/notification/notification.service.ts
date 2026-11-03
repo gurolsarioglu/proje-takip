@@ -106,16 +106,158 @@ export class NotificationService {
     task_title: string,
     explanation_text: string
   ): void {
-    const members = this.db.getProjectMembers(tenant_id, project_id);
-    const managers = members.filter(m => m.role === 'PROJECT_MANAGER');
+    const recipientIds = this.getProjectAuthorityUserIds(tenant_id, project_id);
     const event_id = `exp_submitted_${task_id}_${Date.now()}`;
 
-    for (const manager of managers) {
+    for (const managerId of recipientIds) {
       const title = 'Gecikme Açıklaması Girildi';
-      const message = `${assignee_name}, "${task_title}" görevi için gecikme gerekçesi girdi: "${explanation_text}"`;
-      this.createNotification(tenant_id, manager.user_id, event_id, 'IN_APP', title, message, task_id, project_id);
-      this.createNotification(tenant_id, manager.user_id, event_id, 'EMAIL', title, message, task_id, project_id);
-      this.createNotification(tenant_id, manager.user_id, event_id, 'WEB_PUSH', title, message, task_id, project_id);
+      const message = `${assignee_name}, "${task_title}" görevi için açıklama girdi: "${explanation_text}"`;
+      this.createNotification(tenant_id, managerId, event_id, 'IN_APP', title, message, task_id, project_id);
+      this.createNotification(tenant_id, managerId, event_id, 'EMAIL', title, message, task_id, project_id);
+      this.createNotification(tenant_id, managerId, event_id, 'WEB_PUSH', title, message, task_id, project_id);
+    }
+  }
+
+  /**
+   * Projedeki yetkili kişilerin (PROJECT_MANAGER, EDITOR, Proje Kurucusu ve ADMIN) kullanıcı ID listesini döndürür
+   */
+  public getProjectAuthorityUserIds(tenant_id: UUID, project_id: UUID, exclude_user_id?: UUID): UUID[] {
+    const ids = new Set<UUID>();
+    const project = this.db.getProjectById(tenant_id, project_id);
+    if (project?.created_by_user_id) {
+      ids.add(project.created_by_user_id);
+    }
+    const members = this.db.getProjectMembers(tenant_id, project_id);
+    for (const m of members) {
+      if (m.role === 'PROJECT_MANAGER' || m.role === 'EDITOR') {
+        ids.add(m.user_id);
+      }
+    }
+    const admins = this.db.getUsers(tenant_id).filter(u => u.system_role === 'ADMIN');
+    for (const adm of admins) {
+      ids.add(adm.id);
+    }
+    if (exclude_user_id && ids.size > 1) {
+      ids.delete(exclude_user_id);
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * Kullanıcı projeye dahil edildiğinde bildirim
+   */
+  public notifyProjectMemberAdded(
+    tenant_id: UUID,
+    project_id: UUID,
+    user_id: UUID,
+    project_title: string,
+    role: string,
+    added_by_name: string
+  ): void {
+    const roleLabels: Record<string, string> = {
+      PROJECT_MANAGER: 'Proje Yöneticisi',
+      EDITOR: 'Düzenleyici (Editör)',
+      VIEWER: 'Tam Görüntüleyici'
+    };
+    const roleLabel = roleLabels[role] || role;
+    const event_id = `proj_member_added_${project_id}_${user_id}_${role}`;
+    const title = `📁 Projeye Dahil Edildiniz: ${project_title}`;
+    const message = `${added_by_name} sizi "${project_title}" projesine "${roleLabel}" rolüyle dahil etti.`;
+
+    this.createNotification(tenant_id, user_id, event_id, 'IN_APP', title, message, undefined, project_id);
+    this.createNotification(tenant_id, user_id, event_id, 'EMAIL', title, message, undefined, project_id);
+    this.createNotification(tenant_id, user_id, event_id, 'WEB_PUSH', title, message, undefined, project_id);
+  }
+
+  /**
+   * Kullanıcıya görev atandığında bildirim
+   */
+  public notifyTaskAssigned(
+    tenant_id: UUID,
+    project_id: UUID,
+    task_id: UUID,
+    assignee_id: UUID,
+    task_title: string,
+    assigned_by_name: string
+  ): void {
+    const event_id = `task_assigned_${task_id}_${assignee_id}`;
+    const title = `📌 Yeni Görev Atandı: ${task_title}`;
+    const message = `${assigned_by_name} tarafından "${task_title}" görevi size atandı.`;
+
+    this.createNotification(tenant_id, assignee_id, event_id, 'IN_APP', title, message, task_id, project_id);
+    this.createNotification(tenant_id, assignee_id, event_id, 'EMAIL', title, message, task_id, project_id);
+    this.createNotification(tenant_id, assignee_id, event_id, 'WEB_PUSH', title, message, task_id, project_id);
+  }
+
+  /**
+   * Görev tamamlandığında projedeki yetkili kişilere bildirim
+   */
+  public notifyTaskCompletedToManagers(
+    tenant_id: UUID,
+    project_id: UUID,
+    task_id: UUID,
+    completed_by_name: string,
+    task_title: string,
+    note_text?: string
+  ): void {
+    const recipientIds = this.getProjectAuthorityUserIds(tenant_id, project_id);
+    const event_id = `task_completed_mgr_${task_id}`;
+    const title = `✅ Görev Tamamlandı: ${task_title}`;
+    const noteSuffix = note_text ? ` | Not: "${note_text}"` : '';
+    const message = `${completed_by_name}, "${task_title}" görevini %100 tamamladı.${noteSuffix}`;
+
+    for (const uid of recipientIds) {
+      this.createNotification(tenant_id, uid, event_id, 'IN_APP', title, message, task_id, project_id);
+      this.createNotification(tenant_id, uid, event_id, 'EMAIL', title, message, task_id, project_id);
+      this.createNotification(tenant_id, uid, event_id, 'WEB_PUSH', title, message, task_id, project_id);
+    }
+  }
+
+  /**
+   * Görev ilerleme oranı (%40, %50, %60 vb.) ve zorunlu açıklama notu girildiğinde yetkililere bildirim
+   */
+  public notifyTaskProgressToManagers(
+    tenant_id: UUID,
+    project_id: UUID,
+    task_id: UUID,
+    user_name: string,
+    task_title: string,
+    progress: number,
+    note_text: string
+  ): void {
+    const recipientIds = this.getProjectAuthorityUserIds(tenant_id, project_id);
+    const event_id = `task_progress_${task_id}_${progress}_${Date.now()}`;
+    const title = `📊 İlerleme Güncellendi (%${progress}): ${task_title}`;
+    const message = `${user_name}, "${task_title}" görevini %${progress} seviyesine getirdi. Açıklama: "${note_text}"`;
+
+    for (const uid of recipientIds) {
+      this.createNotification(tenant_id, uid, event_id, 'IN_APP', title, message, task_id, project_id);
+      this.createNotification(tenant_id, uid, event_id, 'EMAIL', title, message, task_id, project_id);
+      this.createNotification(tenant_id, uid, event_id, 'WEB_PUSH', title, message, task_id, project_id);
+    }
+  }
+
+  /**
+   * Görev zamanında yapılmadığında (Overdue) projedeki yetkili kişilere uyarı bildirimi
+   */
+  public notifyOverdueTaskToManagers(
+    tenant_id: UUID,
+    project_id: UUID,
+    task_id: UUID,
+    assignee_name: string,
+    task_title: string,
+    due_date: string
+  ): void {
+    const today = new Date().toISOString().slice(0, 10);
+    const recipientIds = this.getProjectAuthorityUserIds(tenant_id, project_id);
+    const event_id = `overdue_mgr_${task_id}_${today}`;
+    const title = `🚨 Geciken Görev Uyarısı: ${task_title}`;
+    const message = `${assignee_name} sorumluluğundaki "${task_title}" görevi zamanında (${due_date.slice(0, 10)}) tamamlanmadı!`;
+
+    for (const uid of recipientIds) {
+      this.createNotification(tenant_id, uid, event_id, 'IN_APP', title, message, task_id, project_id);
+      this.createNotification(tenant_id, uid, event_id, 'EMAIL', title, message, task_id, project_id);
+      this.createNotification(tenant_id, uid, event_id, 'WEB_PUSH', title, message, task_id, project_id);
     }
   }
 

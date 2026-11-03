@@ -631,7 +631,46 @@ export class EmailAndAutomationService {
   }
 
   /**
-   * 1. Görev HAZIR (READY) Olduğunda veya Atandığında Gönderilen Canlı Outlook Adaptive Card
+   * Yardımcı: Projedeki yetkili kişilerin (PROJECT_MANAGER, EDITOR, Proje Kurucusu ve ADMIN) e-posta adreslerini döndürür
+   */
+  public getProjectAuthorityEmails(tenant_id: UUID, project_id: UUID, exclude_user_id?: UUID): string[] {
+    const authUserIds = this.notificationService.getProjectAuthorityUserIds(tenant_id, project_id, exclude_user_id);
+    const emails = new Set<string>();
+    for (const uid of authUserIds) {
+      const u = this.db.getUserById(tenant_id, uid);
+      if (u?.email) emails.add(u.email);
+    }
+    if (emails.size === 0) {
+      const admin = this.db.getUsers(tenant_id).find(u => u.system_role === 'ADMIN');
+      if (admin?.email) emails.add(admin.email);
+    }
+    return Array.from(emails);
+  }
+
+  /**
+   * Adaptive Card ortak İlerleme Yüzdesi (%20, %40, %50, %60, %80, %100) ChoiceSet bloğu
+   */
+  private buildProgressChoiceSet(currentProgress = 40) {
+    const defaultVal = [20, 40, 50, 60, 80, 100].includes(currentProgress) ? String(currentProgress) : '50';
+    return {
+      type: 'Input.ChoiceSet',
+      id: 'progressValue',
+      label: '📊 Tamamlanma / İlerleme Oranı Seçin (%40, %50, %60 vb.):',
+      style: 'compact',
+      value: defaultVal,
+      choices: [
+        { title: '%20 — Başlangıç & Hazırlık Yapıldı', value: '20' },
+        { title: '%40 — İlk Aşama Tamamlandı (%40)', value: '40' },
+        { title: '%50 — İş Yarılandı (%50)', value: '50' },
+        { title: '%60 — Kritik Kısım Tamamlandı (%60)', value: '60' },
+        { title: '%80 — Son Kontroller Yapılıyor (%80)', value: '80' },
+        { title: '%100 — Tamamlandı Olarak Kapat (%100)', value: '100' }
+      ]
+    };
+  }
+
+  /**
+   * 1. Görev HAZIR (READY) Olduğunda Gönderilen Canlı Outlook Adaptive Card (Rehber Örnek A)
    */
   public async sendTaskReadyActionableCard(tenant_id: UUID, task_id: UUID): Promise<EmailOutboxItem | null> {
     const config = this.getSmtpConfig(tenant_id);
@@ -666,7 +705,7 @@ export class EmailAndAutomationService {
       body: [
         {
           type: 'TextBlock',
-          text: `📁 ${project?.title || 'FG Group Projesi'}`,
+          text: `📁 ${project?.title || 'FG Group Projesi'} • SIRA SİZDE`,
           weight: 'Bolder',
           color: 'Accent',
           size: 'Small'
@@ -680,24 +719,27 @@ export class EmailAndAutomationService {
         },
         {
           type: 'TextBlock',
-          text: task.description || 'Öncül görevler tamamlandı. Görevinize hemen başlayabilirsiniz.',
+          text: task.description || 'Öncül görevler tamamlandı. Görevinize hemen başlayabilir, %40/%50/%60 ilerleme bildirebilir veya tamamlayabilirsiniz.',
           isSubtle: true,
           wrap: true
         },
         {
           type: 'FactSet',
           facts: [
-            { title: 'Durum:', value: `HAZIR (${task.work_status})` },
+            { title: 'Durum:', value: `HAZIR (${task.work_status}) • Mevcut İlerleme: %${task.progress || 0}` },
             { title: 'Sorumlu:', value: `${assignee.name} (${assignee.department || 'Ekip'})` },
             { title: 'Hedef Teslim:', value: dueStr },
             ...predFacts
           ]
         },
+        this.buildProgressChoiceSet(task.progress || 50),
         {
           type: 'Input.Text',
           id: 'explanationText',
-          placeholder: 'Atölye / durum notu veya gecikme açıklaması yazın (opsiyonel)...',
-          isMultiline: true
+          label: '📝 Yapılan İş / İlerleme veya Gecikme Notu (Zorunlu):',
+          placeholder: 'Örn: %50 numune dikimi tamamlandı, yarın ütü ve kalite kontrole geçilecek (İlerleme/Açıklama için zorunludur)...',
+          isMultiline: true,
+          isRequired: true
         }
       ],
       actions: [
@@ -710,7 +752,22 @@ export class EmailAndAutomationService {
             tenant_id,
             task_id: task.id,
             user_id: assignee.id,
-            action: 'START_TASK'
+            action: 'START_TASK',
+            explanation_text: '{{explanationText.value}}'
+          })
+        },
+        {
+          type: 'Action.Http',
+          title: '📊 İlerleme (%40-%60) & Not Kaydet',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'UPDATE_PROGRESS',
+            progress_value: '{{progressValue.value}}',
+            explanation_text: '{{explanationText.value}}'
           })
         },
         {
@@ -722,7 +779,8 @@ export class EmailAndAutomationService {
             tenant_id,
             task_id: task.id,
             user_id: assignee.id,
-            action: 'COMPLETE_TASK'
+            action: 'COMPLETE_TASK',
+            explanation_text: '{{explanationText.value}}'
           })
         },
         {
@@ -744,7 +802,7 @@ export class EmailAndAutomationService {
     const htmlBody = `
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
         <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
-          ${project?.title || 'FG Group'} • Outlook Actionable Message
+          ${project?.title || 'FG Group'} • Outlook Actionable Message (Canlı Görev Kartı)
         </div>
         <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">🔔 Sıra Sizde: ${task.title}</h2>
         <p style="margin:0 0 16px 0;font-size:14px;color:#475569;">${task.description || 'Bu görevin öncülleri tamamlandı ve başlamaya hazır.'}</p>
@@ -752,6 +810,7 @@ export class EmailAndAutomationService {
           <div><strong>Sorumlu:</strong> ${assignee.name}</div>
           <div><strong>Hedef Bitiş:</strong> ${dueStr}</div>
           <div><strong>Durum:</strong> <span style="color:#059669;font-weight:700;">HAZIR (Öncüller Tamamlandı ✓)</span></div>
+          <div style="margin-top:6px;color:#334155;">💡 <strong>E-posta İçi İşlem:</strong> Doğrudan bu e-postanın içinden görevi başlatabilir, <strong>%40 / %50 / %60</strong> ilerleme oranı seçip zorunlu notunuzu kaydedebilir veya görevi tamamlayabilirsiniz.</div>
         </div>
         <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
       </div>
@@ -770,23 +829,554 @@ export class EmailAndAutomationService {
   }
 
   /**
-   * 2. Görev Geciktiğinde (KAB07) Gönderilen Zorunlu Mazeret Giriş Kartı
+   * 1.B. Kullanıcıya Yeni Görev Atandığında Gönderilen Bilgilendirme & Canlı Aksiyon Kartı
+   */
+  public async sendTaskAssignedActionableCard(
+    tenant_id: UUID,
+    task_id: UUID,
+    assigned_by_name = 'Proje Yönetimi'
+  ): Promise<EmailOutboxItem | null> {
+    const task = this.db.getTaskById(tenant_id, task_id);
+    if (!task || !task.assignee_id) return null;
+
+    const assignee = this.db.getUserById(tenant_id, task.assignee_id);
+    if (!assignee) return null;
+
+    const project = this.db.getProjectById(tenant_id, task.project_id);
+    this.notificationService.notifyTaskAssigned(
+      tenant_id,
+      task.project_id,
+      task.id,
+      assignee.id,
+      task.title,
+      assigned_by_name
+    );
+
+    const config = this.getSmtpConfig(tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+    const startStr = task.current_start_date ? task.current_start_date.slice(0, 10) : '-';
+    const dueStr = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
+
+    const preds = this.db.getPredecessors(tenant_id, task.id);
+    const predTitles = preds.map(d => {
+      const pt = this.db.getTaskById(tenant_id, d.predecessor_id);
+      return pt ? `${pt.title} (${pt.work_status === 'COMPLETED' ? 'Tamamlandı ✓' : 'Bekleniyor ⏳'})` : '';
+    }).filter(Boolean);
+
+    const isBlocked = task.work_status === 'BLOCKED';
+
+    const adaptiveCard = {
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      hideOriginalBody: true,
+      body: [
+        {
+          type: 'TextBlock',
+          text: `📌 YENİ GÖREV ATANDI • ${project?.title || 'FG Group Projesi'}`,
+          weight: 'Bolder',
+          color: isBlocked ? 'Warning' : 'Accent',
+          size: 'Small'
+        },
+        {
+          type: 'TextBlock',
+          text: task.title,
+          weight: 'Bolder',
+          size: 'Large',
+          wrap: true
+        },
+        {
+          type: 'TextBlock',
+          text: task.description || `${assigned_by_name} tarafından bu görev sizin sorumluluğunuza atandı.`,
+          isSubtle: true,
+          wrap: true
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: 'Proje:', value: project?.title || 'FG Group' },
+            { title: 'Atayan Yetkili:', value: assigned_by_name },
+            { title: 'Sorumlu:', value: `${assignee.name} (${assignee.department || 'Ekip'})` },
+            { title: 'Planlanan Takvim:', value: `${startStr} ➔ ${dueStr}` },
+            { title: 'Başlangıç Durumu:', value: isBlocked ? '⏳ ÖNCÜL BEKLİYOR (BLOCKED)' : '🟢 BAŞLAMAYA HAZIR (READY)' },
+            ...(predTitles.length > 0 ? [{ title: 'Öncül Görevler:', value: predTitles.join(' | ') }] : [])
+          ]
+        },
+        ...(!isBlocked ? [this.buildProgressChoiceSet(task.progress || 40)] : []),
+        {
+          type: 'Input.Text',
+          id: 'explanationText',
+          label: '📝 Görev / İlerleme Notu veya Açıklama (Zorunlu):',
+          placeholder: 'Yaptığınız çalışmayı, %40/%50/%60 ilerleme detayını veya hazırlık notunuzu yazınız...',
+          isMultiline: true,
+          isRequired: true
+        }
+      ],
+      actions: isBlocked ? [
+        {
+          type: 'Action.Http',
+          title: '📝 Hazırlık / Durum Notu Kaydet',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'SUBMIT_EXPLANATION',
+            explanation_text: '{{explanationText.value}}'
+          })
+        },
+        {
+          type: 'Action.OpenUrl',
+          title: '🔗 Proje Paneline Git',
+          url: baseUrl
+        }
+      ] : [
+        {
+          type: 'Action.Http',
+          title: '▶️ Görevi Başlat',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'START_TASK',
+            explanation_text: '{{explanationText.value}}'
+          })
+        },
+        {
+          type: 'Action.Http',
+          title: '📊 İlerleme (%40-%60) & Not Kaydet',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'UPDATE_PROGRESS',
+            progress_value: '{{progressValue.value}}',
+            explanation_text: '{{explanationText.value}}'
+          })
+        },
+        {
+          type: 'Action.Http',
+          title: '✅ Tamamlandı İşaretle',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'COMPLETE_TASK',
+            explanation_text: '{{explanationText.value}}'
+          })
+        },
+        {
+          type: 'Action.Http',
+          title: '📝 Not / Açıklama Gönder',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'SUBMIT_EXPLANATION',
+            explanation_text: '{{explanationText.value}}'
+          })
+        }
+      ]
+    };
+
+    const htmlBody = `
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:24px;">
+        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
+          📌 Yeni Görev Atama Bildirimi • ${project?.title || 'FG Group'}
+        </div>
+        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${task.title}</h2>
+        <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">
+          Merhaba <strong>${assignee.name}</strong>, <strong>${assigned_by_name}</strong> tarafından <strong>${project?.title || 'Proje'}</strong> kapsamında bu görev size atandı.
+        </p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:16px;">
+          <div><strong>Proje:</strong> ${project?.title || '-'}</div>
+          <div><strong>Planlanan Tarih:</strong> ${startStr} ➔ ${dueStr}</div>
+          <div><strong>Durum:</strong> ${isBlocked ? '⏳ Öncül Görev Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)'}</div>
+          ${predTitles.length > 0 ? `<div><strong>Öncüller:</strong> ${predTitles.join(', ')}</div>` : ''}
+        </div>
+        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Görev Detayını Aç</a>
+      </div>
+    `;
+
+    return this.dispatchEmail({
+      tenant_id,
+      to: [assignee.email],
+      subject: `📌 Yeni Görev Atandı: ${task.title} (${project?.title || 'Proje'})`,
+      category: 'TASK_ASSIGNED_CARD',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard,
+      linked_task_id: task.id,
+      linked_project_id: task.project_id
+    });
+  }
+
+  /**
+   * 1.C. Kullanıcı Projeye Dahil Edildiğinde Gönderilen Bilgilendirme E-postası & Adaptive Card
+   */
+  public async sendProjectMemberAddedCard(
+    tenant_id: UUID,
+    project_id: UUID,
+    user_id: UUID,
+    role: string,
+    added_by_name = 'Proje Yöneticisi'
+  ): Promise<EmailOutboxItem | null> {
+    const project = this.db.getProjectById(tenant_id, project_id);
+    const user = this.db.getUserById(tenant_id, user_id);
+    if (!project || !user) return null;
+
+    this.notificationService.notifyProjectMemberAdded(
+      tenant_id,
+      project.id,
+      user.id,
+      project.title,
+      role,
+      added_by_name
+    );
+
+    const roleMap: Record<string, string> = {
+      PROJECT_MANAGER: '👑 Proje Yöneticisi (Tam Yetki)',
+      EDITOR: '✏️ Proje Editörü (Görev & Plan Düzenleme)',
+      VIEWER: '👁️ Tam Görüntüleyici (Tüm Proje Akışı & Gantt)'
+    };
+    const roleLabel = roleMap[role] || role;
+    const config = this.getSmtpConfig(tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+    const tasksCount = this.db.getTasks(tenant_id, project.id).length;
+    const startStr = project.current_start_date ? project.current_start_date.slice(0, 10) : '-';
+    const dueStr = project.current_due_date ? project.current_due_date.slice(0, 10) : '-';
+
+    const adaptiveCard = {
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      hideOriginalBody: true,
+      body: [
+        {
+          type: 'TextBlock',
+          text: `📁 PROJEYE DAHİL EDİLDİNİZ • FG GROUP`,
+          weight: 'Bolder',
+          color: 'Accent',
+          size: 'Small'
+        },
+        {
+          type: 'TextBlock',
+          text: project.title,
+          weight: 'Bolder',
+          size: 'Large',
+          wrap: true
+        },
+        {
+          type: 'TextBlock',
+          text: project.description || `${added_by_name} sizi bu proje ekibine dahil etti.`,
+          isSubtle: true,
+          wrap: true
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: 'Personel:', value: `${user.name} (${user.department || 'Ekip'})` },
+            { title: 'Projedeki Rolünüz:', value: roleLabel },
+            { title: 'Ekleyen Yetkili:', value: added_by_name },
+            { title: 'Proje Takvimi:', value: `${startStr} ➔ ${dueStr}` },
+            { title: 'Toplam İş Paketi:', value: `${tasksCount} Görev` }
+          ]
+        }
+      ],
+      actions: [
+        {
+          type: 'Action.OpenUrl',
+          title: '🚀 Projeyi ve Görevleri Görüntüle',
+          url: baseUrl
+        }
+      ]
+    };
+
+    const htmlBody = `
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:24px;">
+        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
+          📁 Proje Ekibi Bildirimi • FG Group
+        </div>
+        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">Projeye Dahil Edildiniz: ${project.title}</h2>
+        <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">
+          Merhaba <strong>${user.name}</strong>, <strong>${added_by_name}</strong> sizi <strong>${project.title}</strong> projesine <strong>${roleLabel}</strong> rolüyle dahil etti.
+        </p>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:16px;">
+          <div><strong>Proje Adı:</strong> ${project.title}</div>
+          <div><strong>Atanan Rol:</strong> ${roleLabel}</div>
+          <div><strong>Proje Takvimi:</strong> ${startStr} ➔ ${dueStr}</div>
+          <div><strong>Toplam İş Paketi:</strong> ${tasksCount} Görev</div>
+        </div>
+        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
+      </div>
+    `;
+
+    return this.dispatchEmail({
+      tenant_id,
+      to: [user.email],
+      subject: `📁 Projeye Dahil Edildiniz: ${project.title} (${roleLabel})`,
+      category: 'PROJECT_MEMBER_CARD',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard,
+      linked_project_id: project.id
+    });
+  }
+
+  /**
+   * 1.D. Proje Adımlarında Bir İş Tamamlandığında Projedeki Yetkili Kişilere Giden Bilgilendirme Maili & Kartı
+   */
+  public async sendTaskCompletedToManagersCard(
+    tenant_id: UUID,
+    task_id: UUID,
+    completed_by_user_id: UUID,
+    completion_note?: string,
+    newlyReadyTaskIds: UUID[] = []
+  ): Promise<EmailOutboxItem | null> {
+    const task = this.db.getTaskById(tenant_id, task_id);
+    if (!task) return null;
+
+    const project = this.db.getProjectById(tenant_id, task.project_id);
+    const completedBy = this.db.getUserById(tenant_id, completed_by_user_id)
+      || (task.assignee_id ? this.db.getUserById(tenant_id, task.assignee_id) : undefined);
+    const performerName = completedBy?.name || 'Görev Sorumlusu';
+
+    this.notificationService.notifyTaskCompletedToManagers(
+      tenant_id,
+      task.project_id,
+      task.id,
+      performerName,
+      task.title,
+      completion_note
+    );
+
+    const managerEmails = this.getProjectAuthorityEmails(tenant_id, task.project_id);
+    if (managerEmails.length === 0) return null;
+
+    const projectTasks = this.db.getTasks(tenant_id, task.project_id);
+    const doneCount = projectTasks.filter(t => t.work_status === 'COMPLETED').length;
+    const totalCount = projectTasks.length;
+    const projectRate = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 100;
+
+    const unlockedDetails = newlyReadyTaskIds.map(rid => {
+      const rt = this.db.getTaskById(tenant_id, rid);
+      if (!rt) return '';
+      const ra = rt.assignee_id ? this.db.getUserById(tenant_id, rt.assignee_id) : null;
+      return `${rt.title} (Sorumlu: ${ra?.name || 'Atanmamış'})`;
+    }).filter(Boolean);
+
+    const isLate = task.actual_completion_date && task.current_due_date
+      ? new Date(task.actual_completion_date) > new Date(task.current_due_date)
+      : false;
+
+    const config = this.getSmtpConfig(tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+
+    const adaptiveCard = {
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      hideOriginalBody: true,
+      body: [
+        {
+          type: 'TextBlock',
+          text: `✅ PROJE ADIMI TAMAMLANDI • YETKİLİ BİLGİLENDİRME`,
+          weight: 'Bolder',
+          color: 'Good',
+          size: 'Small'
+        },
+        {
+          type: 'TextBlock',
+          text: `${performerName}, "${task.title}" görevini tamamladı!`,
+          weight: 'Bolder',
+          size: 'Large',
+          wrap: true
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: 'Proje:', value: project?.title || 'FG Group Projesi' },
+            { title: 'Tamamlanan Görev:', value: task.title },
+            { title: 'Tamamlayan Kişi:', value: `${performerName} (${completedBy?.department || 'Ekip'})` },
+            { title: 'Teslim Durumu:', value: isLate ? '⚠️ Gecikmeli Tamamlandı' : '🟢 Zamanında Tamamlandı ✓' },
+            { title: 'Proje İlerlemesi:', value: `%${projectRate} (${doneCount}/${totalCount} Görev Tamamlandı)` },
+            ...(completion_note ? [{ title: 'Personel Notu:', value: completion_note }] : []),
+            ...(unlockedDetails.length > 0 ? [{ title: 'Yeni Açılan Adım:', value: unlockedDetails.join(' | ') }] : [])
+          ]
+        }
+      ],
+      actions: [
+        {
+          type: 'Action.OpenUrl',
+          title: '📊 Proje Durumunu ve Gantt Takvimini Gör',
+          url: baseUrl
+        }
+      ]
+    };
+
+    const htmlBody = `
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #10b981;border-radius:12px;padding:24px;">
+        <div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:6px;">
+          ✅ Proje Adımı Tamamlandı • Yönetici Bilgilendirmesi
+        </div>
+        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${performerName}, "${task.title}" işini tamamladı</h2>
+        <p style="margin:0 0 14px 0;font-size:14px;color:#334155;">
+          <strong>${project?.title || 'Proje'}</strong> kapsamında yürütülen <strong>${task.title}</strong> görevi <strong>%100 tamamlandı</strong> olarak işaretlendi.
+        </p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:14px;color:#166534;">
+          <div><strong>Tamamlayan Personel:</strong> ${performerName} (${completedBy?.email || '-'})</div>
+          <div><strong>Teslim Durumu:</strong> ${isLate ? '⚠️ Gecikmeli Tamamlandı' : '🟢 Zamanında Tamamlandı ✓'}</div>
+          <div><strong>Proje Genel İlerlemesi:</strong> %${projectRate} (${doneCount} / ${totalCount} görev bitti)</div>
+          ${completion_note ? `<div style="margin-top:6px;"><strong>📝 Personel Açıklama Notu:</strong> "${completion_note}"</div>` : ''}
+          ${unlockedDetails.length > 0 ? `<div style="margin-top:6px;"><strong>🔓 Kilidi Açılan Sıradaki Görevler:</strong> ${unlockedDetails.join(', ')}</div>` : ''}
+        </div>
+        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#059669;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
+      </div>
+    `;
+
+    return this.dispatchEmail({
+      tenant_id,
+      to: managerEmails,
+      subject: `✅ Görev Tamamlandı: ${performerName} — ${task.title} (${project?.title || 'Proje'})`,
+      category: 'TASK_COMPLETED_MANAGER_CARD',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard,
+      linked_task_id: task.id,
+      linked_project_id: task.project_id
+    });
+  }
+
+  /**
+   * 1.E. Personel %40, %50, %60 İlerleme + Zorunlu Not Girdiğinde Proje Yetkililerine Giden Mail & Kart
+   */
+  public async sendTaskProgressUpdateToManagersCard(
+    tenant_id: UUID,
+    task_id: UUID,
+    updated_by_user_id: UUID,
+    progress: number,
+    note_text: string
+  ): Promise<EmailOutboxItem | null> {
+    const task = this.db.getTaskById(tenant_id, task_id);
+    if (!task) return null;
+
+    const project = this.db.getProjectById(tenant_id, task.project_id);
+    const user = this.db.getUserById(tenant_id, updated_by_user_id)
+      || (task.assignee_id ? this.db.getUserById(tenant_id, task.assignee_id) : undefined);
+    const userName = user?.name || 'Görev Sorumlusu';
+
+    this.notificationService.notifyTaskProgressToManagers(
+      tenant_id,
+      task.project_id,
+      task.id,
+      userName,
+      task.title,
+      progress,
+      note_text
+    );
+
+    const managerEmails = this.getProjectAuthorityEmails(tenant_id, task.project_id);
+    if (managerEmails.length === 0) return null;
+
+    const config = this.getSmtpConfig(tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+
+    const adaptiveCard = {
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      hideOriginalBody: true,
+      body: [
+        {
+          type: 'TextBlock',
+          text: `📊 GÖREV İLERLEME BİLDİRİMİ (%${progress}) • YETKİLİ BİLGİSİ`,
+          weight: 'Bolder',
+          color: 'Accent',
+          size: 'Small'
+        },
+        {
+          type: 'TextBlock',
+          text: `${userName}: "${task.title}" görevini %${progress} seviyesine güncelledi`,
+          weight: 'Bolder',
+          size: 'Large',
+          wrap: true
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: 'Proje:', value: project?.title || 'FG Group Projesi' },
+            { title: 'Görev:', value: task.title },
+            { title: 'Güncelleyen Kişi:', value: `${userName} (${user?.department || 'Ekip'})` },
+            { title: 'Yeni İlerleme Oranı:', value: `%${progress} (DEVAM EDİYOR)` },
+            { title: 'Zorunlu Açıklama Notu:', value: note_text }
+          ]
+        }
+      ],
+      actions: [
+        {
+          type: 'Action.OpenUrl',
+          title: '🔍 Görev Detayını ve Notları Görüntüle',
+          url: baseUrl
+        }
+      ]
+    };
+
+    const htmlBody = `
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #3b82f6;border-radius:12px;padding:24px;">
+        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
+          📊 Görev İlerleme & Zorunlu Not Bildirimi (%${progress})
+        </div>
+        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${userName}, "${task.title}" görevinde %${progress} ilerleme bildirdi</h2>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:13px;margin:12px 0;color:#1e3a8a;">
+          <div><strong>Proje:</strong> ${project?.title || '-'}</div>
+          <div><strong>İlerleme Oranı:</strong> <strong>%${progress}</strong></div>
+          <div style="margin-top:6px;"><strong>📝 Personel Açıklama Notu:</strong> "${note_text}"</div>
+        </div>
+        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
+      </div>
+    `;
+
+    return this.dispatchEmail({
+      tenant_id,
+      to: managerEmails,
+      subject: `📊 İlerleme (%${progress}): ${userName} — ${task.title} (${project?.title || 'Proje'})`,
+      category: 'TASK_PROGRESS_MANAGER_CARD',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard,
+      linked_task_id: task.id,
+      linked_project_id: task.project_id
+    });
+  }
+
+  /**
+   * 2. Görev Zamanında Yapılmadığında (KAB07) Sorumluya Giden Zorunlu Mazeret + İlerleme (%40-%60) Kartı
+   *    ve Proje Yetkililerine Giden Gecikme Uyarısı Maili!
    */
   public async sendDelayExplanationActionableCard(tenant_id: UUID, task_id: UUID): Promise<EmailOutboxItem | null> {
     const config = this.getSmtpConfig(tenant_id);
     if (!config.enable_actionable_cards) return null;
-
-    // Aynı görev için zaten mazeret kartı gönderildiyse mükerrer gönderim yapma
-    const existingCard = this.db.getEmailOutbox(tenant_id, 50).find(
-      item => item.category === 'DELAY_EXPLANATION_CARD' && item.linked_task_id === task_id && !item.action_taken
-    );
-    if (existingCard) return existingCard;
 
     const task = this.db.getTaskById(tenant_id, task_id);
     if (!task || !task.assignee_id) return null;
 
     const assignee = this.db.getUserById(tenant_id, task.assignee_id);
     if (!assignee) return null;
+
+    // Aynı görev için bekleyen mazeret kartı varsa mükerrer gönderme
+    const existingCard = this.db.getEmailOutbox(tenant_id, 50).find(
+      item => item.category === 'DELAY_EXPLANATION_CARD' && item.linked_task_id === task_id && !item.action_taken
+    );
+    if (existingCard) return existingCard;
 
     const project = this.db.getProjectById(tenant_id, task.project_id);
     const succs = this.db.getSuccessors(tenant_id, task.id);
@@ -802,7 +1392,7 @@ export class EmailAndAutomationService {
       body: [
         {
           type: 'TextBlock',
-          text: `⚠️ TERMİN AŞILDI (KAB07 Gecikme Açıklaması Gerekli)`,
+          text: `⚠️ GÖREV ZAMANINDA YAPILMADI • TERMİN AŞILDI (KAB07)`,
           weight: 'Bolder',
           color: 'Warning',
           size: 'Small'
@@ -820,13 +1410,16 @@ export class EmailAndAutomationService {
             { title: 'Proje:', value: project?.title || 'FG Group' },
             { title: 'Sorumlu:', value: assignee.name },
             { title: 'Aşılan Termin:', value: dueStr },
-            { title: 'Bekleyen Ardıl İş:', value: `${succs.length} görev sizi bekliyor` }
+            { title: 'Mevcut İlerleme:', value: `%${task.progress || 0}` },
+            { title: 'Bekleyen Ardıl İş:', value: `${succs.length} görev tamamlanmasını bekliyor` }
           ]
         },
+        this.buildProgressChoiceSet(task.progress || 50),
         {
           type: 'Input.Text',
           id: 'explanationText',
-          placeholder: 'Gecikme nedenini ve alınan önlemi doğrudan buraya yazınız...',
+          label: '📝 Gecikme Nedeni ve Mevcut İlerleme Açıklaması (Zorunlu):',
+          placeholder: 'Görevin neden zamanında tamamlanmadığını ve yapılan kısmı (%40/%50/%60) buraya yazınız...',
           isMultiline: true,
           isRequired: true
         }
@@ -834,7 +1427,21 @@ export class EmailAndAutomationService {
       actions: [
         {
           type: 'Action.Http',
-          title: '📝 Mazereti Kaydet ve Yöneticiye Bildir',
+          title: '📊 İlerleme (%40-%60) & Mazeret Kaydet',
+          method: 'POST',
+          url: `${baseUrl}/api/outlook/action`,
+          body: JSON.stringify({
+            tenant_id,
+            task_id: task.id,
+            user_id: assignee.id,
+            action: 'UPDATE_PROGRESS',
+            progress_value: '{{progressValue.value}}',
+            explanation_text: '{{explanationText.value}}'
+          })
+        },
+        {
+          type: 'Action.Http',
+          title: '📝 Sadece Mazereti Kaydet ve Yöneticiye Bildir',
           method: 'POST',
           url: `${baseUrl}/api/outlook/action`,
           body: JSON.stringify({
@@ -847,14 +1454,15 @@ export class EmailAndAutomationService {
         },
         {
           type: 'Action.Http',
-          title: '✅ Görevi Şimdi Tamamla',
+          title: '✅ Görevi Şimdi Tamamla (%100)',
           method: 'POST',
           url: `${baseUrl}/api/outlook/action`,
           body: JSON.stringify({
             tenant_id,
             task_id: task.id,
             user_id: assignee.id,
-            action: 'COMPLETE_TASK'
+            action: 'COMPLETE_TASK',
+            explanation_text: '{{explanationText.value}}'
           })
         }
       ]
@@ -863,18 +1471,131 @@ export class EmailAndAutomationService {
     const htmlBody = `
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #f59e0b;border-radius:12px;padding:24px;">
         <div style="font-size:12px;font-weight:700;color:#d97706;text-transform:uppercase;margin-bottom:6px;">
-          ⚠️ Gecikme Açıklaması Bekleniyor (KAB07)
+          ⚠️ Görev Zamanında Tamamlanmadı • Gecikme Açıklaması Gerekli (KAB07)
         </div>
         <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${task.title}</h2>
-        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;">Bu görevin teslim tarihi (${dueStr}) aşılmıştır ve <strong>${succs.length} ardıl görev</strong> tamamlanmasını beklemektedir.</p>
+        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;">
+          Merhaba <strong>${assignee.name}</strong>, bu görevin teslim tarihi (<strong>${dueStr}</strong>) aşılmıştır ve <strong>${succs.length} ardıl görev</strong> sizin görevinizi beklemektedir. Lütfen e-posta içindeki karttan mevcut ilerleme yüzdesini (%40, %50, %60) ve zorunlu gecikme açıklamanızı giriniz.
+        </p>
+      </div>
+    `;
+
+    const assigneeMail = await this.dispatchEmail({
+      tenant_id,
+      to: [assignee.email],
+      subject: `⚠️ Gecikme Açıklaması Gerekli (Termin Aşıldı): ${task.title}`,
+      category: 'DELAY_EXPLANATION_CARD',
+      htmlBody,
+      adaptiveCardJson: adaptiveCard,
+      linked_task_id: task.id,
+      linked_project_id: task.project_id
+    });
+
+    // Aynı anda projedeki yetkili kişilere de "Bu kişi verilen görevi zamanında yapmadı" uyarısı gönder!
+    await this.sendOverdueAlertToManagersCard(tenant_id, task.id);
+
+    return assigneeMail;
+  }
+
+  /**
+   * 2.B. Kullanıcı Verilen Görevi Zamanında Yapmadığında Proje Yetkililerine Giden Uyarı Maili
+   */
+  public async sendOverdueAlertToManagersCard(tenant_id: UUID, task_id: UUID): Promise<EmailOutboxItem | null> {
+    const task = this.db.getTaskById(tenant_id, task_id);
+    if (!task) return null;
+
+    const existingAlert = this.db.getEmailOutbox(tenant_id, 50).find(
+      item => item.category === 'OVERDUE_MANAGER_ALERT' && item.linked_task_id === task_id
+    );
+    if (existingAlert) return existingAlert;
+
+    const project = this.db.getProjectById(tenant_id, task.project_id);
+    const assignee = task.assignee_id ? this.db.getUserById(tenant_id, task.assignee_id) : null;
+    const assigneeName = assignee?.name || 'Atanmamış';
+    const dueStr = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
+
+    this.notificationService.notifyOverdueTaskToManagers(
+      tenant_id,
+      task.project_id,
+      task.id,
+      assigneeName,
+      task.title,
+      dueStr
+    );
+
+    const managerEmails = this.getProjectAuthorityEmails(tenant_id, task.project_id, task.assignee_id);
+    if (managerEmails.length === 0) return null;
+
+    const succs = this.db.getSuccessors(tenant_id, task.id);
+    const config = this.getSmtpConfig(tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+
+    const adaptiveCard = {
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      type: 'AdaptiveCard',
+      version: '1.4',
+      originator: 'fg-group-proje-sistemi',
+      hideOriginalBody: true,
+      body: [
+        {
+          type: 'TextBlock',
+          text: `🚨 GECİKEN GÖREV UYARISI • PROJE YETKİLİ BİLDİRİMİ`,
+          weight: 'Bolder',
+          color: 'Attention',
+          size: 'Small'
+        },
+        {
+          type: 'TextBlock',
+          text: `${assigneeName}, "${task.title}" görevini zamanında tamamlamadı!`,
+          weight: 'Bolder',
+          size: 'Large',
+          wrap: true
+        },
+        {
+          type: 'FactSet',
+          facts: [
+            { title: 'Proje:', value: project?.title || 'FG Group Projesi' },
+            { title: 'Geciken Görev:', value: task.title },
+            { title: 'Sorumlu Personel:', value: `${assigneeName} (${assignee?.email || '-'})` },
+            { title: 'Aşılan Teslim Tarihi:', value: dueStr },
+            { title: 'Mevcut Durum / İlerleme:', value: `${task.work_status} (%${task.progress || 0})` },
+            { title: 'Etkilenen Ardıl Görev:', value: `${succs.length} görev bekliyor` }
+          ]
+        }
+      ],
+      actions: [
+        {
+          type: 'Action.OpenUrl',
+          title: '🚨 Darboğaz ve Gecikme Detayını İncele',
+          url: baseUrl
+        }
+      ]
+    };
+
+    const htmlBody = `
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #ef4444;border-radius:12px;padding:24px;">
+        <div style="font-size:12px;font-weight:700;color:#dc2626;text-transform:uppercase;margin-bottom:6px;">
+          🚨 Geciken Görev Uyarısı • Proje Yetkilisi Bilgilendirmesi
+        </div>
+        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${assigneeName}, "${task.title}" görevini zamanında tamamlamadı</h2>
+        <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">
+          <strong>${project?.title || 'Proje'}</strong> kapsamındaki <strong>${task.title}</strong> görevinin hedef teslim tarihi (<strong>${dueStr}</strong>) geçmiştir. Sorumlu personele zorunlu mazeret ve ilerleme (%40/%50/%60) kartı gönderilmiştir.
+        </p>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:13px;margin-bottom:14px;color:#991b1b;">
+          <div><strong>Sorumlu Personel:</strong> ${assigneeName} (${assignee?.email || '-'})</div>
+          <div><strong>Aşılan Termin:</strong> ${dueStr}</div>
+          <div><strong>Mevcut İlerleme:</strong> %${task.progress || 0} (${task.work_status})</div>
+          <div><strong>Bekleyen Ardıl İş:</strong> ${succs.length} görev</div>
+        </div>
+        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#dc2626;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
       </div>
     `;
 
     return this.dispatchEmail({
       tenant_id,
-      to: [assignee.email],
-      subject: `⚠️ Gecikme Açıklaması Gerekli: ${task.title}`,
-      category: 'DELAY_EXPLANATION_CARD',
+      to: managerEmails,
+      subject: `🚨 Geciken Görev Uyarısı: ${assigneeName} — "${task.title}" zamanında tamamlanmadı!`,
+      category: 'OVERDUE_MANAGER_ALERT',
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
@@ -896,15 +1617,9 @@ export class EmailAndAutomationService {
     const requester = this.db.getUserById(tenant_id, req.user_id);
     if (!project || !requester) return null;
 
+    const managerEmails = this.getProjectAuthorityEmails(tenant_id, project.id);
     const members = this.db.getProjectMembers(tenant_id, project.id).filter(m => m.role === 'PROJECT_MANAGER');
-    const managerUsers = members.map(m => this.db.getUserById(tenant_id, m.user_id)).filter(Boolean);
-    const managerEmails = managerUsers.map(u => u!.email);
-    const managerId = managerUsers[0]?.id || project.created_by_user_id;
-
-    if (managerEmails.length === 0) {
-      const admin = this.db.getUsers(tenant_id).find(u => u.system_role === 'ADMIN');
-      if (admin) managerEmails.push(admin.email);
-    }
+    const managerId = members[0]?.user_id || project.created_by_user_id;
 
     const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
 
@@ -990,7 +1705,8 @@ export class EmailAndAutomationService {
 
   /**
    * 4. Outlook Actionable Message HTTP Callback İşleyicisi (/api/outlook/action)
-   * E-postanın içindeki butonlara tıklandığında çalışır ve kartı anında günceller!
+   * E-postanın içindeki butonlara tıklandığında çalışır, ZORUNLU NOT kuralını denetler,
+   * yönetici bilgilendirme maillerini gönderir ve kartı anında günceller!
    */
   public async handleOutlookCardAction(payload: {
     tenant_id?: UUID;
@@ -998,7 +1714,8 @@ export class EmailAndAutomationService {
     request_id?: UUID;
     user_id?: UUID;
     outboxId?: UUID;
-    action: 'START_TASK' | 'COMPLETE_TASK' | 'SUBMIT_EXPLANATION' | 'DECIDE_VISIBILITY';
+    action: 'START_TASK' | 'UPDATE_PROGRESS' | 'COMPLETE_TASK' | 'SUBMIT_EXPLANATION' | 'DECIDE_VISIBILITY';
+    progress_value?: number | string;
     explanation_text?: string;
     approve?: boolean;
   }): Promise<{ message: string; updatedCard: any; resultData?: any }> {
@@ -1011,15 +1728,53 @@ export class EmailAndAutomationService {
       name: callerUser.name
     };
 
+    const rawNote = (payload.explanation_text || '').trim();
+    const cleanNote = rawNote === '{{explanationText.value}}' ? '' : rawNote;
+
     let statusMessage = 'İşlem tamamlandı.';
     let resultData: any = null;
 
     if (payload.action === 'START_TASK' && payload.task_id) {
       const updated = this.taskService.startTask(auth, payload.task_id);
+      if (cleanNote.length >= 2) {
+        this.delayService.submitExplanation(auth, payload.task_id, `[Görev Başlatma Notu]: ${cleanNote}`);
+      }
       statusMessage = `▶️ "${updated.title}" görevi Outlook üzerinden BAŞLATILDI (%${updated.progress || 25}).`;
       resultData = updated;
+    } else if (payload.action === 'UPDATE_PROGRESS' && payload.task_id) {
+      // KURAL: %40, %50, %60 ilerleme bildirirken açıklama notu MUTLAKA yazılmalıdır!
+      if (cleanNote.length < 2) {
+        throw new Error('İlerleme yüzdesi (%40, %50, %60 vb.) güncellerken yapılan çalışmayı açıklayan bir not yazılması zorunludur!');
+      }
+      const rawProg = String(payload.progress_value || '50').replace(/[^0-9]/g, '');
+      const progNum = Math.max(10, Math.min(100, Number(rawProg) || 50));
+
+      const updRes = this.taskService.updateTaskProgressWithNote(auth, payload.task_id, progNum, cleanNote);
+      resultData = updRes;
+
+      if (progNum >= 100) {
+        const unlockedNames: string[] = [];
+        for (const readyId of updRes.newlyReadyTaskIds || []) {
+          const rt = this.db.getTaskById(tenant_id, readyId);
+          if (rt) {
+            unlockedNames.push(rt.title);
+            if (rt.assignee_id) {
+              this.notificationService.notifyTaskReady(tenant_id, rt.id, rt.assignee_id, rt.title);
+              await this.sendTaskReadyActionableCard(tenant_id, rt.id);
+            }
+          }
+        }
+        await this.sendTaskCompletedToManagersCard(tenant_id, updRes.task.id, auth.user_id, cleanNote, updRes.newlyReadyTaskIds || []);
+        statusMessage = `✅ "${updRes.task.title}" %100 tamamlandı, notunuz kaydedildi ve proje yetkililerine bilgi e-postası gönderildi!`;
+      } else {
+        await this.sendTaskProgressUpdateToManagersCard(tenant_id, updRes.task.id, auth.user_id, progNum, cleanNote);
+        statusMessage = `📊 "${updRes.task.title}" ilerleme oranı %${progNum} olarak güncellendi, notunuz ("${cleanNote}") kaydedildi ve proje yetkililerine bildirildi!`;
+      }
     } else if (payload.action === 'COMPLETE_TASK' && payload.task_id) {
       const res = this.taskService.completeTask(auth, payload.task_id);
+      if (cleanNote.length >= 2) {
+        this.delayService.submitExplanation(auth, payload.task_id, `[%100 Tamamlandı Notu]: ${cleanNote}`);
+      }
       resultData = res;
       const unlockedNames: string[] = [];
       for (const readyId of res.newlyReadyTaskIds) {
@@ -1032,23 +1787,32 @@ export class EmailAndAutomationService {
           }
         }
       }
+      // Proje yetkililerine "bu kişi bu işi tamamladı" mailini gönder
+      await this.sendTaskCompletedToManagersCard(tenant_id, res.task.id, auth.user_id, cleanNote || undefined, res.newlyReadyTaskIds);
+
       statusMessage = unlockedNames.length > 0
-        ? `✅ "${res.task.title}" tamamlandı! Sıradaki görev(ler) otomatik açıldı ve e-postası gönderildi: ${unlockedNames.join(', ')}`
-        : `✅ "${res.task.title}" görevi Outlook üzerinden %100 TAMAMLANDI.`;
+        ? `✅ "${res.task.title}" tamamlandı! Proje yetkililerine bilgi verildi ve sıradaki görev(ler) açıldı: ${unlockedNames.join(', ')}`
+        : `✅ "${res.task.title}" görevi %100 TAMAMLANDI ve proje yetkililerine bilgi e-postası gönderildi.`;
     } else if (payload.action === 'SUBMIT_EXPLANATION' && payload.task_id) {
-      const text = (payload.explanation_text || '').trim() || 'Outlook Actionable Card üzerinden durum/gecikme notu girildi.';
-      const rec = this.delayService.submitExplanation(auth, payload.task_id, text);
+      if (cleanNote.length < 2) {
+        throw new Error('Lütfen yapılan çalışmayı veya gecikme/durum nedenini açıklayan bir not yazınız (Not alanı zorunludur)!');
+      }
+      const rec = this.delayService.submitExplanation(auth, payload.task_id, cleanNote);
       const task = this.db.getTaskById(tenant_id, payload.task_id);
       if (task) {
-        this.notificationService.notifyExplanationSubmitted(tenant_id, task.project_id, task.id, auth.name, task.title, text);
+        this.notificationService.notifyExplanationSubmitted(tenant_id, task.project_id, task.id, auth.name, task.title, cleanNote);
+        await this.sendTaskProgressUpdateToManagersCard(tenant_id, task.id, auth.user_id, task.progress || 0, cleanNote);
       }
-      statusMessage = `📝 Gecikme / durum açıklamanız kaydedildi ve proje yöneticisine bildirildi: "${text}"`;
+      statusMessage = `📝 Açıklama / durum notunuz kaydedildi ve proje yetkililerine e-posta ile bildirildi: "${cleanNote}"`;
       resultData = rec;
     } else if (payload.action === 'DECIDE_VISIBILITY' && payload.request_id) {
       const approve = payload.approve !== false;
       const decided = this.projectService.decideVisibilityRequest(auth, payload.request_id, approve);
+      if (approve) {
+        await this.sendProjectMemberAddedCard(tenant_id, decided.project_id, decided.user_id, 'VIEWER', auth.name);
+      }
       statusMessage = approve
-        ? `✅ Görünürlük talebi onaylandı. Personel artık projeyi (VIEWER) olarak görüntüleyebilir.`
+        ? `✅ Görünürlük talebi onaylandı ve personele projeye dahil edilme e-postası gönderildi.`
         : `❌ Görünürlük talebi reddedildi.`;
       resultData = decided;
     }

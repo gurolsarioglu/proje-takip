@@ -2272,7 +2272,7 @@ function setupEventListeners() {
   document.getElementById('wpCloseFooterBtn')?.addEventListener('click', closeTaskDrawer);
   document.getElementById('wpDrawerBackdrop')?.addEventListener('click', closeTaskDrawer);
 
-  // Çekmece İçi İlerleme Kaydırıcısı (Canlı Önizleme + Kayıt)
+  // Çekmece İçi İlerleme Kaydırıcısı & Zorunlu Notlu Hızlı İlerleme (%20, %40, %50, %60, %80, %100)
   const wpProgressSlider = document.getElementById('wpProgressSlider');
   if (wpProgressSlider) {
     wpProgressSlider.addEventListener('input', (e) => {
@@ -2280,19 +2280,65 @@ function setupEventListeners() {
       document.getElementById('wpProgressText').textContent = `%${val}`;
       document.getElementById('wpProgressFill').style.width = `${val}%`;
     });
-    wpProgressSlider.addEventListener('change', async (e) => {
-      if (!state.activeTaskId) return;
-      const val = Number(e.target.value);
-      try {
-        await apiCall(`/api/tasks/${state.activeTaskId}`, 'PATCH', { progress: val });
-        showToast(`İlerleme oranı %${val} olarak güncellendi.`, 'success');
-        await loadProjectTasks(state.currentProjectId);
-        await loadProjects();
-      } catch (err) {
-        showToast('İlerleme güncellenemedi: ' + err.message, 'error');
+    wpProgressSlider.addEventListener('change', () => {
+      const noteEl = document.getElementById('wpProgressNoteInput');
+      if (noteEl && !noteEl.value.trim()) {
+        noteEl.focus();
+        showToast('📝 Lütfen seçtiğiniz ilerleme oranı için aşağıya yapılan iş / açıklama notunu yazıp Kaydet butonuna basın.', 'info');
       }
     });
   }
+
+  document.querySelectorAll('.wp-quick-prog-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const progVal = Number(btn.dataset.prog) || 50;
+      const slider = document.getElementById('wpProgressSlider');
+      if (slider && !slider.disabled) {
+        slider.value = String(progVal);
+        document.getElementById('wpProgressText').textContent = `%${progVal}`;
+        document.getElementById('wpProgressFill').style.width = `${progVal}%`;
+      }
+      const noteEl = document.getElementById('wpProgressNoteInput');
+      if (noteEl) {
+        noteEl.focus();
+      }
+    });
+  });
+
+  document.getElementById('wpSaveProgressWithNoteBtn')?.addEventListener('click', async () => {
+    if (!state.activeTaskId) return;
+    const slider = document.getElementById('wpProgressSlider');
+    const noteEl = document.getElementById('wpProgressNoteInput');
+    const progress = Number(slider?.value || 50);
+    const note_text = (noteEl?.value || '').trim();
+
+    if (note_text.length < 2) {
+      if (noteEl) {
+        noteEl.style.borderColor = '#ef4444';
+        noteEl.focus();
+        setTimeout(() => { noteEl.style.borderColor = ''; }, 2500);
+      }
+      showToast('⚠️ İlerleme oranı (%40, %50, %60 vb.) güncellerken yapılan çalışmayı açıklayan bir not yazmanız zorunludur!', 'error');
+      return;
+    }
+
+    try {
+      await apiCall(`/api/tasks/${state.activeTaskId}/progress`, 'POST', { progress, note_text });
+      if (noteEl) noteEl.value = '';
+      showToast(
+        progress >= 100
+          ? `✅ Görev %100 tamamlandı, notunuz kaydedildi ve proje yetkililerine bilgi e-postası gönderildi!`
+          : `📊 İlerleme %${progress} olarak güncellendi, zorunlu notunuz kaydedildi ve proje yetkililerine mail gönderildi!`,
+        'success'
+      );
+      await loadProjectTasks(state.currentProjectId);
+      await loadProjects();
+      await openTaskDrawer(state.activeTaskId);
+      await loadNotifications();
+    } catch (err) {
+      showToast('İlerleme kaydedilemedi: ' + err.message, 'error');
+    }
+  });
 
   // Çekmece İçi Öncelik Değişimi
   document.getElementById('wpPrioritySelect')?.addEventListener('change', async (e) => {
@@ -2380,8 +2426,13 @@ function setupEventListeners() {
 
   document.getElementById('wpCompleteBtn')?.addEventListener('click', async () => {
     if (!state.activeTaskId) return;
-    await apiCall(`/api/tasks/${state.activeTaskId}/complete`, 'POST');
-    showToast('Görev tamamlandı!', 'success');
+    const progNote = document.getElementById('wpProgressNoteInput')?.value.trim();
+    const inlineNote = document.getElementById('wpInlineExpText')?.value.trim();
+    const note_text = progNote || inlineNote || '';
+    await apiCall(`/api/tasks/${state.activeTaskId}/complete`, 'POST', { note_text });
+    if (document.getElementById('wpProgressNoteInput')) document.getElementById('wpProgressNoteInput').value = '';
+    if (document.getElementById('wpInlineExpText')) document.getElementById('wpInlineExpText').value = '';
+    showToast('✅ Görev tamamlandı ve projedeki yetkili kişilere tamamlama e-postası gönderildi!', 'success');
     await loadProjectTasks(state.currentProjectId);
     await loadProjects();
     await openTaskDrawer(state.activeTaskId);
@@ -4256,8 +4307,13 @@ function renderEmailOutboxList() {
 
   const catLabels = {
     ACTIONABLE_TASK_CARD: '🔔 Sıra Sizde (Adaptive Card)',
-    DELAY_EXPLANATION_CARD: '⚠️ Gecikme Mazereti Kartı',
-    APPROVAL_CARD: '👁️ Yönetici Onay Kartı',
+    TASK_ASSIGNED_CARD: '📌 Yeni Görev Atandı Kartı',
+    PROJECT_MEMBER_CARD: '📁 Projeye Dahil Edildiniz',
+    TASK_COMPLETED_MANAGER_CARD: '✅ İş Tamamlandı (Yetkili Bilgi)',
+    TASK_PROGRESS_MANAGER_CARD: '📊 %40-%60 İlerleme & Not (Yetkili Bilgi)',
+    DELAY_EXPLANATION_CARD: '⚠️ Gecikme Mazereti Kartı (Sorumlu)',
+    OVERDUE_MANAGER_ALERT: '🚨 Geciken Görev Uyarısı (Yetkili)',
+    APPROVAL_CARD: '👁️ Yönetici Onay Kartı (KAB03)',
     SCHEDULED_REPORT: '📊 Zamanlanmış Otomatik Rapor',
     SMTP_TEST: '🧪 Exchange SMTP Testi'
   };
@@ -4324,10 +4380,35 @@ function renderSelectedOutboxPreview() {
           </div>
         `;
       }
+      if (block.type === 'Input.ChoiceSet' && Array.isArray(block.choices)) {
+        const defVal = block.value || '50';
+        return `
+          <div style="margin-top:10px; padding:10px; border-radius:8px; background:var(--surface-hover, #f8fafc); border:1px solid var(--border-color, #e2e8f0);">
+            <label style="display:block; font-size:0.76rem; font-weight:700; color:var(--text-secondary); margin-bottom:6px;">
+              ${escapeHtml(block.label || '📊 İlerleme Oranı Seçin (%40, %50, %60 vb.):')}
+            </label>
+            <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px;">
+              ${block.choices.map(c => `
+                <button type="button" class="action-btn secondary-btn sm-btn ac-prog-chip" data-val="${escapeHtml(c.value)}" style="padding:3px 8px; font-size:0.72rem;">
+                  %${escapeHtml(c.value)}
+                </button>
+              `).join('')}
+            </div>
+            <select id="acLiveProgress_${item.id}" class="styled-select sm-select" style="width:100%;">
+              ${block.choices.map(c => `
+                <option value="${escapeHtml(c.value)}" ${String(c.value) === String(defVal) ? 'selected' : ''}>
+                  ${escapeHtml(c.title)}
+                </option>
+              `).join('')}
+            </select>
+          </div>
+        `;
+      }
       if (block.type === 'Input.Text') {
         return `
           <div style="margin-top:8px;">
-            <input type="text" id="acLiveInput_${item.id}" class="styled-input" placeholder="${escapeHtml(block.placeholder || 'Açıklama yazınız...')}">
+            ${block.label ? `<label style="display:block; font-size:0.76rem; font-weight:700; color:var(--text-secondary); margin-bottom:4px;">${escapeHtml(block.label)}</label>` : ''}
+            <input type="text" id="acLiveInput_${item.id}" class="styled-input" placeholder="${escapeHtml(block.placeholder || 'Açıklama notu yazınız (Zorunlu)...')}">
           </div>
         `;
       }
@@ -4380,6 +4461,15 @@ function renderSelectedOutboxPreview() {
     </div>
   `;
 
+  previewEl.querySelectorAll('.ac-prog-chip').forEach(chip => {
+    chip.onclick = () => {
+      const sel = document.getElementById(`acLiveProgress_${item.id}`);
+      if (sel) sel.value = chip.dataset.val;
+      const inp = document.getElementById(`acLiveInput_${item.id}`);
+      if (inp) inp.focus();
+    };
+  });
+
   previewEl.querySelectorAll('.btn-exec-ac-action').forEach(btn => {
     btn.onclick = async () => {
       const idx = Number(btn.dataset.idx);
@@ -4390,8 +4480,27 @@ function renderSelectedOutboxPreview() {
         const payload = JSON.parse(act.body);
         payload.outboxId = item.id;
         const liveInput = document.getElementById(`acLiveInput_${item.id}`);
-        if (liveInput && liveInput.value.trim()) {
-          payload.explanation_text = liveInput.value.trim();
+        const liveProg = document.getElementById(`acLiveProgress_${item.id}`);
+        const typedNote = liveInput ? liveInput.value.trim() : '';
+
+        if (liveProg && liveProg.value) {
+          payload.progress_value = Number(liveProg.value);
+        }
+
+        if (typedNote) {
+          payload.explanation_text = typedNote;
+        } else {
+          payload.explanation_text = '';
+        }
+
+        if ((payload.action === 'UPDATE_PROGRESS' || payload.action === 'SUBMIT_EXPLANATION') && typedNote.length < 2) {
+          if (liveInput) {
+            liveInput.style.borderColor = '#ef4444';
+            liveInput.focus();
+            setTimeout(() => { liveInput.style.borderColor = ''; }, 2500);
+          }
+          showToast('⚠️ İlerleme oranı (%40, %50, %60 vb.) veya durum kaydederken açıklama notu yazılması zorunludur!', 'error');
+          return;
         }
 
         btn.disabled = true;
@@ -4673,6 +4782,31 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Outlook Adaptive Cards Rehberi (outlook_adaptive_cards_rehberi.md) 5 Senaryo Tetikleyicileri
+  document.querySelectorAll('.btn-trigger-card-scenario').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const scenario = btn.dataset.scenario;
+      if (!scenario) return;
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Gönderiliyor...';
+      try {
+        const res = await apiCall('/api/admin/trigger-card-scenario', 'POST', { scenario });
+        if (res.item) {
+          emailAutoState.selectedOutboxId = res.item.id;
+          showToast(`📬 "${res.item.subject}" oluşturuldu, gönderildi ve aşağıdaki simülatörde açıldı!`, 'success');
+        }
+        await loadEmailAutomationDashboard();
+        await loadNotifications();
+      } catch (err) {
+        showToast('Senaryo tetiklenemedi: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    });
+  });
 
   // Zamanlanmış Rapor Kuralı Ekle Formu
   const schedForm = document.getElementById('scheduledReportForm');

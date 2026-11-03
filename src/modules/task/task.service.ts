@@ -201,6 +201,57 @@ export class TaskService {
     };
   }
 
+  /**
+   * Görev İlerleme Yüzdesi (%20, %40, %50, %60, %80, %100 vb.) ve ZORUNLU Açıklama Notu Güncellemesi
+   */
+  public updateTaskProgressWithNote(
+    auth: AuthContext,
+    task_id: UUID,
+    progress: number,
+    note_text: string
+  ): { task: Task; record: any; newlyReadyTaskIds?: UUID[] } {
+    const task = this.db.getTaskById(auth.tenant_id, task_id);
+    if (!task) throw new Error('Görev bulunamadı.');
+
+    const cleanedNote = (note_text || '').trim();
+    if (cleanedNote.length < 2) {
+      throw new Error('İlerleme yüzdesi güncellenirken yapılan çalışmayı veya durumu açıklayan bir not yazılması zorunludur!');
+    }
+
+    const safeProgress = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+
+    if (safeProgress >= 100) {
+      const comp = this.completeTask(auth, task_id);
+      const formattedNote = cleanedNote.startsWith('[%') ? cleanedNote : `[%100 Tamamlandı Notu]: ${cleanedNote}`;
+      const record = this.delayService.submitExplanation(auth, task_id, formattedNote);
+      return {
+        task: comp.task,
+        record,
+        newlyReadyTaskIds: comp.newlyReadyTaskIds
+      };
+    }
+
+    if (task.work_status === 'BLOCKED') {
+      throw new Error('Öncül görevler tamamlanmadığı için BLOCKED durumundaki görevde ilerleme kaydedilemez.');
+    }
+
+    const newStatus: WorkStatus = safeProgress > 0 ? 'IN_PROGRESS' : 'READY';
+    const updated = this.db.updateTask(auth.tenant_id, task_id, {
+      work_status: newStatus,
+      progress: safeProgress,
+      actual_start_date: safeProgress > 0 ? (task.actual_start_date || new Date().toISOString()) : task.actual_start_date,
+      actual_completion_date: undefined
+    })!;
+
+    const formattedNote = cleanedNote.startsWith('[%') ? cleanedNote : `[%${safeProgress} İlerleme Notu]: ${cleanedNote}`;
+    const record = this.delayService.submitExplanation(auth, task_id, formattedNote);
+
+    return {
+      task: updated,
+      record
+    };
+  }
+
   public getTask(auth: AuthContext, task_id: UUID): Task | undefined {
     return this.db.getTaskById(auth.tenant_id, task_id);
   }
