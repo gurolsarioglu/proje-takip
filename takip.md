@@ -231,3 +231,19 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 * **Kullanıcı Profil Resmi Yükleme / Kaldırma (`PUT /api/profile/avatar` & `users.avatar_url`):**
   - Kullanıcılar **👤 Kullanıcı Profili & Tercihler** penceresinden **"📷 Profil Resmi Yükle / Değiştir"** butonuyla kendi fotoğraflarını seçebilir; görsel tarayıcıda otomatik olarak `256x256` kare formata kırpılıp sıkıştırılarak veritabanına (`users.avatar_url`) kaydedilir ve sol menüde, personel tablosunda ve görev detay çekmecesinde görüntülenir.
   - **25/25 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
+
+### 21. Yüksek Kaliteli Outlook Adaptive Card Görsel Çerçevesi (`renderAdaptiveCardHtmlFrame`) & E-Postadan Tek Tıkla Görev Aksiyonu (`GET /api/quick-action`)
+* **Outlook Rehberine (`outlook_adaptive_cards_rehberi.md`) Birebir Uygun Görsel Kart Çerçevesi (`renderAdaptiveCardHtmlFrame`):**
+  - Outlook masaüstü, web ve mobil istemcilerinde Microsoft Actionable Messages motoru (HTTPS ve kayıtlı GUID gereksinimi sebebiyle) devre dışı kaldığında dahi, e-postanın rehberdeki canlı kart ile birebir aynı görsel zenginlikte görünmesini sağlayan yüksek kaliteli HTML e-posta şablonu geliştirildi.
+  - Şablon öğeleri: Koyu lacivert üst başlık şeridi (`#0f172a`), kategori etiketi (`📌 YENİ GÖREV ATAMA BİLDİRİMİ`), renk kodlu durum rozeti (`🟢 Başlamaya Hazır (READY)`, `⚡ Devam Ediyor (%50)`, `✓ Tamamlandı (%100)`, `⏳ Öncül Bekliyor (BLOCKED)`, `🚨 Termin Aşıldı`), proje ve görev başlığı, biçimlendirilmiş veri tablosu (`FactSet`), görsel grafik ilerleme çubuğu, hızlı ilerleme çipleri (`%20`, `%40 Bildir`, `%50 Yarılandı`, `%60 Bildir`, `%80 Son Aşama`) ve büyük aksiyon butonları (`▶️ Görevi Başlat (%25)`, `✅ Tamamlandı İşaretle (%100)`, `🔗 Görev Detayını Aç & Yönet ➔`).
+  - Görev atama, görev hazır olma, projeye dahil edilme, yöneticiye tamamlandı bildirimi, yöneticiye ilerleme bildirimi, gecikme mazeret kartı, darboğaz uyarısı, görünürlük onay talebi ve yeni kullanıcı karşılama maillerinin tamamı bu zengin şablonla gönderilmektedir.
+* **E-Postadan Tek Tıkla Anında Görev Yönetimi (`GET /api/quick-action`):**
+  - Kullanıcı Outlook'ta e-postayı açıp herhangi bir butona (`▶️ Görevi Başlat`, `✅ Tamamlandı İşaretle`, `%40/%50/%60 Bildir` vb.) tıkladığında, arka planda güvenli `GET /api/quick-action` rotası tetiklenir:
+    - `START_TASK`: Görevi anında `IN_PROGRESS` yapar.
+    - `UPDATE_PROGRESS`: İlerleme oranını (`%20`, `%40`, `%50`, `%60`, `%80`) günceller, otomatik e-posta notunu düşer ve proje yöneticilerine bildirim iletir.
+    - `COMPLETE_TASK`: Görevi `%100 COMPLETED` yapar, bekleyen ardıl görevlerin kilidini açar, ardıl sorumlulara *"Sıra Sizde"* maili ve proje yetkililerine tamamlama raporu gönderir.
+  - İşlem sonrası kullanıcıya modern bir başarı teyit ekranı sunulur ve 3 saniye içinde web uygulamasındaki ilgili görevin detay çekmecesine otomatik yönlendirme (`redirect`) yapılır.
+* **Doğrudan Görev Çekmecesi Açma Desteği (`?task_id=...` & `openTaskDrawer`):**
+  - Web uygulaması açılışında (`loadInitialData`) URL parametresindeki `task_id` otomatik okunarak ilgili görevin OpenProject bölmeli ekran çekmecesi (`#workPackageDrawer`) doğrudan açılır.
+* **Tüm Testler ve Doğrulama:**
+  - `OUTLOOK ADAPTIVE CARD EMAIL FRAME & ONE-CLICK QUICK ACTIONS` testi dahil olmak üzere **26/26 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.

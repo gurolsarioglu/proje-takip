@@ -1564,6 +1564,107 @@ app.post('/api/admin/trigger-card-scenario', async (req, res) => {
   }
 });
 
+function escapeHtmlText(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// E-posta İçi Tek Tık Aksiyon Endpoint'i (Outlook Quick Actions)
+app.get('/api/quick-action', async (req, res) => {
+  const tenant_id = (req.query.tenant_id as string) || db.getTenants()[0]?.id;
+  const taskId = (req.query.task_id as string) || undefined;
+  const requestId = (req.query.request_id as string) || undefined;
+  const userId = (req.query.user_id as string) || undefined;
+  const action = (req.query.action as string) || '';
+  const progressVal = (req.query.progress as string) || undefined;
+  const note = (req.query.note as string) || (action === 'UPDATE_PROGRESS' ? `E-posta üzerinden %${progressVal || 50} ilerleme bildirildi.` : undefined);
+  const approve = req.query.approve === 'true';
+
+  const redirectUrl = taskId ? `/?task_id=${taskId}` : '/';
+
+  try {
+    const result = await emailService.handleOutlookCardAction({
+      tenant_id,
+      task_id: taskId,
+      request_id: requestId,
+      user_id: userId,
+      action: action as any,
+      progress_value: progressVal,
+      explanation_text: note,
+      approve
+    });
+
+    const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="3;url=${redirectUrl}">
+  <title>İşlem Tamamlandı • FG Group</title>
+  <style>
+    body { margin:0; padding:40px 16px; background:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; display:flex; justify-content:center; align-items:center; min-height:80vh; }
+    .card { background:#ffffff; max-width:540px; width:100%; border:1px solid #cbd5e1; border-radius:16px; padding:32px; box-shadow:0 10px 25px rgba(0,0,0,0.06); text-align:center; }
+    .icon { width:64px; height:64px; margin:0 auto 16px auto; border-radius:50%; background:#ecfdf5; color:#059669; display:flex; align-items:center; justify-content:center; font-size:32px; border:2px solid #a7f3d0; }
+    h1 { font-size:20px; font-weight:800; color:#0f172a; margin:0 0 10px 0; }
+    p { font-size:14px; color:#475569; line-height:1.6; margin:0 0 20px 0; }
+    .badge { display:inline-block; padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; font-weight:700; color:#1e293b; margin-bottom:24px; text-align:left; width:calc(100% - 28px); }
+    .btn { display:inline-block; padding:12px 24px; background:#2563eb; color:#ffffff; font-weight:700; font-size:14px; text-decoration:none; border-radius:10px; box-shadow:0 2px 6px rgba(37,99,235,0.25); transition:all 0.2s; }
+    .btn:hover { background:#1d4ed8; }
+    .countdown { font-size:12px; color:#94a3b8; margin-top:16px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>İşleminiz Başarıyla Tamamlandı</h1>
+    <div class="badge">
+      ${escapeHtmlText(result.message)}
+    </div>
+    <p>Bilgilendirme e-postaları proje yetkililerine iletilmiş ve görev durumu güncellenmiştir.</p>
+    <a href="${redirectUrl}" class="btn">🚀 Görev ve Proje Paneline Git</a>
+    <div class="countdown">3 saniye içinde otomatik yönlendiriliyorsunuz...</div>
+  </div>
+</body>
+</html>`;
+
+    res.send(html);
+  } catch (err: any) {
+    const errorHtml = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>İşlem Uyarısı • FG Group</title>
+  <style>
+    body { margin:0; padding:40px 16px; background:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; display:flex; justify-content:center; align-items:center; min-height:80vh; }
+    .card { background:#ffffff; max-width:540px; width:100%; border:1px solid #cbd5e1; border-radius:16px; padding:32px; box-shadow:0 10px 25px rgba(0,0,0,0.06); text-align:center; }
+    .icon { width:64px; height:64px; margin:0 auto 16px auto; border-radius:50%; background:#fffbeb; color:#d97706; display:flex; align-items:center; justify-content:center; font-size:32px; border:2px solid #fde68a; }
+    h1 { font-size:20px; font-weight:800; color:#0f172a; margin:0 0 10px 0; }
+    p { font-size:14px; color:#475569; line-height:1.6; margin:0 0 20px 0; }
+    .badge { display:inline-block; padding:10px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:13px; font-weight:600; color:#991b1b; margin-bottom:24px; text-align:left; width:calc(100% - 28px); }
+    .btn { display:inline-block; padding:12px 24px; background:#2563eb; color:#ffffff; font-weight:700; font-size:14px; text-decoration:none; border-radius:10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">⚠️</div>
+    <h1>İşlem Gerçekleştirilemedi</h1>
+    <div class="badge">
+      ${escapeHtmlText(err.message || 'Bilinmeyen bir hata oluştu.')}
+    </div>
+    <p>Bu görev daha önce tamamlanmış veya güncellenmiş olabilir. Detayları panelden inceleyebilirsiniz.</p>
+    <a href="${redirectUrl}" class="btn">🚀 Proje Paneline Git</a>
+  </div>
+</body>
+</html>`;
+    res.status(200).send(errorHtml);
+  }
+});
+
 // Outlook Actionable Message HTTP Callback Endpoint
 app.post('/api/outlook/action', async (req, res) => {
   try {

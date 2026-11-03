@@ -927,4 +927,64 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const clearedProfile = authService.updateOwnAvatar(selinAuth, '');
     assert.equal(clearedProfile.avatar_url, undefined);
   });
+
+  await t.test('OUTLOOK ADAPTIVE CARD EMAIL FRAME & ONE-CLICK QUICK ACTIONS: Rehbere uygun zengin görsel HTML kart ve e-postadan tek tıkla aksiyon', async () => {
+    // 1. Yeni görev oluştur ve e-posta kartını kontrol et
+    const qTask = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Zengin Kart Numune Kontrolü',
+      '2026-11-03',
+      '2026-11-05',
+      assigneeA.id,
+      'Numune kumaşlarının son kontrolü yapılmalıdır.'
+    );
+
+    const cardMail = await emailService.sendTaskAssignedActionableCard(tenantA.id, qTask.id, authManagerA.name);
+    assert.ok(cardMail);
+    assert.ok(cardMail.html_preview);
+    // Kart ribbon, başlık, rozet ve tek tık butonları içermeli
+    assert.ok(cardMail.html_preview.includes('YENİ GÖREV ATAMA BİLDİRİMİ'));
+    assert.ok(cardMail.html_preview.includes('Başlamaya Hazır'));
+    assert.ok(cardMail.html_preview.includes('/api/quick-action?tenant_id='));
+    assert.ok(cardMail.html_preview.includes('action=START_TASK'));
+    assert.ok(cardMail.html_preview.includes('action=COMPLETE_TASK'));
+    assert.ok(cardMail.html_preview.includes('action=UPDATE_PROGRESS&progress='));
+    assert.ok(cardMail.html_preview.includes('%50 Yarılandı'));
+
+    // 2. E-postadaki linkten görevi başlat (START_TASK)
+    const startRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: qTask.id,
+      user_id: assigneeA.id,
+      action: 'START_TASK',
+      explanation_text: 'E-postadan tıklandı'
+    });
+    assert.ok(startRes.message.includes('BAŞLATILDI'));
+    assert.equal(db.getTaskById(tenantA.id, qTask.id)?.work_status, 'IN_PROGRESS');
+
+    // 3. E-postadaki %60 chip'ine tıkla (UPDATE_PROGRESS)
+    const progRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: qTask.id,
+      user_id: assigneeA.id,
+      action: 'UPDATE_PROGRESS',
+      progress_value: 60,
+      explanation_text: 'E-posta üzerinden %60 ilerleme bildirildi'
+    });
+    assert.ok(progRes.message.includes('%60'));
+    assert.equal(db.getTaskById(tenantA.id, qTask.id)?.progress, 60);
+
+    // 4. E-postadaki Tamamla butonuna tıkla (COMPLETE_TASK)
+    const compRes = await emailService.handleOutlookCardAction({
+      tenant_id: tenantA.id,
+      task_id: qTask.id,
+      user_id: assigneeA.id,
+      action: 'COMPLETE_TASK',
+      explanation_text: 'İşlem e-postadan tamamlandı'
+    });
+    assert.ok(compRes.message.includes('TAMAMLANDI'));
+    assert.equal(db.getTaskById(tenantA.id, qTask.id)?.work_status, 'COMPLETED');
+    assert.equal(db.getTaskById(tenantA.id, qTask.id)?.progress, 100);
+  });
 });

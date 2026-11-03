@@ -164,7 +164,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
       body: [
         { type: 'TextBlock', text: headerText, weight: 'Bolder', color: headerColor, size: 'Small' },
         { type: 'TextBlock', text: sampleTask ? sampleTask.title : 'Exchange Online SMTP Canlı Test Görevi', weight: 'Bolder', size: 'Large', wrap: true },
@@ -620,21 +619,190 @@ export class EmailAndAutomationService {
   }
 
   private wrapHtmlWithAdaptiveCard(subject: string, bodyHtml: string, adaptiveCardJson?: any): string {
-    const cardScript = adaptiveCardJson
-      ? `<script type="application/adaptivecard+json">\n${JSON.stringify(adaptiveCardJson, null, 2)}\n</script>`
+    let cleanJson = adaptiveCardJson;
+    if (cleanJson) {
+      cleanJson = JSON.parse(JSON.stringify(adaptiveCardJson));
+      if (cleanJson.originator === 'fg-group-proje-sistemi') {
+        delete cleanJson.originator;
+      }
+      delete cleanJson.hideOriginalBody;
+    }
+    const cardScript = cleanJson
+      ? `<script type="application/adaptivecard+json">\n${JSON.stringify(cleanJson, null, 2)}\n</script>`
       : '';
 
     return `<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${subject}</title>
   ${cardScript}
 </head>
-<body style="margin:0;padding:20px;background-color:#f8fafc;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;">
+<body style="margin:0;padding:24px 12px;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
   ${bodyHtml}
 </body>
 </html>`;
+  }
+
+  /**
+   * Outlook ve tüm e-posta istemcilerinde Adaptive Cards rehberindeki (outlook_adaptive_cards_rehberi.md)
+   * kart tasarımını birebir oluşturan görsel kart şablonu
+   */
+  public renderAdaptiveCardHtmlFrame(options: {
+    categoryTag: string;
+    categoryColor?: string;
+    badgeText: string;
+    badgeType?: 'ready' | 'progress' | 'done' | 'blocked' | 'delay';
+    projectTitle: string;
+    taskTitle: string;
+    subtitleText?: string;
+    facts: Array<{ label: string; value: string }>;
+    progress?: number;
+    noteSection?: {
+      title: string;
+      content: string;
+      isWarning?: boolean;
+    };
+    unlockedTasks?: string[];
+    actionButtons?: Array<{
+      title: string;
+      url: string;
+      style?: 'primary' | 'success' | 'warning' | 'secondary';
+    }>;
+    quickProgressPillUrlPattern?: string;
+    baseUrl: string;
+  }): string {
+    const badgeColors = {
+      ready: { bg: '#ecfdf5', border: '#a7f3d0', text: '#065f46' },
+      progress: { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' },
+      done: { bg: '#ecfdf5', border: '#10b981', text: '#047857' },
+      blocked: { bg: '#fffbeb', border: '#fde68a', text: '#b45309' },
+      delay: { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c' }
+    };
+    const bColor = badgeColors[options.badgeType || 'ready'];
+
+    const factsHtml = options.facts.map(f => `
+      <tr>
+        <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 600; width: 145px; vertical-align: top;">${f.label}</td>
+        <td style="padding: 6px 0; color: #0f172a; font-size: 13px; font-weight: 700; vertical-align: top;">${f.value}</td>
+      </tr>
+    `).join('');
+
+    const progressHtml = options.progress !== undefined ? `
+      <div style="margin: 14px 0 10px 0; padding: 12px 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; font-weight: 700;">
+          <span style="color: #475569;">İlerleme Oranı</span>
+          <span style="color: #2563eb; font-size: 13px;">%${options.progress}</span>
+        </div>
+        <div style="height: 8px; width: 100%; background: #e2e8f0; border-radius: 999px; overflow: hidden;">
+          <div style="height: 100%; width: ${Math.max(4, Math.min(100, options.progress))}%; background: linear-gradient(90deg, #2563eb, #3b82f6); border-radius: 999px;"></div>
+        </div>
+      </div>
+    ` : '';
+
+    const quickChipsHtml = options.quickProgressPillUrlPattern ? `
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1;">
+        <div style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px;">
+          ⚡ Hızlı İlerleme Bildirimi (%40 / %50 / %60) — E-postadan Tek Tıkla Bildir:
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <a href="${options.quickProgressPillUrlPattern}20" style="display: inline-block; padding: 5px 10px; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">%20</a>
+          <a href="${options.quickProgressPillUrlPattern}40" style="display: inline-block; padding: 5px 10px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">%40 Bildir</a>
+          <a href="${options.quickProgressPillUrlPattern}50" style="display: inline-block; padding: 5px 10px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">%50 Yarılandı</a>
+          <a href="${options.quickProgressPillUrlPattern}60" style="display: inline-block; padding: 5px 10px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">%60 Bildir</a>
+          <a href="${options.quickProgressPillUrlPattern}80" style="display: inline-block; padding: 5px 10px; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">%80 Son Aşama</a>
+        </div>
+      </div>
+    ` : '';
+
+    const noteHtml = options.noteSection ? `
+      <div style="margin: 14px 0; padding: 12px 14px; background: ${options.noteSection.isWarning ? '#fffbeb' : '#f0fdf4'}; border-left: 4px solid ${options.noteSection.isWarning ? '#f59e0b' : '#10b981'}; border-radius: 8px;">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: ${options.noteSection.isWarning ? '#b45309' : '#166534'}; margin-bottom: 4px;">
+          ${options.noteSection.title}
+        </div>
+        <div style="font-size: 13px; color: ${options.noteSection.isWarning ? '#78350f' : '#14532d'}; font-weight: 600; line-height: 1.45;">
+          "${options.noteSection.content}"
+        </div>
+      </div>
+    ` : '';
+
+    const unlockedHtml = (options.unlockedTasks && options.unlockedTasks.length > 0) ? `
+      <div style="margin: 14px 0; padding: 12px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
+        <div style="font-size: 12px; font-weight: 700; color: #1e40af; margin-bottom: 4px;">
+          🔓 Kilidi Açılan ve Sıraya Giren Ardıl Görevler:
+        </div>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #1e3a8a; font-weight: 600;">
+          ${options.unlockedTasks.map(t => `<li style="margin: 2px 0;">${t}</li>`).join('')}
+        </ul>
+      </div>
+    ` : '';
+
+    const buttonsHtml = (options.actionButtons && options.actionButtons.length > 0) ? `
+      <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        ${options.actionButtons.map(b => {
+          let bg = '#2563eb';
+          let color = '#ffffff';
+          let border = '#2563eb';
+          if (b.style === 'success') { bg = '#059669'; color = '#ffffff'; border = '#059669'; }
+          else if (b.style === 'warning') { bg = '#d97706'; color = '#ffffff'; border = '#d97706'; }
+          else if (b.style === 'secondary') { bg = '#ffffff'; color = '#1e293b'; border = '#cbd5e1'; }
+          return `<a href="${b.url}" style="display: inline-block; padding: 10px 18px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">${b.title}</a>`;
+        }).join('')}
+      </div>
+    ` : '';
+
+    return `
+      <div style="max-width: 620px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <!-- Header Ribbon -->
+        <div style="background: #0f172a; padding: 14px 20px; border-bottom: 2px solid #3b82f6;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="vertical-align: middle;">
+                <div style="font-size: 11px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">
+                  ${options.categoryTag}
+                </div>
+                <div style="font-size: 13px; font-weight: 600; color: #94a3b8; margin-top: 2px;">
+                  📁 ${options.projectTitle}
+                </div>
+              </td>
+              <td style="vertical-align: middle; text-align: right;">
+                <span style="display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800; background: ${bColor.bg}; color: ${bColor.text}; border: 1px solid ${bColor.border};">
+                  ${options.badgeText}
+                </span>
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Main Card Body -->
+        <div style="padding: 22px 24px;">
+          <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.3;">
+            ${options.taskTitle}
+          </h2>
+          ${options.subtitleText ? `<p style="margin: 0 0 16px 0; font-size: 14px; color: #475569; line-height: 1.5;">${options.subtitleText}</p>` : ''}
+
+          <!-- FactSet Container -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              ${factsHtml}
+            </table>
+          </div>
+
+          ${progressHtml}
+          ${noteHtml}
+          ${unlockedHtml}
+          ${quickChipsHtml}
+          ${buttonsHtml}
+        </div>
+
+        <!-- Footer -->
+        <div style="background: #f8fafc; padding: 12px 24px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
+          <span>FG Group Proje ve Görev Takip Sistemi</span>
+          <a href="${options.baseUrl}" style="color: #2563eb; font-weight: 700; text-decoration: none;">Sistemi Aç ➔</a>
+        </div>
+      </div>
+    `;
   }
 
   /**
@@ -707,8 +875,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -806,22 +972,40 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
-          ${project?.title || 'FG Group'} • Outlook Actionable Message (Canlı Görev Kartı)
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">🔔 Sıra Sizde: ${task.title}</h2>
-        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;">${task.description || 'Bu görevin öncülleri tamamlandı ve başlamaya hazır.'}</p>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:16px;">
-          <div><strong>Sorumlu:</strong> ${assignee.name}</div>
-          <div><strong>Hedef Bitiş:</strong> ${dueStr}</div>
-          <div><strong>Durum:</strong> <span style="color:#059669;font-weight:700;">HAZIR (Öncüller Tamamlandı ✓)</span></div>
-          <div style="margin-top:6px;color:#334155;">💡 <strong>E-posta İçi İşlem:</strong> Doğrudan bu e-postanın içinden görevi başlatabilir, <strong>%40 / %50 / %60</strong> ilerleme oranı seçip zorunlu notunuzu kaydedebilir veya görevi tamamlayabilirsiniz.</div>
-        </div>
-        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: `📁 ${project?.title || 'FG Group Projesi'} • SIRA SİZDE`,
+      badgeText: '🟢 Başlamaya Hazır (READY)',
+      badgeType: 'ready',
+      projectTitle: project?.title || 'FG Group Projesi',
+      taskTitle: task.title,
+      subtitleText: task.description || 'Öncül görevler tamamlandı. Görevinize hemen başlayabilir, %40/%50/%60 ilerleme bildirebilir veya tamamlayabilirsiniz.',
+      facts: [
+        { label: 'Durum:', value: `🟢 HAZIR (${task.work_status})` },
+        { label: 'Sorumlu:', value: `${assignee.name} (${assignee.department || 'Ekip'})` },
+        { label: 'Hedef Teslim:', value: dueStr },
+        ...(predFacts.map(pf => ({ label: pf.title, value: pf.value })))
+      ],
+      progress: task.progress || 0,
+      quickProgressPillUrlPattern: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`,
+      actionButtons: [
+        {
+          title: '▶️ Görevi Başlat (%25)',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=START_TASK`,
+          style: 'primary'
+        },
+        {
+          title: '✅ Tamamlandı İşaretle (%100)',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=COMPLETE_TASK`,
+          style: 'success'
+        },
+        {
+          title: '🔗 Görev Detayını Aç & Yönet ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'secondary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -876,8 +1060,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -996,24 +1178,50 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
-          📌 Yeni Görev Atama Bildirimi • ${project?.title || 'FG Group'}
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${task.title}</h2>
-        <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">
-          Merhaba <strong>${assignee.name}</strong>, <strong>${assigned_by_name}</strong> tarafından <strong>${project?.title || 'Proje'}</strong> kapsamında bu görev size atandı.
-        </p>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:16px;">
-          <div><strong>Proje:</strong> ${project?.title || '-'}</div>
-          <div><strong>Planlanan Tarih:</strong> ${startStr} ➔ ${dueStr}</div>
-          <div><strong>Durum:</strong> ${isBlocked ? '⏳ Öncül Görev Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)'}</div>
-          ${predTitles.length > 0 ? `<div><strong>Öncüller:</strong> ${predTitles.join(', ')}</div>` : ''}
-        </div>
-        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Görev Detayını Aç</a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: `📌 YENİ GÖREV ATAMA BİLDİRİMİ • ${project?.title || 'FG GROUP'}`,
+      badgeText: isBlocked ? '⏳ Öncül Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)',
+      badgeType: isBlocked ? 'blocked' : 'ready',
+      projectTitle: project?.title || 'FG Group Projesi',
+      taskTitle: task.title,
+      subtitleText: `Merhaba <strong>${assignee.name}</strong>, <strong>${assigned_by_name}</strong> tarafından <strong>${project?.title || 'Proje'}</strong> kapsamında bu görev size atandı.`,
+      facts: [
+        { label: 'Proje:', value: project?.title || 'FG Group' },
+        { label: 'Atayan Yetkili:', value: assigned_by_name },
+        { label: 'Sorumlu:', value: `${assignee.name} (${assignee.department || 'Ekip'})` },
+        { label: 'Planlanan Takvim:', value: `${startStr} ➔ ${dueStr}` },
+        { label: 'Başlangıç Durumu:', value: isBlocked ? '⏳ Öncül Görev Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)' },
+        ...(predTitles.length > 0 ? [{ label: 'Öncül Görevler:', value: predTitles.join(', ') }] : [])
+      ],
+      progress: task.progress || 0,
+      quickProgressPillUrlPattern: !isBlocked
+        ? `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`
+        : undefined,
+      actionButtons: !isBlocked ? [
+        {
+          title: '▶️ Görevi Başlat (%25)',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=START_TASK`,
+          style: 'primary'
+        },
+        {
+          title: '✅ Tamamlandı İşaretle (%100)',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=COMPLETE_TASK`,
+          style: 'success'
+        },
+        {
+          title: '🔗 Görev Detayını Aç & Yönet ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'secondary'
+        }
+      ] : [
+        {
+          title: '🔗 Görev Detayını Aç & Yönet ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'primary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -1066,8 +1274,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1109,24 +1315,29 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
-          📁 Proje Ekibi Bildirimi • FG Group
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">Projeye Dahil Edildiniz: ${project.title}</h2>
-        <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">
-          Merhaba <strong>${user.name}</strong>, <strong>${added_by_name}</strong> sizi <strong>${project.title}</strong> projesine <strong>${roleLabel}</strong> rolüyle dahil etti.
-        </p>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:16px;">
-          <div><strong>Proje Adı:</strong> ${project.title}</div>
-          <div><strong>Atanan Rol:</strong> ${roleLabel}</div>
-          <div><strong>Proje Takvimi:</strong> ${startStr} ➔ ${dueStr}</div>
-          <div><strong>Toplam İş Paketi:</strong> ${tasksCount} Görev</div>
-        </div>
-        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: '📁 PROJEYE DAHİL EDİLDİNİZ • FG GROUP',
+      badgeText: roleLabel,
+      badgeType: 'progress',
+      projectTitle: project.title,
+      taskTitle: `Projeye Dahil Edildiniz: ${project.title}`,
+      subtitleText: `Merhaba <strong>${user.name}</strong>, <strong>${added_by_name}</strong> sizi <strong>${project.title}</strong> projesine <strong>${roleLabel}</strong> rolüyle dahil etti.`,
+      facts: [
+        { label: 'Personel:', value: `${user.name} (${user.department || 'Ekip'})` },
+        { label: 'Projedeki Rolünüz:', value: roleLabel },
+        { label: 'Ekleyen Yetkili:', value: added_by_name },
+        { label: 'Proje Takvimi:', value: `${startStr} ➔ ${dueStr}` },
+        { label: 'Toplam İş Paketi:', value: `${tasksCount} Görev` }
+      ],
+      actionButtons: [
+        {
+          title: '🚀 Projeyi ve Görevleri Görüntüle ➔',
+          url: `${baseUrl}`,
+          style: 'primary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -1192,8 +1403,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1231,25 +1440,36 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #10b981;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:6px;">
-          ✅ Proje Adımı Tamamlandı • Yönetici Bilgilendirmesi
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${performerName}, "${task.title}" işini tamamladı</h2>
-        <p style="margin:0 0 14px 0;font-size:14px;color:#334155;">
-          <strong>${project?.title || 'Proje'}</strong> kapsamında yürütülen <strong>${task.title}</strong> görevi <strong>%100 tamamlandı</strong> olarak işaretlendi.
-        </p>
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:13px;margin-bottom:14px;color:#166534;">
-          <div><strong>Tamamlayan Personel:</strong> ${performerName} (${completedBy?.email || '-'})</div>
-          <div><strong>Teslim Durumu:</strong> ${isLate ? '⚠️ Gecikmeli Tamamlandı' : '🟢 Zamanında Tamamlandı ✓'}</div>
-          <div><strong>Proje Genel İlerlemesi:</strong> %${projectRate} (${doneCount} / ${totalCount} görev bitti)</div>
-          ${completion_note ? `<div style="margin-top:6px;"><strong>📝 Personel Açıklama Notu:</strong> "${completion_note}"</div>` : ''}
-          ${unlockedDetails.length > 0 ? `<div style="margin-top:6px;"><strong>🔓 Kilidi Açılan Sıradaki Görevler:</strong> ${unlockedDetails.join(', ')}</div>` : ''}
-        </div>
-        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#059669;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: '✅ PROJE ADIMI TAMAMLANDI • YÖNETİCİ BİLGİLENDİRMESİ',
+      badgeText: isLate ? '⚠️ Gecikmeli Tamamlandı' : '✓ Tamamlandı (%100)',
+      badgeType: 'done',
+      projectTitle: project?.title || 'FG Group Projesi',
+      taskTitle: `${performerName}, "${task.title}" Görevini Tamamladı!`,
+      subtitleText: `<strong>${project?.title || 'Proje'}</strong> kapsamında yürütülen <strong>${task.title}</strong> görevi <strong>%100 tamamlandı</strong> olarak işaretlendi.`,
+      facts: [
+        { label: 'Proje:', value: project?.title || 'FG Group Projesi' },
+        { label: 'Tamamlanan Görev:', value: task.title },
+        { label: 'Tamamlayan Kişi:', value: `${performerName} (${completedBy?.department || 'Ekip'})` },
+        { label: 'Teslim Durumu:', value: isLate ? '⚠️ Gecikmeli Tamamlandı' : '🟢 Zamanında Tamamlandı ✓' },
+        { label: 'Proje İlerlemesi:', value: `%${projectRate} (${doneCount}/${totalCount} Görev Tamamlandı)` }
+      ],
+      progress: 100,
+      noteSection: completion_note ? {
+        title: 'Personel Tamamlama / Açıklama Notu',
+        content: completion_note,
+        isWarning: false
+      } : undefined,
+      unlockedTasks: unlockedDetails,
+      actionButtons: [
+        {
+          title: '📊 Proje Durumunu ve Gantt Takvimini Gör ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'primary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -1301,8 +1521,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1338,20 +1556,34 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #3b82f6;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#2563eb;text-transform:uppercase;margin-bottom:6px;">
-          📊 Görev İlerleme & Zorunlu Not Bildirimi (%${progress})
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${userName}, "${task.title}" görevinde %${progress} ilerleme bildirdi</h2>
-        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:13px;margin:12px 0;color:#1e3a8a;">
-          <div><strong>Proje:</strong> ${project?.title || '-'}</div>
-          <div><strong>İlerleme Oranı:</strong> <strong>%${progress}</strong></div>
-          <div style="margin-top:6px;"><strong>📝 Personel Açıklama Notu:</strong> "${note_text}"</div>
-        </div>
-        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: `📊 GÖREV İLERLEME BİLDİRİMİ • YETKİLİ BİLGİSİ`,
+      badgeText: `⚡ Devam Ediyor (%${progress})`,
+      badgeType: 'progress',
+      projectTitle: project?.title || 'FG Group Projesi',
+      taskTitle: `${userName}: "${task.title}" Görevinde %${progress} İlerleme Bildirdi`,
+      subtitleText: `<strong>${project?.title || 'Proje'}</strong> kapsamında yürütülen <strong>${task.title}</strong> görevinin ilerleme oranı güncellendi ve personel notu kaydedildi.`,
+      facts: [
+        { label: 'Proje:', value: project?.title || 'FG Group Projesi' },
+        { label: 'Görev:', value: task.title },
+        { label: 'Güncelleyen Kişi:', value: `${userName} (${user?.department || 'Ekip'})` },
+        { label: 'Yeni İlerleme Oranı:', value: `%${progress} (DEVAM EDİYOR)` }
+      ],
+      progress,
+      noteSection: {
+        title: 'Personel Zorunlu Açıklama Notu',
+        content: note_text,
+        isWarning: false
+      },
+      actionButtons: [
+        {
+          title: '🔍 Görev Detayını ve Notları İncele ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'primary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -1394,8 +1626,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1475,17 +1705,36 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #f59e0b;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#d97706;text-transform:uppercase;margin-bottom:6px;">
-          ⚠️ Görev Zamanında Tamamlanmadı • Gecikme Açıklaması Gerekli (KAB07)
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${task.title}</h2>
-        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;">
-          Merhaba <strong>${assignee.name}</strong>, bu görevin teslim tarihi (<strong>${dueStr}</strong>) aşılmıştır ve <strong>${succs.length} ardıl görev</strong> sizin görevinizi beklemektedir. Lütfen e-posta içindeki karttan mevcut ilerleme yüzdesini (%40, %50, %60) ve zorunlu gecikme açıklamanızı giriniz.
-        </p>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: '⚠️ GÖREV ZAMANINDA YAPILMADI • TERMİN AŞILDI (KAB07)',
+      badgeText: '🚨 Termin Aşıldı (Gecikme)',
+      badgeType: 'delay',
+      projectTitle: project?.title || 'FG Group',
+      taskTitle: task.title,
+      subtitleText: `Merhaba <strong>${assignee.name}</strong>, bu görevin teslim tarihi (<strong>${dueStr}</strong>) aşılmıştır ve <strong>${succs.length} ardıl görev</strong> sizin görevinizi beklemektedir. Lütfen e-postadan veya panelden ilerleme yüzdesini (%40, %50, %60) ve zorunlu gecikme açıklamanızı giriniz.`,
+      facts: [
+        { label: 'Proje:', value: project?.title || 'FG Group' },
+        { label: 'Sorumlu:', value: assignee.name },
+        { label: 'Aşılan Termin:', value: dueStr },
+        { label: 'Mevcut İlerleme:', value: `%${task.progress || 0}` },
+        { label: 'Bekleyen Ardıl İş:', value: `${succs.length} görev tamamlanmasını bekliyor` }
+      ],
+      progress: task.progress || 0,
+      quickProgressPillUrlPattern: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`,
+      actionButtons: [
+        {
+          title: '✅ Görevi Şimdi Tamamla (%100)',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=COMPLETE_TASK`,
+          style: 'success'
+        },
+        {
+          title: '🔗 Görev Detayını Aç & Mazeret Yaz ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'warning'
+        }
+      ],
+      baseUrl
+    });
 
     const assigneeMail = await this.dispatchEmail({
       tenant_id,
@@ -1541,8 +1790,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1579,24 +1826,31 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #ef4444;border-radius:12px;padding:24px;">
-        <div style="font-size:12px;font-weight:700;color:#dc2626;text-transform:uppercase;margin-bottom:6px;">
-          🚨 Geciken Görev Uyarısı • Proje Yetkilisi Bilgilendirmesi
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">${assigneeName}, "${task.title}" görevini zamanında tamamlamadı</h2>
-        <p style="margin:0 0 14px 0;font-size:14px;color:#475569;">
-          <strong>${project?.title || 'Proje'}</strong> kapsamındaki <strong>${task.title}</strong> görevinin hedef teslim tarihi (<strong>${dueStr}</strong>) geçmiştir. Sorumlu personele zorunlu mazeret ve ilerleme (%40/%50/%60) kartı gönderilmiştir.
-        </p>
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:13px;margin-bottom:14px;color:#991b1b;">
-          <div><strong>Sorumlu Personel:</strong> ${assigneeName} (${assignee?.email || '-'})</div>
-          <div><strong>Aşılan Termin:</strong> ${dueStr}</div>
-          <div><strong>Mevcut İlerleme:</strong> %${task.progress || 0} (${task.work_status})</div>
-          <div><strong>Bekleyen Ardıl İş:</strong> ${succs.length} görev</div>
-        </div>
-        <a href="${baseUrl}" style="display:inline-block;padding:10px 18px;background:#dc2626;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:13px;">Proje Paneline Git</a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: '🚨 GECİKEN GÖREV UYARISI • PROJE YETKİLİ BİLDİRİMİ',
+      badgeText: '🚨 Termin Aşıldı',
+      badgeType: 'delay',
+      projectTitle: project?.title || 'FG Group Projesi',
+      taskTitle: `${assigneeName}, "${task.title}" Görevini Zamanında Tamamlamadı!`,
+      subtitleText: `<strong>${project?.title || 'Proje'}</strong> kapsamındaki <strong>${task.title}</strong> görevinin hedef teslim tarihi (<strong>${dueStr}</strong>) geçmiştir. Sorumlu personele zorunlu mazeret ve ilerleme (%40/%50/%60) bildirimi iletilmiştir.`,
+      facts: [
+        { label: 'Proje:', value: project?.title || 'FG Group Projesi' },
+        { label: 'Geciken Görev:', value: task.title },
+        { label: 'Sorumlu Personel:', value: `${assigneeName} (${assignee?.email || '-'})` },
+        { label: 'Aşılan Teslim Tarihi:', value: dueStr },
+        { label: 'Mevcut Durum / İlerleme:', value: `${task.work_status} (%${task.progress || 0})` },
+        { label: 'Etkilenen Ardıl Görev:', value: `${succs.length} görev bekliyor` }
+      ],
+      progress: task.progress || 0,
+      actionButtons: [
+        {
+          title: '🚨 Darboğaz ve Gecikme Detayını İncele ➔',
+          url: `${baseUrl}/?task_id=${task.id}`,
+          style: 'warning'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -1634,8 +1888,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1691,12 +1943,38 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;">
-        <h2 style="margin:0 0 8px 0;font-size:18px;color:#0f172a;">👁️ Görünürlük Talebi: ${requester.name}</h2>
-        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;"><strong>${project.title}</strong> projesindeki tüm görevleri ve Gantt takvimini görebilmek için yetki talep edildi.</p>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: '🔐 PROJE GÖRÜNÜRLÜK ONAY TALEBİ (KAB03)',
+      badgeText: '⏳ Onay Bekliyor',
+      badgeType: 'blocked',
+      projectTitle: project.title,
+      taskTitle: `${requester.name} Proje Görünürlük Yetkisi İstiyor`,
+      subtitleText: `<strong>${project.title}</strong> projesindeki tüm görevleri ve Gantt takvimini görebilmek için onayınız talep edildi.`,
+      facts: [
+        { label: 'Proje:', value: project.title },
+        { label: 'Talep Eden:', value: `${requester.name} (${requester.department || 'Personel'})` },
+        { label: 'E-posta:', value: requester.email },
+        { label: 'Verilecek Rol:', value: 'Tam Görüntüleyici (VIEWER)' }
+      ],
+      actionButtons: [
+        {
+          title: '✅ Talebi Onayla (VIEWER Yap)',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&request_id=${req.id}&user_id=${managerId}&action=DECIDE_VISIBILITY&approve=true`,
+          style: 'success'
+        },
+        {
+          title: '❌ Talebi Reddet',
+          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&request_id=${req.id}&user_id=${managerId}&action=DECIDE_VISIBILITY&approve=false`,
+          style: 'secondary'
+        },
+        {
+          title: '🔗 Projeyi Görüntüle ➔',
+          url: `${baseUrl}`,
+          style: 'primary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -1739,8 +2017,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
-      hideOriginalBody: true,
       body: [
         {
           type: 'TextBlock',
@@ -1791,53 +2067,35 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const htmlBody = `
-      <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;font-family:'Segoe UI',Arial,sans-serif;">
-        <div style="display:inline-block;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:12px;padding:4px 10px;border-radius:999px;margin-bottom:10px;">
-          🎉 HOŞ GELDİNİZ • SİSTEM ERİŞİM BİLGİLERİNİZ
-        </div>
-        <h2 style="margin:0 0 8px 0;font-size:20px;color:#0f172a;">Merhaba ${newUser.name},</h2>
-        <p style="margin:0 0 16px 0;font-size:14px;color:#475569;line-height:1.5;">
-          <strong>FG Group Proje ve Görev Takip Sistemi</strong> üzerindeki kullanıcı hesabınız oluşturuldu. Aşağıdaki erişim bilgilerinizle hemen giriş yapabilirsiniz:
-        </p>
-
-        <div style="background:#f8fafc;border:1px solid #cbd5e1;border-left:4px solid #2563eb;border-radius:10px;padding:16px;margin-bottom:18px;">
-          <div style="font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;margin-bottom:10px;">🔐 Giriş Kimlik Bilgileriniz</div>
-          <table style="width:100%;font-size:14px;color:#1e293b;border-collapse:collapse;">
-            <tr>
-              <td style="padding:5px 0;color:#64748b;width:170px;">🌐 Sistem Giriş Adresi:</td>
-              <td style="padding:5px 0;font-weight:700;"><a href="${baseUrl}" style="color:#2563eb;text-decoration:none;">${baseUrl}</a></td>
-            </tr>
-            <tr>
-              <td style="padding:5px 0;color:#64748b;">📧 Kullanıcı Adı (E-posta):</td>
-              <td style="padding:5px 0;font-weight:700;">${newUser.email}</td>
-            </tr>
-            <tr>
-              <td style="padding:5px 0;color:#64748b;">🔑 İlk Giriş Şifreniz:</td>
-              <td style="padding:5px 0;"><code style="background:#e2e8f0;padding:3px 8px;border-radius:6px;font-weight:800;color:#0f172a;font-size:14px;">${initialPass}</code></td>
-            </tr>
-            <tr>
-              <td style="padding:5px 0;color:#64748b;">🏢 Departman / Rol:</td>
-              <td style="padding:5px 0;">${newUser.department || 'Genel'} — <strong>${roleLabel}</strong></td>
-            </tr>
-          </table>
-        </div>
-
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:18px;font-size:13px;color:#166534;line-height:1.5;">
-          <strong>💡 İlk Girişten Sonra Ne Yapmalısınız?</strong>
-          <ol style="margin:6px 0 0 0;padding-left:18px;">
-            <li>Yukarıdaki e-posta ve ilk giriş şifrenizle sisteme giriş yapın.</li>
-            <li>Sol alt köşedeki isminize tıklayarak <strong>👤 Kullanıcı Profili & Tercihler</strong> penceresini açın.</li>
-            <li><strong>🔐 Şifre Oluştur / Değiştir</strong> bölümünden sadece sizin bildiğiniz yeni şifrenizi kaydedin.</li>
-            <li>İsterseniz <strong>📷 Profil Resmi Yükle</strong> butonuyla kendi fotoğrafınızı ekleyin.</li>
-          </ol>
-        </div>
-
-        <a href="${baseUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:700;font-size:14px;">
-          🚀 Sisteme Giriş Yap & Profilini Düzenle
-        </a>
-      </div>
-    `;
+    const htmlBody = this.renderAdaptiveCardHtmlFrame({
+      categoryTag: '🎉 HOŞ GELDİNİZ • FG GROUP SİSTEM ERİŞİMİ',
+      badgeText: '👤 Aktif Hesap',
+      badgeType: 'ready',
+      projectTitle: 'FG Group Proje & Görev Takip Portalı',
+      taskTitle: `Merhaba ${newUser.name}, Sisteme Hoş Geldiniz!`,
+      subtitleText: 'FG Group Proje ve Görev Takip Sistemine erişim bilgileriniz ve ilk giriş şifreniz aşağıda yer almaktadır.',
+      facts: [
+        { label: '🌐 Giriş Adresi:', value: baseUrl },
+        { label: '📧 Kullanıcı E-Posta:', value: newUser.email },
+        { label: '🔑 İlk Giriş Şifreniz:', value: initialPass },
+        { label: '🏢 Departman & Ülke:', value: `${newUser.department || 'Genel'} (${newUser.country})` },
+        { label: '🛡️ Sistem Rolü:', value: roleLabel },
+        { label: '⚡ Tanımlı Yetkiler:', value: permsLabel }
+      ],
+      noteSection: {
+        title: '🔐 Şifre Değiştirme ve Profil Resmi Bilgilendirmesi',
+        content: 'Sisteme giriş yaptıktan sonra sol alt kısımdaki isminize tıklayarak şifrenizi dilediğiniz zaman değiştirebilir ve kendi profil fotoğrafınızı yükleyebilirsiniz.',
+        isWarning: false
+      },
+      actionButtons: [
+        {
+          title: '🚀 FG Group Sistemine Giriş Yap ➔',
+          url: `${baseUrl}`,
+          style: 'primary'
+        }
+      ],
+      baseUrl
+    });
 
     return this.dispatchEmail({
       tenant_id,
@@ -2110,7 +2368,6 @@ export class EmailAndAutomationService {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       type: 'AdaptiveCard',
       version: '1.4',
-      originator: 'fg-group-proje-sistemi',
       body: [
         {
           type: 'TextBlock',

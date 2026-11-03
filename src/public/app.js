@@ -451,6 +451,19 @@ async function loadInitialData() {
     loadAndRenderMicrosoftTodo(),
     triggerWorkerAndLoadNotifications(true)
   ]);
+
+  // URL parametresinde task_id varsa otomatik olarak o görevin detay çekmecesini aç
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetTaskId = urlParams.get('task_id');
+    if (targetTaskId) {
+      setTimeout(async () => {
+        await openTaskDrawer(targetTaskId);
+      }, 350);
+    }
+  } catch (err) {
+    console.warn('URL task_id parse uyarısı:', err);
+  }
 }
 
 async function triggerWorkerAndLoadNotifications(silent = true) {
