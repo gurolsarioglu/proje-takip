@@ -1321,7 +1321,8 @@
         <div class="form-row" id="tWorkflowAndDefRow" style="margin-bottom:12px;">
           <div class="form-group" style="flex:1;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem;">🏷️ İş Adımı (Süreç Katmanı) *</label>
+              <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem;">🏷️ İş Adımı (Süreç
+                Katmanı) *</label>
               <button type="button" id="tAddStepBtn" class="action-btn outline-btn sm-btn"
                 style="font-size:0.72rem; padding:2px 8px; display:none;"
                 title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Adım Ekle</button>
@@ -1333,7 +1334,8 @@
 
           <div class="form-group" style="flex:1.4;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem;">📝 Görev Tanımı *</label>
+              <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem;">📝 Görev Tanımı
+                *</label>
               <button type="button" id="tAddDefBtn" class="action-btn outline-btn sm-btn"
                 style="font-size:0.72rem; padding:2px 8px; display:none;"
                 title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Tanım Ekle</button>
@@ -1341,7 +1343,8 @@
             <select id="tTaskDefinition" class="styled-select" style="font-weight:500;" required>
               <option value="">Önce İş Adımı seçiniz...</option>
             </select>
-            <input type="text" id="tCustomDefInput" class="styled-input" placeholder="Özel görev tanımını yazınız..." style="display:none; margin-top:4px;">
+            <input type="text" id="tCustomDefInput" class="styled-input" placeholder="Özel görev tanımını yazınız..."
+              style="display:none; margin-top:4px;">
           </div>
         </div>
         <input type="hidden" id="tTitle" value="">
@@ -2198,6 +2201,9 @@
   </div>
 
   <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Gantt & İş Paketi Canlı Önizleme Hover Kartı (Popup) -->
+  <div id="ganttTaskHoverPopup" class="gantt-hover-popup" style="display:none;"></div>
 
   <script src="/app.js"></script>
 </body>

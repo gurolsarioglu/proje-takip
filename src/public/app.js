@@ -1369,6 +1369,141 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
   };
 }
 
+// ================= GANTT CANLI DETAY HOVER ÖNİZLEME POPUP =================
+function showGanttTaskHoverPopup(task, targetElement) {
+  const popup = document.getElementById('ganttTaskHoverPopup');
+  if (!popup || !task || !targetElement) return;
+
+  const project = task.project_id ? state.projects.find(p => p.id === task.project_id) : null;
+  const assignee = task.assignee_id ? state.personnelList.find(p => p.id === task.assignee_id) : null;
+  const assigner = task.assigned_by_user_id ? state.personnelList.find(p => p.id === task.assigned_by_user_id) : null;
+
+  const prog = task.work_status === 'COMPLETED' ? 100 : (task.progress || 0);
+
+  const statusText = {
+    BLOCKED: 'Öncül Bekliyor',
+    READY: 'Başlamaya Hazır',
+    IN_PROGRESS: 'Devam Ediyor',
+    COMPLETED: 'Tamamlandı'
+  }[task.work_status] || task.work_status;
+
+  const statusColor = {
+    BLOCKED: '#dc2626',
+    READY: '#2563eb',
+    IN_PROGRESS: '#d97706',
+    COMPLETED: '#059669'
+  }[task.work_status] || '#64748b';
+
+  const isOverdue = task.work_status !== 'COMPLETED' && new Date(task.current_due_date) < new Date();
+  const stepColor = task.workflow_step ? getStepColor(task.workflow_step) : '#8b5cf6';
+  const blockingSucc = getBlockingSuccessorSummary(task);
+
+  const startFormatted = task.current_start_date ? formatDateTR(task.current_start_date) : '-';
+  const dueFormatted = task.current_due_date ? formatDateTR(task.current_due_date) : '-';
+
+  popup.innerHTML = `
+    <div class="gh-header-row">
+      <div class="gh-tags">
+        ${task.workflow_step ? `<span class="gh-step-badge" style="background:${stepColor};">🏷️ ${escapeHtml(task.workflow_step)}</span>` : ''}
+        <span class="gh-id-badge">#${task.id.slice(0, 6)}</span>
+      </div>
+      <span style="font-size:0.72rem; font-weight:700; color:${statusColor}; background:${statusColor}18; padding:2px 7px; border-radius:12px;">
+        ${statusText}
+      </span>
+    </div>
+
+    <div class="gh-title">${escapeHtml(task.title)}</div>
+
+    <div class="gh-progress-box">
+      <div class="gh-progress-header">
+        <span>İlerleme Oranı</span>
+        <strong style="color:${prog === 100 ? '#059669' : '#2563eb'};">%${prog}</strong>
+      </div>
+      <div class="gh-progress-track">
+        <div class="gh-progress-fill ${prog === 100 ? 'done' : ''}" style="width:${prog}%;"></div>
+      </div>
+    </div>
+
+    <div class="gh-meta-grid">
+      <div class="gh-meta-item">
+        <span class="gh-meta-lbl">📁 Proje</span>
+        <span class="gh-meta-val" title="${escapeHtml(project?.title || 'Bireysel Takip')}">${escapeHtml(project?.title || 'Bireysel Takip')}</span>
+      </div>
+      <div class="gh-meta-item">
+        <span class="gh-meta-lbl">👤 Görev Sahibi</span>
+        <span class="gh-meta-val" title="${escapeHtml(assignee ? `${assignee.name} (${assignee.department || 'Genel'})` : 'Atanmamış')}">
+          ${escapeHtml(assignee ? `${assignee.name}` : 'Atanmamış')}
+        </span>
+      </div>
+      ${assigner ? `
+        <div class="gh-meta-item">
+          <span class="gh-meta-lbl">🎯 Görevi Atayan</span>
+          <span class="gh-meta-val" title="${escapeHtml(assigner.name)}">${escapeHtml(assigner.name)}</span>
+        </div>
+      ` : ''}
+      <div class="gh-meta-item">
+        <span class="gh-meta-lbl">📅 Zaman Planı</span>
+        <span class="gh-meta-val ${isOverdue ? 'style="color:#dc2626;"' : ''}">${startFormatted} → ${dueFormatted}</span>
+      </div>
+      ${blockingSucc.count > 0 ? `
+        <div class="gh-meta-item">
+          <span class="gh-meta-lbl" style="color:#d97706;">🔥 Bekletilen Ardıllar</span>
+          <span class="gh-meta-val" style="color:#d97706;" title="${escapeHtml(blockingSucc.titles.join(', '))}">
+            ${blockingSucc.count} Görevi Bekletiyor
+          </span>
+        </div>
+      ` : ''}
+    </div>
+
+    ${task.description ? `
+      <div class="gh-desc-box" title="${escapeHtml(task.description)}">
+        💬 ${escapeHtml(task.description)}
+      </div>
+    ` : ''}
+
+    <div class="gh-footer-hint">
+      <span>💡 Çekmeceyi açmak için tıklayın</span>
+      <span>${task.priority === 'HIGH' ? '🔥 Yüksek Öncelik' : 'Normal'}</span>
+    </div>
+  `;
+
+  popup.style.display = 'block';
+
+  const rect = targetElement.getBoundingClientRect();
+  const popupWidth = 330;
+  const popupHeight = popup.offsetHeight || 260;
+
+  let left = rect.right + 12;
+  if (left + popupWidth > window.innerWidth - 12) {
+    left = rect.left - popupWidth - 12;
+  }
+  if (left < 12) left = 12;
+
+  let top = rect.top + (rect.height / 2) - (popupHeight / 2);
+  if (top + popupHeight > window.innerHeight - 12) {
+    top = window.innerHeight - popupHeight - 12;
+  }
+  if (top < 12) top = 12;
+
+  popup.style.left = `${Math.round(left)}px`;
+  popup.style.top = `${Math.round(top)}px`;
+
+  requestAnimationFrame(() => {
+    popup.classList.add('visible');
+  });
+}
+
+function hideGanttTaskHoverPopup() {
+  const popup = document.getElementById('ganttTaskHoverPopup');
+  if (!popup) return;
+  popup.classList.remove('visible');
+  setTimeout(() => {
+    if (!popup.classList.contains('visible')) {
+      popup.style.display = 'none';
+    }
+  }, 100);
+}
+
 function renderTimeline() {
   setupGanttInteractions();
 
@@ -1465,7 +1600,7 @@ function renderTimeline() {
 
     row.innerHTML = `
       <div class="g-col g-col-id">#${shortId}</div>
-      <div class="g-col g-col-title" title="${t.title}">
+      <div class="g-col g-col-title">
         <span class="g-type-icon">${typeIcon}</span>
         ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 5px; border-radius:3px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; margin-right:4px;">${escapeHtml(t.workflow_step)}</span>` : ''}
         <span class="g-title-text">${t.title}</span>
@@ -1484,6 +1619,12 @@ function renderTimeline() {
         ${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}
       </div>
     `;
+
+    const titleCol = row.querySelector('.g-col-title');
+    if (titleCol) {
+      titleCol.addEventListener('mouseenter', () => showGanttTaskHoverPopup(t, titleCol));
+      titleCol.addEventListener('mouseleave', () => hideGanttTaskHoverPopup());
+    }
 
     // Tıklanınca görev çekmecesini aç
     row.addEventListener('click', () => openTaskDrawer(t.id));
@@ -1604,6 +1745,8 @@ function renderTimeline() {
         <span class="milestone-label">${t.title} (${formatDateTR(t.current_due_date)})</span>
       `;
       marker.addEventListener('click', () => openTaskDrawer(t.id));
+      marker.addEventListener('mouseenter', () => showGanttTaskHoverPopup(t, marker));
+      marker.addEventListener('mouseleave', () => hideGanttTaskHoverPopup());
       track.appendChild(marker);
     } else {
       // Normal Görev Barı
@@ -1627,6 +1770,8 @@ function renderTimeline() {
       `;
 
       pill.addEventListener('click', () => openTaskDrawer(t.id));
+      pill.addEventListener('mouseenter', () => showGanttTaskHoverPopup(t, pill));
+      pill.addEventListener('mouseleave', () => hideGanttTaskHoverPopup());
       track.appendChild(pill);
     }
 
@@ -1651,6 +1796,7 @@ function renderTimeline() {
   // 5. ÇİFT TARAFLI DİKEY KAYDIRMA SENKRONİZASYONU (Vertical Scroll Sync)
   let isSyncing = false;
   tableBody.onscroll = () => {
+    hideGanttTaskHoverPopup();
     if (!isSyncing && chartPane) {
       isSyncing = true;
       chartPane.scrollTop = tableBody.scrollTop;
@@ -1658,6 +1804,7 @@ function renderTimeline() {
     }
   };
   chartPane.onscroll = () => {
+    hideGanttTaskHoverPopup();
     if (!isSyncing && tableBody) {
       isSyncing = true;
       tableBody.scrollTop = chartPane.scrollTop;
