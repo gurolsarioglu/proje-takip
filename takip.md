@@ -478,4 +478,26 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - `npm test` ile 33 kabul testi eksiksiz geçti.
    - `npm run build` ile TypeScript derlemesi ve statik dosya senkronizasyonu hatasız tamamlandı.
 
+---
+
+## 32. GANTT ZAMAN ÇİZELGESİ ÇUBUKLARINDA İŞ ADIMI VE ÇİFT SATIRLI OKUNURLUK DÜZENLEMESİ (04.11.2026)
+
+### 32.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** Zaman Çizelgesi (Gantt) sağ panosundaki renkli görev çubuklarında yalnızca görev başlığı (`AAAAA`) yer alıyor, sol tablodaki iş adımı etiketi (`KOLEKSİYON OLUŞTURMA`) çubukta yazmıyordu. Ayrıca kısa süreli görevlerde çubuk eni dar kaldığından tarihler (`04.11.2026 - 10.11.`) kırpılıyor ve okunmuyordu.
+- **Kullanıcı Talebi:** İş adımının (`KOLEKSİYON OLUŞTURMA`) çubuk üzerine eklenmesi, metin uzunluğuna göre fontun otomatik küçültülerek bir alt satıra geçilmesi, çubuk eninin okunabilirliği sağlayacak şekilde genişletilmesi ve tüm tarih/ilerleme bilgilerinin kesintisiz okunabilir hale getirilmesi.
+
+### 32.2. Gerçekleştirilen Mimari & Arayüz Geliştirmeleri
+1. **Çift Satırlı Çubuk Mimarisi (`src/public/app.js`, `src/public/styles.css`):**
+   - `.gantt-pill-bar` yüksekliği `42px`'e, satır izleri (`.gantt-row-track` ve sol tablodaki `.g-table-row`) kusursuz hizalama ve dikey senkronizasyon için `54px`'e çıkarıldı.
+   - **Üst Satır (`.pill-row-top`):** Görev ikonu (`📌`/`🐞`), renklendirilmiş İş Adımı Etiketi (`.pill-step-tag`, örn: `[KOLEKSİYON OLUŞTURMA]`) ve Görev Başlığı (`.pill-title`, örn: `AAAAA`).
+   - **Alt Satır (`.pill-row-bottom`):** İlerleme yüzdesi rozeti (`%0` / `%100`) ve tam tarih aralığı (`📅 04.11.2026 - 10.11.2026`).
+2. **Otomatik Dinamik Font Boyutlandırma:**
+   - İş adımı ve görev tanımı toplam uzunluğu hesaplanarak `font-compact-sm` (0.67rem) ve `font-compact-xs` (0.61rem) sınıfları otomatik uygulanarak metinlerin taşması önlendi.
+3. **Dinamik Genişlik ve Kesintisiz Okunurluk (`minBarWidth`):**
+   - Çubuğun asgari genişliği (`min-width`) en az 250px olarak güvenceye alındı; metin uzadıkça dinamik genişleme katsayısı entegre edildi.
+   - Böylece kısa terminli görevlerde dahi tarihler ve iş adımı asla sağdan kesilmeden tam okunur hale getirildi.
+4. **Test ve Doğrulama:**
+   - 33/33 kabul testi başarıyla geçti, TypeScript derlemesi 0 hata ile tamamlandı.
+
+
 

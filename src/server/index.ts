@@ -57,7 +57,7 @@ setInterval(() => {
     for (const t of tenants) {
       void backupService.checkAndRunScheduledBackups(t.id);
     }
-  } catch (e) {}
+  } catch (e) { }
 }, 60000);
 
 // Güvenli Kiracı ve Kullanıcı Bağlamı Middleware'i
@@ -884,7 +884,7 @@ app.post('/api/projects/:id/apply-textile-template', (req, res) => {
       const matchedUser = users.find(u =>
         u.is_active !== false &&
         (u.name.toLowerCase().includes(row.nameKeyword.toLowerCase()) ||
-         (row.dept && u.department && u.department.toLowerCase().includes(row.dept.toLowerCase())))
+          (row.dept && u.department && u.department.toLowerCase().includes(row.dept.toLowerCase())))
       );
 
       const taskTitle = `[${row.step}] ${row.title}`;

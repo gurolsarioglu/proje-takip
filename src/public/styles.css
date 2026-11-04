@@ -1006,7 +1006,7 @@ html, body {
 .g-table-row {
   display: flex;
   align-items: center;
-  height: 48px;
+  height: 54px;
   padding: 0 12px;
   border-bottom: 1px solid #f1f5f9;
   font-size: 0.8rem;
@@ -1265,10 +1265,10 @@ html, body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-/* Her Görev İçin Yatay Satır (Tam 48px Yükseklik) */
+/* Her Görev İçin Yatay Satır (Tam 54px Yükseklik) */
 .gantt-row-track {
   position: relative;
-  height: 48px;
+  height: 54px;
   border-bottom: 1px solid #f8fafc;
   display: flex;
   align-items: center;
@@ -1281,29 +1281,33 @@ html, body {
   background: #f8fafc;
 }
 
-/* Normal Görev Barı (OpenProject Stili) */
+/* Normal Görev Barı (OpenProject Stili - 2 Satırlı Zengin Görünüm) */
 .gantt-pill-bar {
   position: absolute;
-  height: 32px;
+  height: 42px;
+  min-height: 42px;
+  min-width: 250px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  border-radius: 8px;
+  padding: 3px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
   z-index: 10;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .gantt-pill-bar:hover {
   transform: translateY(-1px);
   border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   z-index: 20;
 }
 
@@ -1328,49 +1332,106 @@ html, body {
   top: 0;
   left: 0;
   bottom: 0;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(255, 255, 255, 0.18);
   pointer-events: none;
   z-index: 1;
 }
 
 .gantt-pill-bar.bar-done .pill-progress-fill {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.pill-content {
+.pill-content-col {
   position: relative;
   z-index: 2;
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.pill-row-top {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  line-height: 1.25;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pill-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.25;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .pill-icon {
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+.pill-step-tag {
+  font-size: 0.63rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #ffffff !important;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .pill-title {
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  color: #0f172a;
+  color: #ffffff !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  line-height: 1.2;
+}
+
+.pill-title.font-compact-sm {
+  font-size: 0.67rem;
+}
+
+.pill-title.font-compact-xs {
+  font-size: 0.61rem;
 }
 
 .pill-progress {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #059669;
-  background: rgba(16, 185, 129, 0.12);
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: #ffffff !important;
+  background: rgba(0, 0, 0, 0.28) !important;
   padding: 1px 5px;
-  border-radius: 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .pill-dates {
-  font-size: 0.68rem;
-  color: #64748b;
-  font-family: var(--font-mono);
-  background: #f1f5f9;
-  padding: 2px 6px;
+  font-size: 0.67rem;
+  font-weight: 600;
+  color: #ffffff !important;
+  background: rgba(0, 0, 0, 0.24) !important;
+  padding: 1px 6px;
   border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+  line-height: 1.2;
 }
 
 /* Kilometre Taşı (Milestone - OpenProject Elmas Görünümü) */

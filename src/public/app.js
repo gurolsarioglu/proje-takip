@@ -1748,7 +1748,11 @@ function renderTimeline() {
 
     const leftPx = Math.round(scale.dateToPx(tStart));
     const rightPx = Math.round(scale.dateToPx(tDue));
-    const minBarWidth = ganttZoomLevel === 'year' ? 24 : (ganttZoomLevel === 'month' ? 36 : 60);
+
+    // Metin ve iş adımı uzunluğuna göre dinamik genişlik hesabı (asla kesilmemesi ve okunur olması için)
+    const textLength = (t.workflow_step ? t.workflow_step.length : 0) + (t.title ? t.title.length : 0);
+    const dynamicMinWidth = Math.max(250, Math.min(520, Math.round(textLength * 7.5) + 70));
+    const minBarWidth = ganttZoomLevel === 'year' ? 100 : (ganttZoomLevel === 'month' ? 160 : dynamicMinWidth);
     const widthPx = Math.max(minBarWidth, rightPx - leftPx);
 
     const barClass = {
@@ -1779,7 +1783,7 @@ function renderTimeline() {
       marker.addEventListener('mouseleave', () => hideGanttTaskHoverPopup());
       track.appendChild(marker);
     } else {
-      // Normal Görev Barı
+      // Normal Görev Barı (2 Satırlı, İş Adımı Etiketli ve Dinamik Font Boyutlandırmalı)
       const pill = document.createElement('div');
       pill.className = `gantt-pill-bar ${barClass}`;
       pill.id = `gantt-bar-${t.id}`;
@@ -1788,14 +1792,29 @@ function renderTimeline() {
       pill.dataset.id = t.id;
 
       const typeIcon = t.type === 'BUG' ? '🐞' : '📌';
+      const stepColor = t.workflow_step ? getStepColor(t.workflow_step) : '#8b5cf6';
+
+      // Dinamik Font Boyutlandırma (Metin uzunluğuna göre küçültme)
+      const combinedLength = (t.workflow_step ? t.workflow_step.length + 3 : 0) + (t.title ? t.title.length : 0);
+      let fontClass = '';
+      if (combinedLength > 36) {
+        fontClass = 'font-compact-xs';
+      } else if (combinedLength > 22) {
+        fontClass = 'font-compact-sm';
+      }
 
       pill.innerHTML = `
         <div class="pill-progress-fill" style="width: ${prog}%;"></div>
-        <div class="pill-content">
-          <span class="pill-icon">${typeIcon}</span>
-          <span class="pill-title">${t.title}</span>
-          <span class="pill-progress">${prog}%</span>
-          <span class="pill-dates">${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}</span>
+        <div class="pill-content-col">
+          <div class="pill-row-top">
+            <span class="pill-icon">${typeIcon}</span>
+            ${t.workflow_step ? `<span class="pill-step-tag" style="background:${stepColor};">${escapeHtml(t.workflow_step)}</span>` : ''}
+            <span class="pill-title ${fontClass}" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</span>
+          </div>
+          <div class="pill-row-bottom">
+            <span class="pill-progress">${prog}%</span>
+            <span class="pill-dates">📅 ${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}</span>
+          </div>
         </div>
       `;
 
