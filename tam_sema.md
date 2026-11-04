@@ -162,3 +162,4 @@ y:\gorevler1\
 ├── tam_sema.md                                # Eksiksiz mimari, yetki ve iş akışı şeması
 └── takip.md                                   # Geliştirme günlüğü ve tamamlanan isterler
 ```
+

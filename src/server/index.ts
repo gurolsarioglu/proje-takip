@@ -596,6 +596,14 @@ app.get('/api/tasks/:id/details', (req, res) => {
     const can_edit = can_manage_plan || task.assignee_id === auth.user_id;
     const is_assignee = !task.assignee_id || task.assignee_id === auth.user_id;
 
+    const config = emailService.getSmtpConfig(auth.tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+    const calendar_links = emailService.buildCalendarLinks({
+      task,
+      projectTitle: project?.title,
+      baseUrl
+    });
+
     res.json({
       task,
       project: project ? { id: project.id, title: project.title } : null,
@@ -606,10 +614,40 @@ app.get('/api/tasks/:id/details', (req, res) => {
       plan_changes,
       can_manage_plan,
       can_edit,
-      is_assignee
+      is_assignee,
+      calendar_links
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Görevi Kişisel Takvime (.ics - iCalendar RFC 5545) Aktarma Endpoint'i
+app.get('/api/tasks/:id/calendar.ics', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const task = db.getTaskById(auth.tenant_id, req.params.id);
+    if (!task) return res.status(404).send('Görev bulunamadı.');
+
+    const project = task.project_id ? db.getProjectById(auth.tenant_id, task.project_id) : undefined;
+    const assignee = task.assignee_id ? db.getUserById(auth.tenant_id, task.assignee_id) : undefined;
+    const config = emailService.getSmtpConfig(auth.tenant_id);
+    const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
+
+    const icsContent = emailService.generateTaskIcsContent({
+      task,
+      projectTitle: project?.title,
+      assigneeName: assignee?.name,
+      assigneeEmail: assignee?.email,
+      baseUrl
+    });
+
+    const safeFilename = `gorev_${task.id.slice(0, 8)}.ics`;
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.send(icsContent);
+  } catch (err: any) {
+    res.status(500).send('Takvim dosyası oluşturulamadı: ' + err.message);
   }
 });
 

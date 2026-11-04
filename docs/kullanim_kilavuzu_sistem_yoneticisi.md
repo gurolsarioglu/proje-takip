@@ -111,3 +111,4 @@ Sunucu çökmesi veya büyük veri kaybı durumunda:
 Sistemde **hiçbir kullanıcı başkasının yerine görev başlatamaz veya tamamlayamaz**:
 - Admin dahil olmak üzere yöneticiler personelin görev tanımını, önceliğini ve planını revize edebilir; ancak **görevi fiilen icra etme (başlatma, ilerletme, tamamlama)** yetkisi yalnızca atanan personele aittir.
 - Bu kural veri manipülasyonunu engeller ve performans ölçümlerinin (`RAP04` formülü) adil olmasını garanti eder.
+

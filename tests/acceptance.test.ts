@@ -1319,4 +1319,56 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(completed.task.work_status, 'COMPLETED');
     assert.equal(completed.task.progress, 100);
   });
+
+  await t.test('KİŞİSEL TAKVİM ENTEGRASYONU: RFC 5545 uyumlu iCalendar (.ics), Outlook Web, Google Calendar deeplinkleri ve alarmlı e-posta takvim şablonu', async () => {
+    // 1. Proje ve Görev
+    const pCal = projectService.createProject(authManagerA, 'Takvim Test Projesi', 'Tekstil Termin', '2026-11-05T09:00:00Z', '2026-11-12T18:00:00Z');
+    const taskCal = taskService.createTask(
+      authManagerA,
+      pCal.id,
+      'Koleksiyon Kumaş Numuneleri Kesim',
+      '2026-11-06T09:00:00Z',
+      '2026-11-10T18:00:00Z',
+      assigneeA.id,
+      'Müşteri sunumu için 5 adet varyant numunenin kesimi yapılacaktır.'
+    );
+
+    // 2. RFC 5545 .ics Metin Üretimi Doğrulaması
+    const icsContent = emailService.generateTaskIcsContent({
+      task: taskCal,
+      projectTitle: pCal.title,
+      assigneeName: assigneeA.name,
+      assigneeEmail: assigneeA.email,
+      baseUrl: 'http://localhost:3000'
+    });
+
+    assert.ok(icsContent.includes('BEGIN:VCALENDAR'), 'VCALENDAR başlangıç etiketi içermelidir');
+    assert.ok(icsContent.includes('VERSION:2.0'), 'iCalendar versiyon 2.0 olmalıdır');
+    assert.ok(icsContent.includes(`UID:task-${taskCal.id}@fggroup.com.tr`), 'Göreve özel benzersiz UID olmalıdır');
+    assert.ok(icsContent.includes('SUMMARY:[Takvim Test Projesi] 📌 Koleksiyon Kumaş Numuneleri Kesim'), 'Görev başlığı ve proje adı SUMMARY olmalıdır');
+    assert.ok(icsContent.includes('BEGIN:VALARM'), 'Otomatik hatırlatma alarmı (VALARM) içermelidir');
+    assert.ok(icsContent.includes('TRIGGER:-P1D'), 'Teslimden 1 gün önce hatırlatma alarmı olmalıdır');
+    assert.ok(icsContent.includes('TRIGGER:-PT2H'), 'Teslimden 2 saat önce hatırlatma alarmı olmalıdır');
+    assert.ok(icsContent.includes('END:VCALENDAR'), 'VCALENDAR bitiş etiketi içermelidir');
+
+    // 3. Takvim Deeplink Bağlantıları Doğrulaması
+    const calLinks = emailService.buildCalendarLinks({
+      task: taskCal,
+      projectTitle: pCal.title,
+      baseUrl: 'http://localhost:3000'
+    });
+
+    assert.equal(calLinks.icsDownloadUrl, `http://localhost:3000/api/tasks/${taskCal.id}/calendar.ics`);
+    assert.ok(calLinks.outlookWebUrl.includes('outlook.office.com/calendar/0/deeplink/compose'), 'M365 Outlook Web deeplink olmalıdır');
+    assert.ok(calLinks.outlookWebUrl.includes(encodeURIComponent(pCal.title)), 'Outlook linkinde proje adı geçmelidir');
+    assert.ok(calLinks.googleCalendarUrl.includes('calendar.google.com/calendar/render'), 'Google Calendar deeplink olmalıdır');
+
+    // 4. E-posta Gönderimi & Görsel HTML Şablonunda Takvim Bölümü
+    const emailItem = await emailService.sendTaskAssignedActionableCard(tenantA.id, taskCal.id, 'Ali Yönetici');
+    assert.ok(emailItem, 'E-posta kaydı oluşmalıdır');
+    assert.ok(emailItem?.html_preview.includes('📅 KİŞİSEL TAKVİMİNİZE EKLEYİN'), 'E-posta kartında takvime ekleme kutusu bulunmalıdır');
+    assert.ok(emailItem?.html_preview.includes(`/api/tasks/${taskCal.id}/calendar.ics`), 'HTML gövdesinde .ics indirme butonu olmalıdır');
+    assert.ok(emailItem?.html_preview.includes('🌐 Outlook Web (M365)'), 'HTML gövdesinde Outlook Web butonu olmalıdır');
+    assert.ok(emailItem?.html_preview.includes('📆 Google Takvim'), 'HTML gövdesinde Google Calendar butonu olmalıdır');
+  });
 });

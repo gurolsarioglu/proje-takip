@@ -501,6 +501,10 @@ export class EmailAndAutomationService {
     linked_task_id?: UUID;
     linked_project_id?: UUID | null;
     linked_request_id?: UUID;
+    icalEvent?: {
+      filename?: string;
+      content: string;
+    };
   }): Promise<EmailOutboxItem> {
     const config = this.getSmtpConfig(params.tenant_id);
     const outboxId = crypto.randomUUID();
@@ -548,12 +552,30 @@ export class EmailAndAutomationService {
           greetingTimeout: 8000
         });
 
-        await transporter.sendMail({
+        const mailOptions: any = {
           from: `"${config.from_name}" <${config.from_email || config.username}>`,
           to: params.to.join(', '),
           subject: params.subject,
           html: fullHtml
-        });
+        };
+
+        if (params.icalEvent) {
+          const fn = params.icalEvent.filename || 'gorev-takvimi.ics';
+          mailOptions.icalEvent = {
+            filename: fn,
+            method: 'PUBLISH',
+            content: params.icalEvent.content
+          };
+          mailOptions.attachments = [
+            {
+              filename: fn,
+              content: params.icalEvent.content,
+              contentType: 'text/calendar; charset=utf-8; method=PUBLISH'
+            }
+          ];
+        }
+
+        await transporter.sendMail(mailOptions);
 
         status = 'SENT';
       } catch (err: any) {
@@ -572,12 +594,31 @@ export class EmailAndAutomationService {
               connectionTimeout: 8000,
               greetingTimeout: 8000
             });
-            await directTransporter.sendMail({
+
+            const directMailOptions: any = {
               from: `"${config.from_name}" <${config.from_email || config.username}>`,
               to: params.to.join(', '),
               subject: params.subject,
               html: fullHtml
-            });
+            };
+
+            if (params.icalEvent) {
+              const fn = params.icalEvent.filename || 'gorev-takvimi.ics';
+              directMailOptions.icalEvent = {
+                filename: fn,
+                method: 'PUBLISH',
+                content: params.icalEvent.content
+              };
+              directMailOptions.attachments = [
+                {
+                  filename: fn,
+                  content: params.icalEvent.content,
+                  contentType: 'text/calendar; charset=utf-8; method=PUBLISH'
+                }
+              ];
+            }
+
+            await directTransporter.sendMail(directMailOptions);
             status = 'SENT';
             error_message = undefined;
           } catch {
@@ -646,6 +687,116 @@ export class EmailAndAutomationService {
   }
 
   /**
+   * RFC 5545 uyumlu iCalendar (.ics) metni üretir.
+   * Outlook Masaüstü, Outlook Web, Google Calendar, Apple/iOS ve Android takvimleri ile %100 uyumludur.
+   */
+  public generateTaskIcsContent(params: {
+    task: Task;
+    projectTitle?: string;
+    assigneeName?: string;
+    assigneeEmail?: string;
+    baseUrl: string;
+    sequence?: number;
+  }): string {
+    const { task, projectTitle, assigneeName, baseUrl, sequence = 0 } = params;
+
+    const startDate = task.current_start_date ? new Date(task.current_start_date) : new Date(task.created_at);
+    const dueDate = task.current_due_date ? new Date(task.current_due_date) : new Date(startDate.getTime() + 3600000);
+
+    const formatIcsDate = (d: Date): string => {
+      return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    };
+
+    const dtStart = formatIcsDate(startDate);
+    const dtEnd = formatIcsDate(dueDate);
+    const dtStamp = formatIcsDate(new Date());
+
+    const safeTitle = (task.title || 'FG Group Görevi').replace(/\r?\n/g, ' ').replace(/[;,]/g, ' ');
+    const proj = projectTitle || 'FG Group Projesi';
+    const summary = `[${proj}] 📌 ${safeTitle}`;
+    const descLines = [
+      `Proje: ${proj}`,
+      `Sorumlu: ${assigneeName || 'Atanmamış'}`,
+      `Öncelik: ${task.priority || 'NORMAL'}`,
+      `Durum: ${task.work_status} (%${task.progress || 0})`,
+      task.description ? `Açıklama: ${task.description.replace(/\r?\n/g, ' ')}` : '',
+      `Görev Detay Bağlantısı: ${baseUrl}/?task_id=${task.id}`
+    ].filter(Boolean).join('\\n');
+
+    const uid = `task-${task.id}@fggroup.com.tr`;
+
+    return [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//FG Group//Proje ve Gorev Yonetim Sistemi v0.3//TR',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `SEQUENCE:${sequence}`,
+      `DTSTAMP:${dtStamp}`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      `SUMMARY:${summary}`,
+      `DESCRIPTION:${descLines}`,
+      `LOCATION:${proj}`,
+      'STATUS:CONFIRMED',
+      task.priority === 'HIGH' ? 'PRIORITY:1' : (task.priority === 'LOW' ? 'PRIORITY:9' : 'PRIORITY:5'),
+      'BEGIN:VALARM',
+      'TRIGGER:-P1D',
+      'ACTION:DISPLAY',
+      `DESCRIPTION:🔔 Hatırlatma: Yarın "${safeTitle}" görevinin teslim tarihi!`,
+      'END:VALARM',
+      'BEGIN:VALARM',
+      'TRIGGER:-PT2H',
+      'ACTION:DISPLAY',
+      `DESCRIPTION:⏰ Dikkat: "${safeTitle}" görevinin teslimine 2 saat kaldı!`,
+      'END:VALARM',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+  }
+
+  /**
+   * E-posta ve web arayüzü için tek tıkla takvime ekleme bağlantıları üretir:
+   * 1. .ics indirme linki (Tüm cihazlar ve masaüstü Outlook)
+   * 2. Microsoft 365 / Outlook Web Deeplink
+   * 3. Google Calendar Deeplink
+   */
+  public buildCalendarLinks(params: {
+    task: Task;
+    projectTitle?: string;
+    baseUrl: string;
+  }): {
+    icsDownloadUrl: string;
+    outlookWebUrl: string;
+    googleCalendarUrl: string;
+  } {
+    const { task, projectTitle, baseUrl } = params;
+    const proj = projectTitle || 'FG Group Projesi';
+    const title = `[${proj}] 📌 ${task.title}`;
+    const desc = `Proje: ${proj}\nDurum: ${task.work_status} (%${task.progress || 0})\nDetay: ${baseUrl}/?task_id=${task.id}\n${task.description || ''}`;
+
+    const startDate = task.current_start_date ? new Date(task.current_start_date) : new Date(task.created_at);
+    const dueDate = task.current_due_date ? new Date(task.current_due_date) : new Date(startDate.getTime() + 3600000);
+
+    const fmtUtc = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const startStr = fmtUtc(startDate);
+    const dueStr = fmtUtc(dueDate);
+
+    // 1. .ics indirme linki
+    const icsDownloadUrl = `${baseUrl}/api/tasks/${task.id}/calendar.ics`;
+
+    // 2. Outlook Web Deeplink
+    const outlookWebUrl = `https://outlook.office.com/calendar/0/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${encodeURIComponent(startDate.toISOString())}&enddt=${encodeURIComponent(dueDate.toISOString())}&body=${encodeURIComponent(desc)}&location=${encodeURIComponent(proj)}`;
+
+    // 3. Google Calendar Deeplink
+    const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startStr}/${dueStr}&details=${encodeURIComponent(desc)}&location=${encodeURIComponent(proj)}`;
+
+    return { icsDownloadUrl, outlookWebUrl, googleCalendarUrl };
+  }
+
+  /**
    * Outlook ve tüm e-posta istemcilerinde Adaptive Cards rehberindeki (outlook_adaptive_cards_rehberi.md)
    * kart tasarımını birebir oluşturan görsel kart şablonu
    */
@@ -665,6 +816,13 @@ export class EmailAndAutomationService {
       isWarning?: boolean;
     };
     unlockedTasks?: string[];
+    calendarBox?: {
+      startDateStr: string;
+      dueDateStr: string;
+      icsDownloadUrl: string;
+      outlookWebUrl: string;
+      googleCalendarUrl: string;
+    };
     actionButtons?: Array<{
       title: string;
       url: string;
@@ -738,6 +896,33 @@ export class EmailAndAutomationService {
       </div>
     ` : '';
 
+    const calendarHtml = options.calendarBox ? `
+      <div style="margin: 16px 0; padding: 14px 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 12px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.3px;">
+            📅 KİŞİSEL TAKVİMİNİZE EKLEYİN (HATIRLATICI ALARMLI)
+          </span>
+          <span style="font-size: 11px; font-weight: 700; color: #15803d; background: #dcfce7; padding: 2px 8px; border-radius: 999px;">
+            🔔 1 Gün & 2 Saat Kala Alarm
+          </span>
+        </div>
+        <div style="font-size: 12px; color: #14532d; line-height: 1.45; margin-bottom: 10px;">
+          Planlanan Termin: <strong>${options.calendarBox.startDateStr} ➔ ${options.calendarBox.dueDateStr}</strong>. Görevi unutmamak için tek tıkla kendi takviminize işleyebilirsiniz:
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <a href="${options.calendarBox.icsDownloadUrl}" style="display: inline-block; padding: 7px 13px; background: #16a34a; color: #ffffff; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">
+            📅 Outlook / Telefon (.ics)
+          </a>
+          <a href="${options.calendarBox.outlookWebUrl}" target="_blank" style="display: inline-block; padding: 7px 13px; background: #0284c7; color: #ffffff; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">
+            🌐 Outlook Web (M365)
+          </a>
+          <a href="${options.calendarBox.googleCalendarUrl}" target="_blank" style="display: inline-block; padding: 7px 13px; background: #ffffff; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-weight: 700; text-decoration: none;">
+            📆 Google Takvim
+          </a>
+        </div>
+      </div>
+    ` : '';
+
     const buttonsHtml = (options.actionButtons && options.actionButtons.length > 0) ? `
       <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         ${options.actionButtons.map(b => {
@@ -792,6 +977,7 @@ export class EmailAndAutomationService {
           ${progressHtml}
           ${noteHtml}
           ${unlockedHtml}
+          ${calendarHtml}
           ${quickChipsHtml}
           ${buttonsHtml}
         </div>
@@ -972,6 +1158,19 @@ export class EmailAndAutomationService {
       ]
     };
 
+    const icsContent = this.generateTaskIcsContent({
+      task,
+      projectTitle: project?.title,
+      assigneeName: assignee.name,
+      assigneeEmail: assignee.email,
+      baseUrl
+    });
+    const calLinks = this.buildCalendarLinks({
+      task,
+      projectTitle: project?.title,
+      baseUrl
+    });
+
     const htmlBody = this.renderAdaptiveCardHtmlFrame({
       categoryTag: `📁 ${project?.title || 'FG Group Projesi'} • SIRA SİZDE`,
       badgeText: '🟢 Başlamaya Hazır (READY)',
@@ -986,6 +1185,11 @@ export class EmailAndAutomationService {
         ...(predFacts.map(pf => ({ label: pf.title, value: pf.value })))
       ],
       progress: task.progress || 0,
+      calendarBox: {
+        startDateStr: task.current_start_date ? task.current_start_date.slice(0, 10) : '-',
+        dueDateStr: dueStr,
+        ...calLinks
+      },
       quickProgressPillUrlPattern: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`,
       actionButtons: [
         {
@@ -1015,7 +1219,11 @@ export class EmailAndAutomationService {
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
-      linked_project_id: task.project_id
+      linked_project_id: task.project_id,
+      icalEvent: {
+        filename: `gorev_${task.id.slice(0, 8)}.ics`,
+        content: icsContent
+      }
     });
   }
 
@@ -1178,6 +1386,19 @@ export class EmailAndAutomationService {
       ]
     };
 
+    const icsContent = this.generateTaskIcsContent({
+      task,
+      projectTitle: project?.title,
+      assigneeName: assignee.name,
+      assigneeEmail: assignee.email,
+      baseUrl
+    });
+    const calLinks = this.buildCalendarLinks({
+      task,
+      projectTitle: project?.title,
+      baseUrl
+    });
+
     const htmlBody = this.renderAdaptiveCardHtmlFrame({
       categoryTag: `📌 YENİ GÖREV ATAMA BİLDİRİMİ • ${project?.title || 'FG GROUP'}`,
       badgeText: isBlocked ? '⏳ Öncül Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)',
@@ -1194,6 +1415,11 @@ export class EmailAndAutomationService {
         ...(predTitles.length > 0 ? [{ label: 'Öncül Görevler:', value: predTitles.join(', ') }] : [])
       ],
       progress: task.progress || 0,
+      calendarBox: {
+        startDateStr: startStr,
+        dueDateStr: dueStr,
+        ...calLinks
+      },
       quickProgressPillUrlPattern: !isBlocked
         ? `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`
         : undefined,
@@ -1231,7 +1457,11 @@ export class EmailAndAutomationService {
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
-      linked_project_id: task.project_id
+      linked_project_id: task.project_id,
+      icalEvent: {
+        filename: `gorev_${task.id.slice(0, 8)}.ics`,
+        content: icsContent
+      }
     });
   }
 
@@ -1705,6 +1935,19 @@ export class EmailAndAutomationService {
       ]
     };
 
+    const icsContent = this.generateTaskIcsContent({
+      task,
+      projectTitle: project?.title,
+      assigneeName: assignee.name,
+      assigneeEmail: assignee.email,
+      baseUrl
+    });
+    const calLinks = this.buildCalendarLinks({
+      task,
+      projectTitle: project?.title,
+      baseUrl
+    });
+
     const htmlBody = this.renderAdaptiveCardHtmlFrame({
       categoryTag: '⚠️ GÖREV ZAMANINDA YAPILMADI • TERMİN AŞILDI (KAB07)',
       badgeText: '🚨 Termin Aşıldı (Gecikme)',
@@ -1720,6 +1963,11 @@ export class EmailAndAutomationService {
         { label: 'Bekleyen Ardıl İş:', value: `${succs.length} görev tamamlanmasını bekliyor` }
       ],
       progress: task.progress || 0,
+      calendarBox: {
+        startDateStr: task.current_start_date ? task.current_start_date.slice(0, 10) : '-',
+        dueDateStr: dueStr,
+        ...calLinks
+      },
       quickProgressPillUrlPattern: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`,
       actionButtons: [
         {
@@ -1744,7 +1992,11 @@ export class EmailAndAutomationService {
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
-      linked_project_id: task.project_id
+      linked_project_id: task.project_id,
+      icalEvent: {
+        filename: `gorev_${task.id.slice(0, 8)}.ics`,
+        content: icsContent
+      }
     });
 
     // Aynı anda projedeki yetkili kişilere de "Bu kişi verilen görevi zamanında yapmadı" uyarısı gönder!

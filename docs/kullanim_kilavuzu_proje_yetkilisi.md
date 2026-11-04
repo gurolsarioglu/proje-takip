@@ -97,3 +97,4 @@ Proje gereksinimleri değiştiğinde veya müşteri termin revizyonu istediğind
 Sistemde **hiçbir kullanıcı başkasının görevini başlatamaz, ilerletemez veya tamamlayamaz**:
 - Bir görev Ali'ye atanmışsa; Ayşe (Proje Yöneticisi olsa dahi) Ali'nin adına *"ben başladım"* diyemez veya görevi *"Tamamlandı"* olarak işaretleyemez.
 - Yetkili olarak siz görevin planını revize edebilir veya görevi başka personele yeniden atayabilirsiniz; ancak görevin icra sorumluluğu yalnızca atanan personele aittir.
+

@@ -339,3 +339,26 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 4. **Test ve Doğrulama:**
    - `tests/acceptance.test.ts` içine kapsamlı kabul testi (`KORUMA & MÜDAHALE ENGELİ`) eklendi.
    - **30/30 Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** hatasız tamamlandı.
+
+---
+
+## 27. Kişisel Takvim Entegrasyonu (iCalendar RFC 5545, Outlook Web & Google Calendar)
+
+### 27.1. İster Özeti
+- **Kullanıcı Talebi:** Kişilere gönderilen görev maillerinin kişilerin kişisel takvimine eklenebilecek formatta gönderilmesi; gelen görevi gören personelin tek tıkla kendi takvimine işleyebilmesi.
+- **Hedef:** Hiçbir ek lisans gerektirmeden çalışan e-posta motorumuz üzerinden hem otomatik takvim eki (`.ics`), hem alarmlı takvim kutusu, hem de tek tıkla web takvimlerine (Outlook Web / Google Calendar) aktarma imkanı sunmak.
+
+### 27.2. Geliştirilen Bileşenler ve Mimari
+1. **RFC 5545 Standart Takvim Motoru (`src/modules/email/email.service.ts`):**
+   - `generateTaskIcsContent`: Göreve özel `UID: task-{id}@fggroup.com.tr`, `DTSTART`, `DTEND`, `SUMMARY`, `DESCRIPTION` ve 2 adet otomatik hatırlatma alarmı (`VALARM`: teslimden 1 gün önce `-P1D` ve teslim günü 2 saat kala `-PT2H`) üreten motor yazıldı.
+   - `buildCalendarLinks`: Görev için doğrudan `.ics` indirme linki, Microsoft 365 / Outlook Web compose linki ve Google Calendar render linki üreten yardımcı eklendi.
+   - `renderAdaptiveCardHtmlFrame`: E-posta gövdesine şık **"📅 KİŞİSEL TAKVİMİNİZE EKLEYİN (HATIRLATICI ALARMLI)"** kutusu ve 3 adet tek tıkla takvim butonu eklendi.
+   - `dispatchEmail`: `nodemailer` gönderiminde `icalEvent` ve `attachments` (`text/calendar; charset=utf-8; method=PUBLISH`) desteği eklendi; böylece Outlook ve mobil e-posta istemcileri e-postanın en üstünde yerel "Takvime Ekle" şeridini otomatik çıkarır.
+2. **REST API Endpoint'i (`src/server/index.ts`):**
+   - `GET /api/tasks/:id/calendar.ics`: Görevin `.ics` dosyasını `text/calendar; charset=utf-8` başlığıyla doğrudan indiren endpoint açıldı.
+   - `GET /api/tasks/:id/details`: Yanıta `calendar_links` eklendi.
+3. **Web Arayüzü Çekmecesi (`src/public/index.html` & `src/public/app.js`):**
+   - Görev detay çekmecesindeki zaman planı altına 3 adet takvim butonu yerleştirildi (`📅 Takvimime Ekle (.ics)`, `🌐 Outlook Web`, `📆 Google Takvim`).
+4. **Test ve Doğrulama:**
+   - `tests/acceptance.test.ts` içine `.ics` üretimi, alarmlar, deeplinkler ve e-posta şablonunu doğrulayan kabul testi eklendi.
+   - **31/31 Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** başarıyla geçti.

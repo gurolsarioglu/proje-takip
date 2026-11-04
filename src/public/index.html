@@ -1901,6 +1901,24 @@
         <div id="wpInitialDates" class="wp-initial-plan-note"></div>
         <div id="wpDelayBadge" class="op-delay-alert" style="display:none;"></div>
 
+        <!-- Kişisel Takvime Ekleme Butonları -->
+        <div class="wp-calendar-actions-box" style="margin-top:10px; padding:10px 12px; background:var(--bg-secondary, #f8fafc); border:1px solid var(--border-subtle, #e2e8f0); border-radius:8px;">
+          <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary, #475569); margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+            <span>📅 Kişisel Takvime Ekle (Hatırlatıcı Alarmlı):</span>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <a id="wpDownloadIcsBtn" href="#" class="action-btn sm-btn" style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;" title="Görevi Outlook veya telefon takviminize (.ics) indirin">
+              📅 Takvimime Ekle (.ics)
+            </a>
+            <a id="wpOutlookWebBtn" href="#" target="_blank" class="action-btn sm-btn" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;" title="Microsoft 365 / Outlook Web üzerinde takvim kaydı aç">
+              🌐 Outlook Web
+            </a>
+            <a id="wpGoogleCalBtn" href="#" target="_blank" class="action-btn sm-btn" style="background:#ffffff; color:#334155; border:1px solid #cbd5e1; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;" title="Google Takvim'e ekle">
+              📆 Google Takvim
+            </a>
+          </div>
+        </div>
+
         <!-- Satır İçi Plan Revizyon Formu -->
         <form id="wpPlanReviseForm" class="wp-plan-revise-box" style="display:none;">
           <div class="form-row">

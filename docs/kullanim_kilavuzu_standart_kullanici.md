@@ -90,3 +90,4 @@ Eğer tedarik aksaması, makine arızası veya müşteri onayı gecikmesi gibi b
 - **İş Panosu (Kanban)** ekranında şirketinizdeki iş akışını görebilirsiniz.
 - **Görev Müdahale Koruması:** Yalnızca kendi sorumluluğunuzdaki görev kartlarını tutup sürükleyebilirsiniz. Başka bir çalışma arkadaşınızın görevini taşıyamaz veya onun adına başlatıp bitiremezsiniz.
 - Başkasına ait bir karta tıkladığınızda arayüzde kırmızı kilit bandı gösterilir ve müdahale butonları kilitlenir.
+

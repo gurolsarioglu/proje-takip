@@ -2022,6 +2022,28 @@ async function openTaskDrawer(taskId) {
       initDatesEl.innerHTML = `📌 <strong>İlk Plan (Baz):</strong> ${initStart} → ${initDue} ${isRevised ? '<span class="wp-rev-pill">Revize Edildi</span>' : '<span style="color:#10b981;">(Orijinal Plan)</span>'}`;
     }
 
+    // Kişisel Takvim Butonları (.ics, Outlook Web, Google Calendar)
+    const calDownloadBtn = document.getElementById('wpDownloadIcsBtn');
+    const calOutlookBtn = document.getElementById('wpOutlookWebBtn');
+    const calGoogleBtn = document.getElementById('wpGoogleCalBtn');
+    if (calDownloadBtn) {
+      calDownloadBtn.href = `/api/tasks/${task.id}/calendar.ics`;
+    }
+    if (details.calendar_links) {
+      if (calOutlookBtn) calOutlookBtn.href = details.calendar_links.outlookWebUrl;
+      if (calGoogleBtn) calGoogleBtn.href = details.calendar_links.googleCalendarUrl;
+    } else {
+      const projTitle = project?.title || 'FG Group Projesi';
+      const calTitle = encodeURIComponent(`[${projTitle}] 📌 ${task.title}`);
+      const calDesc = encodeURIComponent(`Proje: ${projTitle}\nDurum: ${task.work_status} (%${task.progress || 0})\n${task.description || ''}`);
+      if (calOutlookBtn) {
+        calOutlookBtn.href = `https://outlook.office.com/calendar/0/deeplink/compose?subject=${calTitle}&body=${calDesc}`;
+      }
+      if (calGoogleBtn) {
+        calGoogleBtn.href = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calTitle}&details=${calDesc}`;
+      }
+    }
+
     const newStartInput = document.getElementById('wpNewStart');
     const newDueInput = document.getElementById('wpNewDue');
     const planReasonInput = document.getElementById('wpPlanReason');
