@@ -1302,6 +1302,12 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
       /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu tarafından girilebilir/
     );
 
+    // E2) Projede editör yetkisine sahip olsa dahi başka bir kullanıcı (authEditorA) Mehmet'in görevi adına not ekleyemez
+    assert.throws(
+      () => delayService.submitExplanation(authEditorA, taskMehmet.id, 'Editör olarak not düşüyorum'),
+      /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu tarafından girilebilir/
+    );
+
     // F) Can (standart kullanıcı), Mehmet'in görev planını veya tanımını DEĞİŞTİREMEZ
     assert.throws(
       () => taskService.updateTaskPlan(authCan, taskMehmet.id, '2026-11-05T00:00:00Z', '2026-11-20T00:00:00Z', 'Erteleme'),

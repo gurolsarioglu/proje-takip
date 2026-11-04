@@ -1947,7 +1947,7 @@ async function openTaskDrawer(taskId) {
       if (!isAssignee) {
         lockBanner.style.display = 'flex';
         const assignedName = assignee ? escapeHtml(assignee.name) : 'başka personele';
-        lockBanner.innerHTML = `🔒 <strong>Müdahale Kısıtlaması:</strong> Bu görev <strong>${assignedName}</strong> adlı personele atanmıştır. Görevi başlatma, tamamlama, durumunu veya ilerleme yüzdesini değiştirme yetkisi yalnızca atanmış sorumluya aittir; başkası yerine müdahale edilemez.`;
+        lockBanner.innerHTML = `🔒 <strong>Müdahale Kısıtlaması:</strong> Bu görev <strong>${assignedName}</strong> adlı personele atanmıştır. Görevi başlatma, tamamlama, durumunu veya ilerleme yüzdesini değiştirme yetkisi yalnızca atanmış sorumluya aittir; başkası yerine müdahale edilemez ve başkası adına not eklenemez.`;
       } else {
         lockBanner.style.display = 'none';
       }
@@ -1966,15 +1966,29 @@ async function openTaskDrawer(taskId) {
     if (quickBox) {
       quickBox.style.display = isAssignee && task.work_status !== 'COMPLETED' && task.work_status !== 'BLOCKED' ? 'block' : 'none';
     }
-    const inlineExpCard = document.getElementById('wpInlineExpCard');
-    if (inlineExpCard) {
-      const inlineExpText = document.getElementById('wpInlineExpText');
-      const inlineSaveBtn = document.getElementById('wpInlineSaveExpBtn');
-      if (inlineExpText) {
-        inlineExpText.disabled = !isAssignee;
-        if (!isAssignee) inlineExpText.placeholder = 'Yalnızca görev sorumlusu açıklama veya gerekçe girebilir.';
+
+    // Not ekleme kısıtlaması (Başkası adına not veya gecikme açıklaması eklenemez)
+    const inlineExpForm = document.getElementById('wpInlineExpForm');
+    const inlineExpNotice = document.getElementById('wpInlineExpNotice');
+    const inlineExpText = document.getElementById('wpInlineExpText');
+    const inlineExpAssigneeName = document.getElementById('wpInlineExpAssigneeName');
+
+    if (!isAssignee) {
+      if (inlineExpForm) inlineExpForm.style.display = 'none';
+      if (inlineExpNotice) {
+        inlineExpNotice.style.display = 'flex';
+        if (inlineExpAssigneeName) {
+          inlineExpAssigneeName.textContent = assignee ? assignee.name : 'atanmış personele';
+        }
       }
-      if (inlineSaveBtn) inlineSaveBtn.disabled = !isAssignee;
+      if (inlineExpText) inlineExpText.disabled = true;
+    } else {
+      if (inlineExpForm) inlineExpForm.style.display = 'flex';
+      if (inlineExpNotice) inlineExpNotice.style.display = 'none';
+      if (inlineExpText) {
+        inlineExpText.disabled = false;
+        inlineExpText.placeholder = 'Gecikme gerekçesi veya durum notu yazınız...';
+      }
     }
 
     // Sorumlu Personel Seçici & Kartı
@@ -2826,13 +2840,28 @@ function setupEventListeners() {
   document.getElementById('wpInlineExpForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!state.activeTaskId) return;
-    const text = document.getElementById('wpInlineExpText').value.trim();
+    const expInput = document.getElementById('wpInlineExpText');
+    const text = expInput ? expInput.value.trim() : '';
     if (!text) return;
-    await apiCall(`/api/tasks/${state.activeTaskId}/explanation`, 'POST', { explanation_text: text });
-    showToast('Gerekçe / durum notu kaydedildi.', 'success');
-    document.getElementById('wpInlineExpText').value = '';
-    await loadProjectTasks(state.currentProjectId);
-    await openTaskDrawer(state.activeTaskId);
+    try {
+      await apiCall(`/api/tasks/${state.activeTaskId}/explanation`, 'POST', { explanation_text: text });
+      showToast('Gerekçe / durum notu kaydedildi.', 'success');
+      if (expInput) expInput.value = '';
+      await loadProjectTasks(state.currentProjectId);
+      await openTaskDrawer(state.activeTaskId);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // ESC tuşu ile görev detay modalını kapatma
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const drawer = document.getElementById('workPackageDrawer');
+      if (drawer && drawer.classList.contains('open')) {
+        closeTaskDrawer();
+      }
+    }
   });
 
   // Proje Ekip, Plan ve Görünürlük Yönetimi Modalı Dinleyicileri

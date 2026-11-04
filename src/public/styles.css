@@ -2342,35 +2342,56 @@ html, body {
   border-color: rgba(59, 130, 246, 0.3);
 }
 
-/* OpenProject Split Screen Drawer */
+/* OpenProject Görev Detay Modalı (Ortalanmış Modal Tasarımı) */
+#wpDrawerBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  z-index: 9999;
+  display: none;
+}
+
 .op-split-drawer {
   position: fixed;
-  top: 0;
-  right: 0;
-  width: 520px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.96);
+  width: 720px;
   max-width: 95vw;
-  height: 100vh;
-  background: #ffffff;
-  border-left: 1px solid #e2e8f0;
-  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.1);
+  max-height: 90vh;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.05);
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  transform: translateX(100%);
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.22s;
+  overflow: hidden;
 }
 
 .op-split-drawer.open {
-  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .op-drawer-header {
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  background: #ffffff;
+  background: var(--bg-card, #ffffff);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  flex-shrink: 0;
 }
 
 .op-drawer-meta {
@@ -2695,15 +2716,18 @@ html, body {
   flex-direction: column;
 }
 
-/* Drawer Footer */
+/* Drawer / Modal Footer */
 .op-drawer-footer {
-  padding: 16px 24px;
+  padding: 14px 24px;
   border-top: 1px solid var(--border-subtle);
-  background: #f8fafc;
+  background: var(--bg-main, #f8fafc);
   display: flex;
   align-items: center;
   gap: 10px;
   justify-content: flex-end;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+  flex-shrink: 0;
 }
 
 /* Make rows interactive */
@@ -4117,8 +4141,8 @@ html, body {
 }
 .op-split-drawer {
   background: var(--bg-card);
-  border-left: 1px solid var(--border-subtle);
-  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.1);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35);
 }
 .op-drawer-header, .op-drawer-footer {
   background: var(--bg-main);

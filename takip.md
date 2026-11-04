@@ -362,3 +362,27 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 4. **Test ve Doğrulama:**
    - `tests/acceptance.test.ts` içine `.ics` üretimi, alarmlar, deeplinkler ve e-posta şablonunu doğrulayan kabul testi eklendi.
    - **31/31 Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** başarıyla geçti.
+
+---
+
+## 28. Görev Detayının Ekran Ortasına Alınması (Centered Modal) ve Başkası Adına Not Girişinin Engellenmesi
+
+### 28.1. İster Özeti
+- **Kullanıcı Talebi:**
+  1. Göreve basıldığında sağ tarafta açılan panelin ekranın ortasına alınması (ortalanmış modern modal tasarımı).
+  2. Bir kullanıcının başkasının görevine girip inceleyebilmesi ancak onun adına not, açıklama veya gerekçe ekleyememesi (not kutusunun kilitlenmesi).
+
+### 28.2. Geliştirilen Çözüm ve Mimari
+1. **Ortalanmış Modal Tasarımı (`src/public/styles.css`):**
+   - `.op-split-drawer` sağa dayalı panelden (`right: 0`, `height: 100vh`) çıkarılarak ekranın tam ortasına (`top: 50%`, `left: 50%`, `transform: translate(-50%, -50%)`), `width: 720px`, `max-height: 90vh`, `border-radius: 16px` ve `box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35)` ile modern bir modal penceresine dönüştürüldü.
+   - `#wpDrawerBackdrop` arka planı karartıcı ve `backdrop-filter: blur(5px)` ile z-index 9999 olarak modalın altına bağlandı.
+   - Açılış/kapanış akıcı `scale` ve `opacity` animasyonuyla donatıldı; klavyeden `ESC` tuşuna basıldığında modalın otomatik kapanması sağlandı.
+2. **Başkası Adına Not / Açıklama Giriş Koruması:**
+   - **Arayüz (`src/public/index.html` & `src/public/app.js`):**
+     - Başkasına ait görev görüntülendiğinde not ekleme formu (`#wpInlineExpForm`) gizlendi; yerine kırmızı çerçeveli `🔒 Not Ekleme Kısıtlaması: Bu görev [Personel Adı] adlı personele aittir. Başkası adına aktivite notu veya gerekçe eklenemez.` bilgi uyarısı yerleştirildi.
+     - Form submit işlemi istemci tarafında da `try/catch` ve yetki doğrulamasıyla güvenliğe alındı.
+   - **Sunucu & İş Mantığı (`src/modules/delay/delay.service.ts`):**
+     - `submitExplanation` fonksiyonunda görev başka bir personele atanmışsa (`task.assignee_id && task.assignee_id !== auth.user_id`) ve çağrıyı yapan kişi sistem yöneticisi (ADMIN) değilse işlem `Yetkisiz Müdahale Engellendi: Bu görev başka bir personele atanmıştır. Açıklama veya gerekçe yalnızca atanan sorumlu tarafından girilebilir.` istisnası fırlatarak kesin olarak reddedilir.
+3. **Test ve Doğrulama:**
+   - `tests/acceptance.test.ts` içine editör veya başka bir personelin başkasının görevine not ekleyemediğini doğrulayan kabul senaryosu eklendi.
+   - **31/31 Kabul Testi** başarıyla tamamlandı, derleme hatasız alındı.

@@ -926,14 +926,14 @@ export class EmailAndAutomationService {
     const buttonsHtml = (options.actionButtons && options.actionButtons.length > 0) ? `
       <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         ${options.actionButtons.map(b => {
-          let bg = '#2563eb';
-          let color = '#ffffff';
-          let border = '#2563eb';
-          if (b.style === 'success') { bg = '#059669'; color = '#ffffff'; border = '#059669'; }
-          else if (b.style === 'warning') { bg = '#d97706'; color = '#ffffff'; border = '#d97706'; }
-          else if (b.style === 'secondary') { bg = '#ffffff'; color = '#1e293b'; border = '#cbd5e1'; }
-          return `<a href="${b.url}" style="display: inline-block; padding: 10px 18px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">${b.title}</a>`;
-        }).join('')}
+      let bg = '#2563eb';
+      let color = '#ffffff';
+      let border = '#2563eb';
+      if (b.style === 'success') { bg = '#059669'; color = '#ffffff'; border = '#059669'; }
+      else if (b.style === 'warning') { bg = '#d97706'; color = '#ffffff'; border = '#d97706'; }
+      else if (b.style === 'secondary') { bg = '#ffffff'; color = '#1e293b'; border = '#cbd5e1'; }
+      return `<a href="${b.url}" style="display: inline-block; padding: 10px 18px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">${b.title}</a>`;
+    }).join('')}
       </div>
     ` : '';
 
