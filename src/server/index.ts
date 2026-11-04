@@ -17,6 +17,7 @@ import { NotificationService } from '../modules/notification/notification.servic
 import { ReportingService } from '../modules/reporting/reporting.service.js';
 import { MicrosoftTodoService } from '../modules/microsoft_todo/microsoft_todo.service.js';
 import { EmailAndAutomationService } from '../modules/email/email.service.js';
+import { BackupAndRecoveryService } from '../modules/backup/backup.service.js';
 import { AuthContext, UUID, Task } from '../core/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +27,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // Veritabanı ve Modül Başlatma (PostgreSQL + AES-256-GCM Şifre Kasası)
 const dbPath = path.resolve(__dirname, '../../.work/data.json');
@@ -44,6 +45,20 @@ const notificationService = new NotificationService(db);
 const reportingService = new ReportingService(db, projectService);
 const microsoftTodoService = new MicrosoftTodoService(db);
 const emailService = new EmailAndAutomationService(db, taskService, delayService, projectService, notificationService);
+const backupService = new BackupAndRecoveryService(db);
+backupService.setPostgresSyncHook(async () => {
+  await pgEngine.syncStateToPostgres(db.getRawState());
+});
+
+// Otomatik yedek kontrolü periyodik tarayıcı (her 60 saniyede bir)
+setInterval(() => {
+  try {
+    const tenants = db.getTenants();
+    for (const t of tenants) {
+      void backupService.checkAndRunScheduledBackups(t.id);
+    }
+  } catch (e) {}
+}, 60000);
 
 // Güvenli Kiracı ve Kullanıcı Bağlamı Middleware'i
 function getAuthContext(req: Request): AuthContext {
@@ -1580,6 +1595,200 @@ app.post('/api/admin/trigger-card-scenario', async (req, res) => {
     }
 
     res.json({ success: true, scenario, item });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ==============================================================
+// 12. Yedekleme & Felaket Kurtarma (Backup & Disaster Recovery) API
+// ==============================================================
+
+// 1. Yedek Listesi, İstatistikler ve Zamanlayıcı Ayarları
+app.get('/api/admin/backups', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yedekleme yönetimi yalnızca sistem yöneticilerine açıktır.' });
+    }
+
+    const backups = db.getBackupList(auth.tenant_id);
+    const schedule = backupService.getScheduleConfig(auth.tenant_id);
+    const totalBytes = backups.reduce((sum, b) => sum + (b.size_bytes || 0), 0);
+    const lastBackup = backups[0] || null;
+
+    res.json({
+      backups,
+      schedule,
+      stats: {
+        total_count: backups.length,
+        total_size_bytes: totalBytes,
+        last_backup_at: lastBackup ? lastBackup.created_at : null,
+        last_backup_name: lastBackup ? lastBackup.name : null
+      }
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 2. Zamanlayıcı Kurallarını Güncelle (Günlük / Haftalık)
+app.put('/api/admin/backups/schedule', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yalnızca sistem yöneticileri zamanlama kuralı belirleyebilir.' });
+    }
+
+    const updated = backupService.updateScheduleConfig(auth.tenant_id, req.body);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 3. Anlık Yedek Oluştur
+app.post('/api/admin/backups/create', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yedek oluşturma yetkiniz yok.' });
+    }
+
+    const { name, note } = req.body;
+    const meta = await backupService.createBackup(auth, name, 'MANUAL', note);
+    res.status(201).json(meta);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 4. Yedek Paketini Bilgisayara İndir (JSON Dosyası)
+app.get('/api/admin/backups/:id/download', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yedek indirme yetkiniz yok.' });
+    }
+
+    const meta = db.getBackupById(auth.tenant_id, req.params.id);
+    if (!meta || !fs.existsSync(meta.file_path)) {
+      return res.status(404).json({ error: 'Yedek dosyası bulunamadı.' });
+    }
+
+    const cleanName = `${meta.name.replace(/[^a-zA-Z0-9_\-\u00C0-\u017F]/g, '_')}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cleanName)}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.sendFile(path.resolve(meta.file_path));
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 5. Yedek İçeriği Önizleme (Tekil proje seçimi için)
+app.get('/api/admin/backups/:id/preview', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yetkisiz erişim.' });
+    }
+
+    const { meta, payload } = backupService.getBackupPayload(auth, req.params.id);
+    const projectsSummary = (payload.projects || []).map(p => {
+      const taskCount = (payload.tasks || []).filter(t => t.project_id === p.id).length;
+      return {
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        task_count: taskCount,
+        created_at: p.created_at
+      };
+    });
+
+    res.json({
+      meta,
+      projects: projectsSummary
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 6. Tam Sistem Geri Yükleme
+app.post('/api/admin/backups/:id/restore-full', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Tam sistem geri yükleme yetkisi yalnızca Sistem Yöneticisine aittir.' });
+    }
+
+    const result = await backupService.restoreFull(auth, req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 7. Tekil Proje Kurtarma
+app.post('/api/admin/backups/:id/restore-project', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Proje kurtarma yetkisi yalnızca Sistem Yöneticisine aittir.' });
+    }
+
+    const { project_id } = req.body;
+    if (!project_id) {
+      return res.status(400).json({ error: 'Kurtarılacak proje seçilmelidir.' });
+    }
+
+    const result = await backupService.restoreSingleProject(auth, req.params.id, project_id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 8. Dışarıdan Yedek Dosyası İçe Aktarma (Import)
+app.post('/api/admin/backups/import', async (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yedek yükleme yetkiniz yok.' });
+    }
+
+    const { payload, fileName } = req.body;
+    if (!payload) {
+      return res.status(400).json({ error: 'Yedek verisi boş olamaz.' });
+    }
+
+    const jsonStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const meta = await backupService.importBackupFile(auth, jsonStr, fileName || 'yuklenen_yedek.json');
+    res.status(201).json(meta);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 9. Yedek Silme
+app.delete('/api/admin/backups/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yedek silme yetkiniz yok.' });
+    }
+
+    const deleted = backupService.deleteBackup(auth, req.params.id);
+    res.json({ success: deleted });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }

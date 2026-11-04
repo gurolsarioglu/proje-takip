@@ -2232,7 +2232,8 @@ function switchView(viewId) {
     'view-team': 'Ekip & Personel',
     'view-report-builder': 'Özel Rapor Oluşturucu (Sürükle-Bırak)',
     'view-microsoft-todo': 'Microsoft To Do & Outlook Görevleri',
-    'view-email-automation': 'Exchange Online (SMTP) & Otomatik Raporlar'
+    'view-email-automation': 'Exchange Online (SMTP) & Otomatik Raporlar',
+    'view-backup-recovery': 'Yedekleme & Felaket Kurtarma Merkezi'
   };
   document.getElementById('currentViewTitle').textContent = titles[viewId] || 'Panel';
 
@@ -2243,7 +2244,7 @@ function switchView(viewId) {
 
   // Proje seçici göster/gizle
   const projContainer = document.getElementById('projectSelectorContainer');
-  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo' || viewId === 'view-email-automation') {
+  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo' || viewId === 'view-email-automation' || viewId === 'view-backup-recovery') {
     projContainer.style.display = 'none';
   } else {
     projContainer.style.display = 'flex';
@@ -2263,6 +2264,10 @@ function switchView(viewId) {
 
   if (viewId === 'view-email-automation') {
     loadEmailAutomationDashboard();
+  }
+
+  if (viewId === 'view-backup-recovery') {
+    loadBackupDashboard();
   }
 }
 
@@ -5344,4 +5349,400 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadEmailAutomationDashboard();
     });
   }
+
+  // ================= 10. YEDEKLEME & FELAKET KURTARMA (DISASTER RECOVERY) =================
+  const backupForm = document.getElementById('backupScheduleForm');
+  if (backupForm) {
+    backupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const payload = {
+          daily_enabled: document.getElementById('schedDailyEnabled').checked,
+          daily_time: document.getElementById('schedDailyTime').value || '02:00',
+          daily_retention_days: parseInt(document.getElementById('schedDailyRetention').value, 10) || 14,
+          weekly_enabled: document.getElementById('schedWeeklyEnabled').checked,
+          weekly_day: parseInt(document.getElementById('schedWeeklyDay').value, 10) || 0,
+          weekly_time: document.getElementById('schedWeeklyTime').value || '03:00',
+          weekly_retention_weeks: parseInt(document.getElementById('schedWeeklyRetention').value, 10) || 8,
+          notify_email: document.getElementById('schedNotifyEmail').value.trim()
+        };
+
+        const res = await apiCall('/api/admin/backups/schedule', 'PUT', payload);
+        if (res.success) {
+          showToast('✅ Otomatik yedekleme planı ve saklama kuralları başarıyla güncellendi.', 'success');
+          await loadBackupDashboard();
+        }
+      } catch (err) {
+        showToast('Plan kaydedilemedi: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // Anlık Manuel Yedek Al Butonu
+  document.getElementById('createBackupNowBtn')?.addEventListener('click', async () => {
+    const desc = prompt('Alınacak yedek için kısa bir açıklama veya not giriniz:', 'Manuel Yönetici Yedeği');
+    if (desc === null) return;
+
+    const btn = document.getElementById('createBackupNowBtn');
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Yedek Alınıyor...';
+
+    try {
+      const res = await apiCall('/api/admin/backups/create', 'POST', { description: desc || 'Manuel Yedek' });
+      if (res.success) {
+        showToast(`✅ Tam sistem yedeği başarıyla oluşturuldu! (${(res.backup.file_size_bytes / 1024).toFixed(1)} KB)`, 'success');
+        await loadBackupDashboard();
+      }
+    } catch (err) {
+      showToast('Yedek alınamadı: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origText;
+    }
+  });
+
+  // Yenile Butonu
+  document.getElementById('refreshBackupsBtn')?.addEventListener('click', () => {
+    loadBackupDashboard();
+  });
+
+  // Dışarıdan Yedek İçe Aktar Butonu
+  const backupFileInput = document.getElementById('backupFileInput');
+  document.getElementById('importBackupBtn')?.addEventListener('click', () => {
+    backupFileInput?.click();
+  });
+
+  backupFileInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm(`"${file.name}" isimli yedek dosyası sisteme içe aktarılacak. Onaylıyor musunuz?`)) {
+      backupFileInput.value = '';
+      return;
+    }
+
+    try {
+      const fileText = await file.text();
+      const payload = JSON.parse(fileText);
+
+      const res = await apiCall('/api/admin/backups/import', 'POST', { payload });
+      if (res.success) {
+        showToast('✅ Dış yedek başarıyla doğrulandı ve sisteme aktarıldı!', 'success');
+        await loadBackupDashboard();
+      }
+    } catch (err) {
+      showToast('Yedek yükleme başarısız: ' + (err.message || 'Geçersiz JSON'), 'error');
+    } finally {
+      backupFileInput.value = '';
+    }
+  });
+
+  // Tekil Proje Kurtarma Formu
+  const restoreProjectForm = document.getElementById('restoreProjectForm');
+  if (restoreProjectForm) {
+    restoreProjectForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const backupId = document.getElementById('restoreBackupId').value;
+      const projectId = document.getElementById('restoreProjectSelect').value;
+      if (!backupId || !projectId) {
+        showToast('Lütfen kurtarılacak bir proje seçin.', 'warning');
+        return;
+      }
+
+      if (!confirm('⚠️ Seçilen proje bu yedekteki haliyle geri yüklenecektir. Diğer projelere dokunulmaz. Onaylıyor musunuz?')) {
+        return;
+      }
+
+      const submitBtn = document.getElementById('confirmRestoreProjectBtn');
+      const origText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '⏳ Kurtarılıyor...';
+
+      try {
+        const res = await apiCall(`/api/admin/backups/${backupId}/restore-project`, 'POST', { projectId });
+        if (res.success) {
+          showToast('🎯 Proje başarıyla kurtarıldı ve güncellendi!', 'success');
+          document.getElementById('restoreProjectModal')?.classList.remove('open');
+          await init();
+          await loadBackupDashboard();
+        }
+      } catch (err) {
+        showToast('Proje kurtarılamadı: ' + err.message, 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = origText;
+      }
+    });
+  }
+
+  // Proje Seçildiğinde Önizleme Kutusunu Güncelle
+  document.getElementById('restoreProjectSelect')?.addEventListener('change', (e) => {
+    const opt = e.target.selectedOptions?.[0];
+    const previewBox = document.getElementById('restoreProjectPreviewBox');
+    if (!previewBox) return;
+
+    if (!opt || !opt.value) {
+      previewBox.style.display = 'none';
+      return;
+    }
+
+    const tasksCount = opt.dataset.tasks || '0';
+    const membersCount = opt.dataset.members || '0';
+    previewBox.innerHTML = `📦 <strong>Kurtarılacak İçerik:</strong> ${opt.text} projesi kapsamında <strong>${tasksCount} adet görev</strong> ve <strong>${membersCount} adet ekip üyesi</strong> geri yüklenecektir.`;
+    previewBox.style.display = 'block';
+  });
 });
+
+// ================= YEDEKLEME & FELAKET KURTARMA YARDIMCI FONKSİYONLARI =================
+let cachedBackupProjects = {};
+
+async function loadBackupDashboard() {
+  try {
+    const res = await apiCall('/api/admin/backups');
+    if (!res || !res.success) return;
+
+    const schedule = res.schedule || {};
+    const backups = res.backups || [];
+
+    // KPI Kartları
+    if (backups.length > 0) {
+      const last = backups[0];
+      const d = new Date(last.created_at);
+      document.getElementById('kpiLastBackupTime').textContent = `${d.toLocaleDateString('tr-TR')} ${d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
+      
+      const typeLabels = {
+        'SCHEDULED_DAILY': '📅 Günlük Otomatik',
+        'SCHEDULED_WEEKLY': '🗓️ Haftalık Arşiv',
+        'MANUAL': '⚡ Manuel Alınan',
+        'PRE_RESTORE_SAFETY': '🛡️ Güvenlik Yedeği',
+        'IMPORTED': '📥 Dışarıdan Aktarılan'
+      };
+      document.getElementById('kpiLastBackupType').textContent = typeLabels[last.type] || last.type;
+    } else {
+      document.getElementById('kpiLastBackupTime').textContent = '-';
+      document.getElementById('kpiLastBackupType').textContent = 'Henüz yedek alınmadı';
+    }
+
+    document.getElementById('kpiTotalBackups').textContent = `${backups.length} Adet`;
+    const totalBytes = backups.reduce((sum, b) => sum + (b.size_bytes || 0), 0);
+    document.getElementById('kpiTotalBackupSize').textContent = `${(totalBytes / 1024).toFixed(1)} KB Disk Alanı`;
+
+    // Günlük & Haftalık KPI
+    if (schedule.daily_enabled) {
+      document.getElementById('kpiDailyStatus').textContent = `Aktif (${schedule.daily_time || '02:00'})`;
+      document.getElementById('kpiDailyStatus').style.color = '#059669';
+    } else {
+      document.getElementById('kpiDailyStatus').textContent = 'Devre Dışı';
+      document.getElementById('kpiDailyStatus').style.color = '#64748b';
+    }
+    document.getElementById('kpiDailyRetention').textContent = `${schedule.daily_retention_days || 14} gün saklama süresi`;
+
+    const dayNames = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+    if (schedule.weekly_enabled) {
+      const dayName = dayNames[schedule.weekly_day ?? 0] || 'Pazar';
+      document.getElementById('kpiWeeklyStatus').textContent = `Aktif (${dayName} ${schedule.weekly_time || '03:00'})`;
+      document.getElementById('kpiWeeklyStatus').style.color = '#2563eb';
+    } else {
+      document.getElementById('kpiWeeklyStatus').textContent = 'Devre Dışı';
+      document.getElementById('kpiWeeklyStatus').style.color = '#64748b';
+    }
+    document.getElementById('kpiWeeklyRetention').textContent = `${schedule.weekly_retention_weeks || 8} hafta saklama süresi`;
+
+    // Form Alanlarını Doldur
+    const dailyEnabledEl = document.getElementById('schedDailyEnabled');
+    if (dailyEnabledEl) dailyEnabledEl.checked = !!schedule.daily_enabled;
+    const dailyTimeEl = document.getElementById('schedDailyTime');
+    if (dailyTimeEl && schedule.daily_time) dailyTimeEl.value = schedule.daily_time;
+    const dailyRetEl = document.getElementById('schedDailyRetention');
+    if (dailyRetEl && schedule.daily_retention_days) dailyRetEl.value = schedule.daily_retention_days;
+
+    const weeklyEnabledEl = document.getElementById('schedWeeklyEnabled');
+    if (weeklyEnabledEl) weeklyEnabledEl.checked = !!schedule.weekly_enabled;
+    const weeklyDayEl = document.getElementById('schedWeeklyDay');
+    if (weeklyDayEl && schedule.weekly_day !== undefined) weeklyDayEl.value = schedule.weekly_day;
+    const weeklyTimeEl = document.getElementById('schedWeeklyTime');
+    if (weeklyTimeEl && schedule.weekly_time) weeklyTimeEl.value = schedule.weekly_time;
+    const weeklyRetEl = document.getElementById('schedWeeklyRetention');
+    if (weeklyRetEl && schedule.weekly_retention_weeks) weeklyRetEl.value = schedule.weekly_retention_weeks;
+
+    const notifyEmailEl = document.getElementById('schedNotifyEmail');
+    if (notifyEmailEl) notifyEmailEl.value = schedule.notify_email || '';
+
+    // Tabloyu Oluştur
+    renderBackupTable(backups);
+  } catch (err) {
+    showToast('Yedekleme kontrol paneli yüklenemedi: ' + err.message, 'error');
+  }
+}
+
+function renderBackupTable(backups) {
+  const tbody = document.getElementById('backupHistoryTableBody');
+  if (!tbody) return;
+
+  if (!backups || backups.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align:center; padding:32px; color:var(--text-tertiary);">
+          <div style="font-size:2rem; margin-bottom:8px;">📦</div>
+          <div style="font-weight:600; color:var(--text-secondary);">Henüz oluşturulmuş bir sistem yedeği bulunmuyor.</div>
+          <div style="font-size:0.8rem; margin-top:4px;">Yukarıdaki "Hemen Tam Yedek Al" butonuna tıklayarak ilk yedeğinizi anında oluşturabilirsiniz.</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const typeConfig = {
+    'SCHEDULED_DAILY': { label: 'Günlük Otomatik', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', icon: '📅' },
+    'SCHEDULED_WEEKLY': { label: 'Haftalık Arşiv', bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff', icon: '🗓️' },
+    'MANUAL': { label: 'Manuel Alınan', bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', icon: '⚡' },
+    'PRE_RESTORE_SAFETY': { label: 'Güvenlik Yedeği', bg: '#fff1f2', color: '#be123c', border: '#fecdd3', icon: '🛡️' },
+    'IMPORTED': { label: 'İçe Aktarılan', bg: '#fef3c7', color: '#b45309', border: '#fde68a', icon: '📥' }
+  };
+
+  tbody.innerHTML = backups.map(b => {
+    const d = new Date(b.created_at);
+    const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
+    const tc = typeConfig[b.type] || { label: b.type, bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: '📦' };
+
+    const shaShort = b.sha256 ? `${b.sha256.substring(0, 8)}...` : 'n/a';
+    const sizeKb = ((b.size_bytes || 0) / 1024).toFixed(1);
+    const projCount = b.summary?.project_count ?? 0;
+    const taskCount = b.summary?.task_count ?? 0;
+    const userCount = b.summary?.user_count ?? 0;
+
+    return `
+      <tr>
+        <td style="font-weight:600; white-space:nowrap;">
+          <div>${dateFormatted}</div>
+          <div style="font-size:0.72rem; color:var(--text-tertiary); font-weight:normal;">${b.id.substring(0, 8)}</div>
+        </td>
+        <td>
+          <span style="display:inline-flex; align-items:center; gap:4px; font-size:0.75rem; font-weight:600; padding:2px 8px; border-radius:12px; background:${tc.bg}; color:${tc.color}; border:1px solid ${tc.border};">
+            <span>${tc.icon}</span> ${tc.label}
+          </span>
+        </td>
+        <td>
+          <div style="font-size:0.85rem; font-weight:600; color:var(--text-primary);">
+            ${b.name || 'Sistem Yedeği'}
+          </div>
+          ${b.note ? `<div style="font-size:0.76rem; color:var(--text-tertiary); margin-top:2px;">${b.note}</div>` : ''}
+        </td>
+        <td style="font-size:0.78rem; color:var(--text-secondary); white-space:nowrap;">
+          <div>📁 <strong>${projCount}</strong> Proje</div>
+          <div>📌 <strong>${taskCount}</strong> Görev | 👥 <strong>${userCount}</strong> Üye</div>
+        </td>
+        <td style="font-size:0.75rem; color:var(--text-tertiary); white-space:nowrap;">
+          <div>💾 ${sizeKb} KB</div>
+          <div title="${b.sha256 || ''}" style="cursor:help;">🔒 ${shaShort}</div>
+        </td>
+        <td style="text-align:right; white-space:nowrap;">
+          <button type="button" class="action-btn secondary-btn sm-btn" onclick="openRestoreProjectModal('${b.id}')" title="Yalnızca tek bir projeyi kurtar" style="font-size:0.75rem; padding:4px 8px; margin-right:4px;">
+            🎯 Proje Kurtar
+          </button>
+          <button type="button" class="action-btn sm-btn" onclick="triggerFullRestore('${b.id}', '${dateFormatted}')" title="Tüm sistemi bu tarihe geri yükle" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; font-size:0.75rem; padding:4px 8px; margin-right:4px;">
+            🔄 Tam Geri Yükle
+          </button>
+          <button type="button" class="action-btn secondary-btn sm-btn" onclick="downloadBackupFile('${b.id}', 'backup_${b.id.substring(0,8)}.json')" title="İndir" style="font-size:0.75rem; padding:4px 8px; margin-right:4px;">
+            📥
+          </button>
+          <button type="button" class="action-btn secondary-btn sm-btn" onclick="deleteBackupFile('${b.id}', '${(b.name || b.id).replace(/['"]/g, '')}')" title="Sil" style="color:#dc2626; font-size:0.75rem; padding:4px 8px;">
+            🗑️
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+window.openRestoreProjectModal = async function(backupId) {
+  try {
+    const res = await apiCall(`/api/admin/backups/${backupId}/preview`);
+    if (!res || !res.success) throw new Error('Yedek içeriği okunamadı');
+
+    const backup = res.backup;
+    const projects = res.projects || [];
+
+    document.getElementById('restoreBackupId').value = backupId;
+    document.getElementById('restoreModalBackupInfo').innerHTML = `
+      <div>📦 <strong>Seçili Yedek:</strong> ${backup.filename}</div>
+      <div style="color:var(--text-secondary); margin-top:2px;">Tarih: ${new Date(backup.created_at).toLocaleString('tr-TR')} | Not: ${backup.description || '-'}</div>
+    `;
+
+    const select = document.getElementById('restoreProjectSelect');
+    if (projects.length === 0) {
+      select.innerHTML = '<option value="">Bu yedek içinde kayıtlı proje bulunamadı</option>';
+      document.getElementById('restoreProjectPreviewBox').style.display = 'none';
+    } else {
+      select.innerHTML = `
+        <option value="">-- Kurtarmak istediğiniz projeyi seçin (${projects.length} Proje) --</option>
+        ${projects.map(p => `
+          <option value="${p.id}" data-tasks="${p.tasks_count}" data-members="${p.members_count}">
+            ${p.title} (${p.tasks_count} Görev, ${p.members_count} Üye)
+          </option>
+        `).join('')}
+      `;
+      document.getElementById('restoreProjectPreviewBox').style.display = 'none';
+    }
+
+    document.getElementById('restoreProjectModal')?.classList.add('open');
+  } catch (err) {
+    showToast('Proje kurtarma penceresi açılamadı: ' + err.message, 'error');
+  }
+};
+
+window.triggerFullRestore = async function(backupId, dateText) {
+  const confirmMsg = `⚠️ DİKKAT: TAM SİSTEM GERİ YÜKLEME\n\nTüm projeler, görevler, bağımlılıklar ve ayarlar seçilen yedeğin (${dateText}) alındığı durumuna dönecektir.\n\nİşlem başlamadan önce sistem OTOMATİK olarak mevcut anlık durumun güvenlik yedeğini (Pre-Restore Safety) alacaktır. Yanlışlıkla geri yükleseniz bile son duruma geri dönebilirsiniz.\n\nDevam etmek istiyor musunuz?`;
+  
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    showToast('⏳ Geri yükleme yapılıyor, lütfen bekleyin...', 'info');
+    const res = await apiCall(`/api/admin/backups/${backupId}/restore-full`, 'POST');
+    if (res.success) {
+      showToast('🔄 Tam sistem başarıyla geri yüklendi!', 'success');
+      await init();
+      await loadBackupDashboard();
+    }
+  } catch (err) {
+    showToast('Geri yükleme başarısız: ' + err.message, 'error');
+  }
+};
+
+window.downloadBackupFile = async function(backupId, filename) {
+  try {
+    const res = await fetch(`/api/admin/backups/${backupId}/download`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error('İndirme başarısız');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `backup_${backupId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    showToast('📥 Yedek dosyası başarıyla indirildi.', 'success');
+  } catch (err) {
+    showToast('Yedek indirilemedi: ' + err.message, 'error');
+  }
+};
+
+window.deleteBackupFile = async function(backupId, filename) {
+  if (!confirm(`"${filename}" isimli yedek dosyasını kalıcı olarak silmek istediğinize emin misiniz?`)) {
+    return;
+  }
+
+  try {
+    const res = await apiCall(`/api/admin/backups/${backupId}`, 'DELETE');
+    if (res.success) {
+      showToast('🗑️ Yedek dosyası başarıyla silindi.', 'success');
+      await loadBackupDashboard();
+    }
+  } catch (err) {
+    showToast('Yedek silinemedi: ' + err.message, 'error');
+  }
+};

@@ -290,3 +290,26 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - **Kanban Panosu:** Seçili projenin iş akışını korur.
 * **Tüm Testler ve Doğrulama:**
   - `PROJE GÖREVİ & BİREYSEL TO-DO AYRIMI` kabul testi dahil olmak üzere **28/28 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
+
+### 25. Yönetici Felaket Kurtarma & Otomatik Yedekleme Modülü (Disaster Recovery & Backup)
+* **Modül Amacı & İki Kademeli Kurtarma Mimarisi:**
+  - Sistemin başına beklenmedik bir kaza, veri bozulması veya yanlış işlem geldiğinde yöneticinin tek tıkla sistemi ayağa kaldırması için `BackupAndRecoveryService` (`src/modules/backup/backup.service.ts`) geliştirildi.
+  - **1. Tam Sistem Geri Yükleme (Full Restore):** Tüm projeleri, görevleri, bağımlılıkları ve ayarları yedeğin alındığı ana döndürür.
+  - **2. Tekil Proje Kurtarma (Single Project Recovery):** Diğer hiçbir projeye ve personele dokunmadan, yalnızca kazaya uğrayan tek bir projeyi ve ona bağlı görev/bağımlılıkları yedekten kurtarır.
+  - **3. Otomatik Güvenlik Yedeği (`PRE_RESTORE_SAFETY`):** İster tam ister tekil proje kurtarma yapılsın, sistem kurtarma işlemine başlamadan hemen önce o anki mevcut durumun otomatik güvenlik yedeğini alır. Yönetici yanlış bir yedeğe dönse dahi anında geri alma imkanına sahiptir.
+* **Otomatik Zamanlayıcı (Scheduler) & Saklama Politikası (Retention):**
+  - **Günlük Otomatik Yedekleme:** Belirlenen saatte (varsayılan 02:00) otomatik çalışır ve `daily_retention_days` (varsayılan 14 gün) süresini aşan eski günlük yedekleri temizler.
+  - **Haftalık Arşiv Yedeği:** Belirlenen gün ve saatte (varsayılan Pazar 03:00) çalışır ve `weekly_retention_weeks` (varsayılan 8 hafta) süresini aşan yedekleri temizler.
+  - Arka planda 60 saniyelik interval ile otomatik tetikleme ve yönetici bildirim e-postası desteği.
+* **Bütünlük & Güvenlik:**
+  - Her yedek dosyası SHA-256 hash imzasıyla mühürlenir. Geri yüklemede dosya bütünlüğü kontrol edilir.
+  - Harici JSON yedek dosyalarını içe aktarma (`import`) ve bilgisayara indirme (`download`) işlevleri.
+  - PostgreSQL ve AES-256-GCM kasa yapısıyla anlık senkronizasyon kancası (`setPostgresSyncHook`).
+* **Yönetici Arayüzü (`#view-backup-recovery`):**
+  - Sol menüde **YÖNETİM** başlığı altına `🛡️ Yedekleme & Kurtarma` menüsü ve `Disaster` rozeti eklendi.
+  - 4 adet canlı KPI kartı: Son Başarılı Yedek, Toplam Yedek Sayısı & Boyut, Günlük Otomatik Plan, Haftalık Otomatik Plan.
+  - Otomatik zamanlama planı formu (`#backupScheduleForm`), anlık manuel yedek butonu (`#createBackupNowBtn`), dış yedek yükleme butonu (`#importBackupBtn`).
+  - Yedek geçmişi tablosu, tekil proje kurtarma modalı (`#restoreProjectModal`) ve silme/indirme butonları.
+* **Kabul Testleri & Doğrulama:**
+  - `FELAKET KURTARMA & YEDEKLEME SİSTEMİ` kabul testi yazıldı.
+  - **29/29 Birim & Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** başarıyla geçti.

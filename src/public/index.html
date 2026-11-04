@@ -155,6 +155,11 @@
           <span class="nav-text">E-posta & Otomatik Rapor</span>
           <span class="nav-badge gold-badge">Exchange</span>
         </button>
+        <button class="nav-item admin-only" id="navBackupBtn" data-nav="view-backup-recovery">
+          <span class="nav-icon">🛡️</span>
+          <span class="nav-text">Yedekleme & Kurtarma</span>
+          <span class="nav-badge" style="background:#fee2e2; color:#b91c1c; font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:10px;">Disaster</span>
+        </button>
       </nav>
 
       <!-- Alt Profil ve Dil Alanı -->
@@ -1008,6 +1013,173 @@
         </div>
       </section>
 
+      <!-- ================= GÖRÜNÜM 9: YEDEKLEME & FELAKET KURTARMA (DISASTER RECOVERY) ================= -->
+      <section id="view-backup-recovery" class="view-section">
+        <!-- Üst Başlık & Hızlı Aksiyon Kartı -->
+        <div class="card email-auto-hero-card" style="margin-bottom:20px;">
+          <div class="email-hero-left">
+            <div class="email-hero-badge-row" style="flex-wrap:wrap; gap:8px;">
+              <span class="report-badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">DISASTER RECOVERY</span>
+              <span class="smtp-status-pill live" style="background:rgba(16,185,129,0.12); color:#047857; border:1px solid rgba(16,185,129,0.3);">
+                🛡️ Otomatik Güvenlik Koruması (Pre-Restore Safety) Aktif
+              </span>
+              <span class="smtp-status-pill live" style="background:rgba(37,99,235,0.12); color:#1d4ed8; border:1px solid rgba(37,99,235,0.3);">
+                🔒 SHA-256 Sağlama Doğrulamalı
+              </span>
+            </div>
+            <h2>🛡️ Yedekleme & Felaket Kurtarma Merkezi</h2>
+            <p class="email-hero-desc">
+              Sistem bütünlüğünü korumak, kritik veri kayıplarını engellemek ve istenirse yalnızca tek bir projeyi diğer projelere dokunmadan eski haline döndürmek için yedekleme ve kurtarma konsolu.
+            </p>
+          </div>
+          <div class="email-hero-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="file" id="backupFileInput" accept=".json" style="display:none;" />
+            <button type="button" class="action-btn secondary-btn" id="importBackupBtn" title="Harici bir JSON yedek dosyasını içe aktar">
+              <span>📤</span> Yedek İçe Aktar (.json)
+            </button>
+            <button type="button" class="action-btn primary-btn" id="createBackupNowBtn" style="background:#dc2626; border-color:#b91c1c;">
+              <span>⚡</span> Hemen Tam Yedek Al
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Adet KPI Kartı -->
+        <div class="kpi-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:20px;">
+          <div class="card clean-card" style="padding:16px;">
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Son Başarılı Yedek</div>
+            <div id="kpiLastBackupTime" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:var(--text-primary);">-</div>
+            <div id="kpiLastBackupType" style="font-size:0.75rem; margin-top:4px; color:#059669; font-weight:600;">Henüz yedek alınmadı</div>
+          </div>
+          <div class="card clean-card" style="padding:16px;">
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Toplam Yedek Sayısı & Boyut</div>
+            <div id="kpiTotalBackups" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:var(--text-primary);">0 Adet</div>
+            <div id="kpiTotalBackupSize" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">0 KB Disk Alanı</div>
+          </div>
+          <div class="card clean-card" style="padding:16px;">
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Günlük Otomatik Plan</div>
+            <div id="kpiDailyStatus" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:#059669;">Aktif (02:00)</div>
+            <div id="kpiDailyRetention" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">14 gün saklama süresi</div>
+          </div>
+          <div class="card clean-card" style="padding:16px;">
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Haftalık Otomatik Plan</div>
+            <div id="kpiWeeklyStatus" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:#2563eb;">Aktif (Pazar 03:00)</div>
+            <div id="kpiWeeklyRetention" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">8 hafta saklama süresi</div>
+          </div>
+        </div>
+
+        <!-- Ana Düzen: Sol Planlama Formu, Sağ/Alt Yedek Tablosu -->
+        <div style="display:grid; grid-template-columns: 360px 1fr; gap:20px; align-items:start;">
+          <!-- SOL KART: Otomatik Zamanlayıcı Ayarları -->
+          <div class="card clean-card" style="padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+              <h3 style="font-size:1.05rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px;">
+                <span>⏱️</span> Otomatik Yedekleme Planı
+              </h3>
+            </div>
+            <form id="backupScheduleForm">
+              <!-- Günlük Otomatik Yedekleme -->
+              <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px; margin-bottom:14px;">
+                <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-weight:600;">
+                  <span>📅 Günlük Otomatik Yedek</span>
+                  <input type="checkbox" id="schedDailyEnabled" checked style="width:18px; height:18px;" />
+                </label>
+                <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <div>
+                    <label style="font-size:0.75rem; color:var(--text-tertiary);">Çalışma Saati</label>
+                    <input type="time" id="schedDailyTime" value="02:00" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                  </div>
+                  <div>
+                    <label style="font-size:0.75rem; color:var(--text-tertiary);">Saklama (Gün)</label>
+                    <input type="number" id="schedDailyRetention" value="14" min="1" max="365" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Haftalık Otomatik Yedekleme -->
+              <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px; margin-bottom:14px;">
+                <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-weight:600;">
+                  <span>🗓️ Haftalık Arşiv Yedeği</span>
+                  <input type="checkbox" id="schedWeeklyEnabled" checked style="width:18px; height:18px;" />
+                </label>
+                <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <div>
+                    <label style="font-size:0.75rem; color:var(--text-tertiary);">Hangi Gün?</label>
+                    <select id="schedWeeklyDay" class="styled-select" style="padding:6px 10px; font-size:0.85rem;">
+                      <option value="0">Pazar</option>
+                      <option value="1">Pazartesi</option>
+                      <option value="2">Salı</option>
+                      <option value="3">Çarşamba</option>
+                      <option value="4">Perşembe</option>
+                      <option value="5">Cuma</option>
+                      <option value="6">Cumartesi</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size:0.75rem; color:var(--text-tertiary);">Çalışma Saati</label>
+                    <input type="time" id="schedWeeklyTime" value="03:00" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                  </div>
+                </div>
+                <div style="margin-top:8px;">
+                  <label style="font-size:0.75rem; color:var(--text-tertiary);">Saklama Süresi (Hafta)</label>
+                  <input type="number" id="schedWeeklyRetention" value="8" min="1" max="104" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                </div>
+              </div>
+
+              <!-- Bildirim E-postası -->
+              <div class="form-group" style="margin-bottom:16px;">
+                <label for="schedNotifyEmail" style="font-size:0.82rem; font-weight:600;">Durum & Hata Bildirim E-postası</label>
+                <input type="email" id="schedNotifyEmail" class="styled-input" placeholder="admin@fggroup.com.tr" />
+                <span style="font-size:0.74rem; color:var(--text-tertiary);">Yedek alındığında veya hata oluştuğunda özet bildirim gönderilir.</span>
+              </div>
+
+              <button type="submit" class="action-btn primary-btn" style="width:100%; justify-content:center;">
+                💾 Zamanlama Planını Kaydet
+              </button>
+            </form>
+          </div>
+
+          <!-- SAĞ KART: Mevcut Yedekler ve Kurtarma Masası -->
+          <div class="card clean-card" style="padding:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+              <div>
+                <h3 style="font-size:1.05rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px;">
+                  <span>📦</span> Alınan Yedekler & Kurtarma Noktaları
+                </h3>
+                <p style="font-size:0.78rem; color:var(--text-tertiary); margin-top:2px;">
+                  Herhangi bir yedeği doğrudan tam sistem olarak veya tek bir projeyi seçerek geri yükleyebilirsiniz.
+                </p>
+              </div>
+              <button type="button" class="action-btn secondary-btn sm-btn" id="refreshBackupsBtn" title="Listeyi Yenile">
+                🔄 Yenile
+              </button>
+            </div>
+
+            <!-- Tablo -->
+            <div style="overflow-x:auto;">
+              <table class="styled-table mini-table" id="backupHistoryTable">
+                <thead>
+                  <tr>
+                    <th>Tarih & Saat</th>
+                    <th>Yedek Türü</th>
+                    <th>Açıklama / Not</th>
+                    <th>Kapsam Özeti</th>
+                    <th>Boyut & SHA</th>
+                    <th style="text-align:right;">Kurtarma & Aksiyon</th>
+                  </tr>
+                </thead>
+                <tbody id="backupHistoryTableBody">
+                  <tr>
+                    <td colspan="6" style="text-align:center; padding:24px; color:var(--text-tertiary);">
+                      Yedekler yükleniyor...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -1799,6 +1971,54 @@
       <button id="wpCloseFooterBtn" class="action-btn secondary-btn sm-btn">Kapat</button>
     </div>
   </aside>
+
+  <!-- 8. Tekil Proje Kurtarma Modalı -->
+  <div id="restoreProjectModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 580px;">
+      <div class="modal-header" style="background:#fef2f2; border-bottom:1px solid #fee2e2;">
+        <div>
+          <h3 style="color:#991b1b; display:flex; align-items:center; gap:8px;">
+            <span>🎯</span> Yedekten Tekil Proje Kurtar
+          </h3>
+          <p style="font-size:0.78rem; color:#b91c1c; margin-top:2px;">
+            Diğer projelere dokunmadan yalnızca seçilen projeyi bu yedekteki haline döndürün.
+          </p>
+        </div>
+        <button class="modal-close" data-close="restoreProjectModal">&times;</button>
+      </div>
+      <form id="restoreProjectForm" class="modal-body" style="padding:20px;">
+        <input type="hidden" id="restoreBackupId" />
+
+        <div id="restoreModalBackupInfo" style="padding:12px; background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; margin-bottom:14px; font-size:0.82rem;">
+          <!-- Dinamik yedek bilgisi -->
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label for="restoreProjectSelect" style="font-weight:600; margin-bottom:6px; display:block;">
+            Kurtarılacak Projeyi Seçin *
+          </label>
+          <select id="restoreProjectSelect" class="styled-select" style="width:100%; font-weight:500;">
+            <!-- JS ile doldurulacak -->
+          </select>
+        </div>
+
+        <div id="restoreProjectPreviewBox" style="display:none; padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; margin-bottom:14px; font-size:0.82rem; color:#166534;">
+          <!-- Seçilen projenin yedekteki görev ve üye sayısı -->
+        </div>
+
+        <div style="padding:10px 14px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; margin-bottom:16px; font-size:0.8rem; color:#92400e; line-height:1.4;">
+          ⚠️ <strong>Güvenlik Garantisi:</strong> Geri yükleme başlatıldığı anda sistem mevcut durumun otomatik güvenlik yedeğini (<code>PRE_RESTORE_SAFETY</code>) anında alır. İstediğiniz zaman bu adımdan önceki duruma dönebilirsiniz.
+        </div>
+
+        <div class="modal-footer" style="padding:0; border:none; display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="action-btn secondary-btn" data-close="restoreProjectModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn" id="confirmRestoreProjectBtn" style="background:#dc2626; border-color:#b91c1c;">
+            🚀 Seçili Projeyi Geri Yükle
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div id="toastContainer" class="toast-container"></div>
 

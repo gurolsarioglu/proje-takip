@@ -11,6 +11,7 @@ import { ReportingService } from '../src/modules/reporting/reporting.service.js'
 import { MicrosoftTodoService } from '../src/modules/microsoft_todo/microsoft_todo.service.js';
 import { EmailAndAutomationService } from '../src/modules/email/email.service.js';
 import { CryptoVault } from '../src/core/crypto-vault.js';
+import { BackupAndRecoveryService } from '../src/modules/backup/backup.service.js';
 import { seedDatabase } from '../src/database/seed.js';
 import { PostgresEngine } from '../src/database/postgres.js';
 
@@ -25,6 +26,7 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
   const reportingService = new ReportingService(db, projectService);
   const microsoftTodoService = new MicrosoftTodoService(db);
   const emailService = new EmailAndAutomationService(db, taskService, delayService, projectService, notificationService);
+  const backupService = new BackupAndRecoveryService(db);
 
   // Setup Test Tenants and Users
   const tenantA = authService.createTenant('Acme Holding', 'entra-tenant-acme-111');
@@ -1104,5 +1106,139 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     );
     assert.equal(managerPersonalTask.project_id, null);
     assert.equal(managerPersonalTask.assignee_id, authManagerA.user_id);
+  });
+
+  await t.test('FELAKET KURTARMA & YEDEKLEME SİSTEMİ: Otomatik Güvenlik Yedeği (Pre-Restore Safety), Tekil Proje Kurtarma, Tam Sistem Geri Yükleme ve SHA-256 Doğrulama', async () => {
+    // 1. Manuel Yedek Alma ve SHA-256 Bütünlük Doğrulaması
+    const initialBackup = await backupService.createBackup(
+      authManagerA,
+      'İlk Temiz Sistem Durumu Yedeği',
+      'MANUAL',
+      'Kabul testi başlangıç temiz sistem yedeği'
+    );
+
+    assert.ok(initialBackup.id);
+    assert.equal(initialBackup.type, 'MANUAL');
+    assert.ok(initialBackup.sha256.length === 64, 'SHA-256 hash 64 karakter uzunluğunda olmalıdır');
+    assert.ok(initialBackup.summary.project_count >= 1);
+    assert.ok(initialBackup.summary.task_count >= 1);
+
+    // 2. İki Proje ile Tekil Proje Kurtarma Senaryosu:
+    // Proje 1 (Hasar Görecek Proje) ve Proje 2 (Dokunulmayacak Sağlam Proje)
+    const pRestore1 = projectService.createProject(
+      authManagerA,
+      'Kurtarılacak Kritik ERP Projesi',
+      'Tekil proje kurtarma testi için oluşturuldu',
+      '2026-11-01',
+      '2026-11-30'
+    );
+    const pTask1 = taskService.createTask(
+      authManagerA,
+      pRestore1.id,
+      'ERP Faz 1 Analiz',
+      '2026-11-01',
+      '2026-11-05',
+      managerA.id
+    );
+
+    const pUntouched2 = projectService.createProject(
+      authManagerA,
+      'Dokunulmayacak Mobil Uygulama Projesi',
+      'Kurtarma sırasında bu projeye kesinlikle dokunulmamalıdır',
+      '2026-11-01',
+      '2026-11-30'
+    );
+    const pTask2 = taskService.createTask(
+      authManagerA,
+      pUntouched2.id,
+      'Mobil Tasarım Onayı',
+      '2026-11-01',
+      '2026-11-05',
+      managerA.id
+    );
+
+    // Bu aşamada temiz bir yedek alıyoruz
+    const cleanProjectBackup = await backupService.createBackup(
+      authManagerA,
+      'İki Projenin de Temiz Olduğu Yedek',
+      'MANUAL'
+    );
+
+    // Simülasyon: Proje 1'de kaza gerçekleşir (görev silinir ve yanlış görev eklenir)
+    db.getRawState().tasks = db.getRawState().tasks.filter(t => t.id !== pTask1.id);
+    const corruptedTask = taskService.createTask(
+      authManagerA,
+      pRestore1.id,
+      'Hatalı Eklenen Görev',
+      '2026-11-10',
+      '2026-11-12',
+      managerA.id
+    );
+
+    // Proje 2'ye ise yeni meşru bir görev eklenir (bunun kaybolmaması şarttır!)
+    const pTask2New = taskService.createTask(
+      authManagerA,
+      pUntouched2.id,
+      'Mobil API Entegrasyonu (Yeni ve Korunmalı)',
+      '2026-11-06',
+      '2026-11-10',
+      managerA.id
+    );
+
+    // Kontrol: Şu an Proje 1'de sadece 'Hatalı Eklenen Görev' var
+    const p1CurrentTasks = taskService.listTasks(authManagerA, pRestore1.id);
+    assert.equal(p1CurrentTasks.length, 1);
+    assert.equal(p1CurrentTasks[0].id, corruptedTask.id);
+
+    // Kontrol: Proje 2'de 2 görev var
+    assert.equal(taskService.listTasks(authManagerA, pUntouched2.id).length, 2);
+
+    // 3. YALNIZCA PROJE 1 İÇİN TEKİL PROJE KURTARMA ÇALIŞTIRILIYOR
+    const restoreProjResult = await backupService.restoreSingleProject(
+      authManagerA,
+      cleanProjectBackup.id,
+      pRestore1.id
+    );
+    assert.equal(restoreProjResult.restored, true);
+
+    // Doğrulama A: Otomatik Güvenlik Yedeği (PRE_RESTORE_SAFETY) oluşturulmuş olmalıdır!
+    const backupsAfterRestore = db.getBackupList(tenantA.id);
+    const safetyBackup = backupsAfterRestore.find(b => b.type === 'PRE_RESTORE_SAFETY');
+    assert.ok(safetyBackup, 'Geri yükleme öncesinde otomatik PRE_RESTORE_SAFETY yedeği alınmış olmalıdır');
+
+    // Doğrulama B: Proje 1 kurtarıldı mı? (Eski silinen pTask1 geri geldi, hatalı eklenen görev temizlendi)
+    const p1RestoredTasks = taskService.listTasks(authManagerA, pRestore1.id);
+    assert.equal(p1RestoredTasks.length, 1);
+    assert.equal(p1RestoredTasks[0].id, pTask1.id);
+    assert.equal(p1RestoredTasks[0].title, 'ERP Faz 1 Analiz');
+
+    // Doğrulama C: Proje 2 KESİNLİKLE BOZULMADI MI? (Yeni eklenen pTask2New hala duruyor olmalı!)
+    const p2TasksAfter = taskService.listTasks(authManagerA, pUntouched2.id);
+    assert.equal(p2TasksAfter.length, 2);
+    assert.ok(p2TasksAfter.some(t => t.id === pTask2New.id), 'Proje 2 meşru görevleri tekil proje kurtarmadan etkilenmemelidir');
+
+    // 4. Zamanlama Ayarları Güncelleme & Doğrulama
+    const updatedSchedule = backupService.updateScheduleConfig(authManagerA, {
+      daily_enabled: true,
+      daily_time: '04:30',
+      daily_retention_days: 21,
+      weekly_enabled: true,
+      weekly_day: 1, // Pazartesi
+      weekly_time: '05:00',
+      weekly_retention_weeks: 12,
+      notify_email: 'sistem-admin@acme.com'
+    });
+    assert.equal(updatedSchedule.daily_time, '04:30');
+    assert.equal(updatedSchedule.daily_retention_days, 21);
+    assert.equal(updatedSchedule.weekly_day, 1);
+    assert.equal(updatedSchedule.notify_email, 'sistem-admin@acme.com');
+
+    // 5. Tam Sistem Geri Yükleme (Full Restore)
+    const fullRestoreResult = await backupService.restoreFull(authManagerA, initialBackup.id);
+    assert.equal(fullRestoreResult.restored, true);
+
+    // Initial yedeğe dönüldüğünde pRestore1 projesi henüz hiç var olmamıştı
+    const p1AfterFull = db.getProjectById(tenantA.id, pRestore1.id);
+    assert.equal(p1AfterFull, undefined, 'Tam geri yükleme sonrasında ilk yedek durumuna eksiksiz dönülmelidir');
   });
 });

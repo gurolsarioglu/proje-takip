@@ -397,3 +397,55 @@ export interface EmailOutboxItem {
   action_taken?: string;
   sent_at: string;
 }
+
+// 10. Yedekleme & Kurtarma (Backup & Disaster Recovery)
+export type BackupType = 'MANUAL' | 'SCHEDULED_DAILY' | 'SCHEDULED_WEEKLY' | 'PRE_RESTORE_SAFETY';
+
+export interface BackupMetadata {
+  id: UUID;
+  tenant_id: UUID;
+  name: string;
+  note?: string;
+  type: BackupType;
+  created_at: string;
+  created_by_name: string;
+  size_bytes: number;
+  sha256: string;
+  summary: {
+    project_count: number;
+    task_count: number;
+    user_count: number;
+    member_count: number;
+  };
+  file_path: string;
+}
+
+export interface BackupScheduleConfig {
+  daily_enabled: boolean;
+  daily_time: string; // '23:00'
+  daily_retention_days: number; // e.g. 14
+  weekly_enabled: boolean;
+  weekly_day: number; // 0: Sunday ... 6: Saturday
+  weekly_time: string; // '22:00'
+  weekly_retention_weeks: number; // e.g. 8
+  notify_email?: string;
+  last_daily_run?: string;
+  last_weekly_run?: string;
+}
+
+export interface BackupPayload {
+  version: string;
+  exported_at: string;
+  tenant_id: UUID;
+  tenant?: Tenant;
+  projects: Project[];
+  tasks: Task[];
+  task_assignments: TaskAssignment[];
+  task_dependencies: TaskDependency[];
+  task_plan_changes: TaskPlanChange[];
+  delay_records: DelayRecord[];
+  project_members: ProjectMember[];
+  project_plan_changes: ProjectPlanChange[];
+  visibility_requests: VisibilityRequest[];
+  users: User[];
+}

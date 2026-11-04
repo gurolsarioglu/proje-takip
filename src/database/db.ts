@@ -18,6 +18,9 @@ import {
   SmtpConfig,
   ScheduledReportJob,
   EmailOutboxItem,
+  BackupMetadata,
+  BackupScheduleConfig,
+  BackupPayload,
   UUID
 } from '../core/types.js';
 import { CryptoVault } from '../core/crypto-vault.js';
@@ -40,6 +43,8 @@ export interface DatabaseState {
   smtp_configs: SmtpConfig[];
   scheduled_reports: ScheduledReportJob[];
   email_outbox: EmailOutboxItem[];
+  backups: BackupMetadata[];
+  backup_schedules: Record<string, BackupScheduleConfig>;
 }
 
 export class Database {
@@ -69,6 +74,12 @@ export class Database {
         }
         if (!Array.isArray(this.state.email_outbox)) {
           this.state.email_outbox = [];
+        }
+        if (!Array.isArray(this.state.backups)) {
+          this.state.backups = [];
+        }
+        if (!this.state.backup_schedules || typeof this.state.backup_schedules !== 'object') {
+          this.state.backup_schedules = {};
         }
         // Düz metin kalmış SMTP şifresi varsa anında AES-256-GCM ile şifrele
         let smtpMigrated = false;
@@ -135,7 +146,9 @@ export class Database {
       microsoft_todos: [],
       smtp_configs: [],
       scheduled_reports: [],
-      email_outbox: []
+      email_outbox: [],
+      backups: [],
+      backup_schedules: {}
     };
   }
 
@@ -598,5 +611,128 @@ export class Database {
     Object.assign(item, updates);
     this.save();
     return item;
+  }
+
+  // --- Backups & Disaster Recovery ---
+  public getBackupScheduleConfig(tenant_id: UUID): BackupScheduleConfig {
+    return this.state.backup_schedules?.[tenant_id] || {
+      daily_enabled: true,
+      daily_time: '23:00',
+      daily_retention_days: 14,
+      weekly_enabled: true,
+      weekly_day: 0, // Sunday
+      weekly_time: '22:00',
+      weekly_retention_weeks: 8,
+      notify_email: ''
+    };
+  }
+
+  public saveBackupScheduleConfig(tenant_id: UUID, cfg: BackupScheduleConfig): void {
+    if (!this.state.backup_schedules) this.state.backup_schedules = {};
+    this.state.backup_schedules[tenant_id] = cfg;
+    this.save();
+  }
+
+  public getBackupList(tenant_id: UUID): BackupMetadata[] {
+    return (this.state.backups || [])
+      .filter(b => b.tenant_id === tenant_id)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public getBackupById(tenant_id: UUID, id: UUID): BackupMetadata | undefined {
+    return (this.state.backups || []).find(b => b.tenant_id === tenant_id && b.id === id);
+  }
+
+  public addBackupRecord(meta: BackupMetadata): void {
+    if (!this.state.backups) this.state.backups = [];
+    this.state.backups.push(meta);
+    this.save();
+  }
+
+  public deleteBackupRecord(tenant_id: UUID, id: UUID): void {
+    if (!this.state.backups) return;
+    this.state.backups = this.state.backups.filter(b => !(b.tenant_id === tenant_id && b.id === id));
+    this.save();
+  }
+
+  /**
+   * Tam Sistem Geri Yükleme: Tenant'a ait tüm verileri yedek paketindeki verilerle değiştirir
+   */
+  public restoreFullState(tenant_id: UUID, payload: BackupPayload): void {
+    this.state.projects = this.state.projects.filter(p => p.tenant_id !== tenant_id).concat(payload.projects || []);
+    this.state.tasks = this.state.tasks.filter(t => t.tenant_id !== tenant_id).concat(payload.tasks || []);
+    this.state.task_assignments = this.state.task_assignments.filter(a => a.tenant_id !== tenant_id).concat(payload.task_assignments || []);
+    this.state.task_dependencies = this.state.task_dependencies.filter(d => d.tenant_id !== tenant_id).concat(payload.task_dependencies || []);
+    this.state.task_plan_changes = this.state.task_plan_changes.filter(c => c.tenant_id !== tenant_id).concat(payload.task_plan_changes || []);
+    this.state.delay_records = this.state.delay_records.filter(r => r.tenant_id !== tenant_id).concat(payload.delay_records || []);
+    this.state.project_members = this.state.project_members.filter(m => m.tenant_id !== tenant_id).concat(payload.project_members || []);
+    this.state.project_plan_changes = this.state.project_plan_changes.filter(c => c.tenant_id !== tenant_id).concat(payload.project_plan_changes || []);
+    this.state.visibility_requests = this.state.visibility_requests.filter(v => v.tenant_id !== tenant_id).concat(payload.visibility_requests || []);
+
+    if (payload.users && payload.users.length > 0) {
+      const existingUserMap = new Map(this.state.users.map(u => [u.id, u]));
+      for (const u of payload.users) {
+        if (existingUserMap.has(u.id)) {
+          const current = existingUserMap.get(u.id)!;
+          Object.assign(current, u);
+        } else {
+          this.state.users.push(u);
+        }
+      }
+    }
+
+    this.save();
+  }
+
+  /**
+   * Tekil Proje Kurtarma: Diğer projelere dokunmadan yalnızca hedef projeyi ve bağlı verilerini geri yükler
+   */
+  public restoreSingleProject(tenant_id: UUID, projectId: UUID, payload: BackupPayload): boolean {
+    const backupProject = (payload.projects || []).find(p => p.id === projectId);
+    if (!backupProject) return false;
+
+    // 1. Mevcut projeyi ve bağlı verilerini temizle
+    this.state.projects = this.state.projects.filter(p => !(p.tenant_id === tenant_id && p.id === projectId));
+    const oldProjectTaskIds = new Set(
+      this.state.tasks.filter(t => t.tenant_id === tenant_id && t.project_id === projectId).map(t => t.id)
+    );
+    this.state.tasks = this.state.tasks.filter(t => !(t.tenant_id === tenant_id && t.project_id === projectId));
+    this.state.task_assignments = this.state.task_assignments.filter(a => !(a.tenant_id === tenant_id && oldProjectTaskIds.has(a.task_id)));
+    this.state.task_dependencies = this.state.task_dependencies.filter(d => !(d.tenant_id === tenant_id && (oldProjectTaskIds.has(d.predecessor_id) || oldProjectTaskIds.has(d.successor_id))));
+    this.state.task_plan_changes = this.state.task_plan_changes.filter(c => !(c.tenant_id === tenant_id && oldProjectTaskIds.has(c.task_id)));
+    this.state.delay_records = this.state.delay_records.filter(r => !(r.tenant_id === tenant_id && oldProjectTaskIds.has(r.task_id)));
+    this.state.project_members = this.state.project_members.filter(m => !(m.tenant_id === tenant_id && m.project_id === projectId));
+    this.state.project_plan_changes = this.state.project_plan_changes.filter(c => !(c.tenant_id === tenant_id && c.project_id === projectId));
+    this.state.visibility_requests = this.state.visibility_requests.filter(v => !(v.tenant_id === tenant_id && v.project_id === projectId));
+
+    // 2. Yedekten hedef projeyi ve bağlı verilerini yükle
+    this.state.projects.push(backupProject);
+    const backupTasks = (payload.tasks || []).filter(t => t.project_id === projectId);
+    const backupTaskIds = new Set(backupTasks.map(t => t.id));
+    this.state.tasks.push(...backupTasks);
+
+    const backupAssignments = (payload.task_assignments || []).filter(a => backupTaskIds.has(a.task_id));
+    this.state.task_assignments.push(...backupAssignments);
+
+    const backupDeps = (payload.task_dependencies || []).filter(d => backupTaskIds.has(d.predecessor_id) || backupTaskIds.has(d.successor_id));
+    this.state.task_dependencies.push(...backupDeps);
+
+    const backupPlanChanges = (payload.task_plan_changes || []).filter(c => backupTaskIds.has(c.task_id));
+    this.state.task_plan_changes.push(...backupPlanChanges);
+
+    const backupDelays = (payload.delay_records || []).filter(r => backupTaskIds.has(r.task_id));
+    this.state.delay_records.push(...backupDelays);
+
+    const backupMembers = (payload.project_members || []).filter(m => m.project_id === projectId);
+    this.state.project_members.push(...backupMembers);
+
+    const backupProjPlanChanges = (payload.project_plan_changes || []).filter(c => c.project_id === projectId);
+    this.state.project_plan_changes.push(...backupProjPlanChanges);
+
+    const backupVis = (payload.visibility_requests || []).filter(v => v.project_id === projectId);
+    this.state.visibility_requests.push(...backupVis);
+
+    this.save();
+    return true;
   }
 }
