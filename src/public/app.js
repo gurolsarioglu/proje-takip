@@ -3006,12 +3006,20 @@ function setupEventListeners() {
   // Yeni Görev Kaydet (Proje Görevi veya Bireysel To-Do)
   document.getElementById('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const title = document.getElementById('tTitle').value.trim();
     const type = document.getElementById('tType')?.value || 'TASK';
     const priority = document.getElementById('tPriority')?.value || 'NORMAL';
     const selectedProjectId = document.getElementById('tProject')?.value || null;
     const workflow_step = document.getElementById('tWorkflowStep')?.value || undefined;
-    const task_definition = document.getElementById('tTaskDefinition')?.value || undefined;
+    let task_definition = document.getElementById('tTaskDefinition')?.value || undefined;
+    const customDef = document.getElementById('tCustomDefInput')?.value?.trim();
+    if (task_definition === '__custom__' || !task_definition) {
+      task_definition = customDef || undefined;
+    }
+
+    const title = (workflow_step && task_definition)
+      ? `[${workflow_step}] ${task_definition}`
+      : (task_definition || workflow_step || 'Yeni Görev');
+
     const finalAssigneeId = selectedProjectId
       ? (document.getElementById('tAssignee').value || undefined)
       : state.currentUser?.id;
@@ -3038,6 +3046,8 @@ function setupEventListeners() {
     showToast(isPersonal ? '📌 Kişisel To-Do başarıyla oluşturuldu.' : '✅ Proje görevi başarıyla oluşturuldu.', 'success');
     document.getElementById('taskModal').classList.remove('open');
     e.target.reset();
+    const customInput = document.getElementById('tCustomDefInput');
+    if (customInput) customInput.style.display = 'none';
     await loadProjectTasks(selectedProjectId || state.currentProjectId || '');
   });
 
@@ -3775,7 +3785,7 @@ function populateTaskModalAssignees(recommendedDept = null) {
 function populateWorkflowStepDropdown(selectedName = '') {
   const stepSelect = document.getElementById('tWorkflowStep');
   if (!stepSelect) return;
-  let options = '<option value="">İş Adımı Seçiniz (KOLEKSİYON, KUMAŞ, TEKNİK ÇİZİM, YIKAMA, vb.)...</option>';
+  let options = '<option value="">İş Adımı Seçiniz (KUMAŞ, DİKİM, YIKAMA, vb.)...</option>';
   (state.workflowSteps || []).forEach(s => {
     const isSel = s.name === selectedName ? 'selected' : '';
     options += `<option value="${escapeHtml(s.name)}" ${isSel}>${escapeHtml(s.name)}</option>`;
@@ -3786,43 +3796,52 @@ function populateWorkflowStepDropdown(selectedName = '') {
 
 function populateTaskDefinitionDropdown(stepName = '', selectedTitle = '') {
   const defSelect = document.getElementById('tTaskDefinition');
+  const customInput = document.getElementById('tCustomDefInput');
   if (!defSelect) return;
   if (!stepName) {
-    defSelect.innerHTML = '<option value="">Önce yukarıdan bir İş Adımı seçiniz...</option>';
+    defSelect.innerHTML = '<option value="">Önce İş Adımı seçiniz...</option><option value="__custom__">✍️ Farklı / Özel Tanım Yaz...</option>';
+    if (customInput) customInput.style.display = 'none';
     return;
   }
-  const matching = (state.taskDefinitions || []).filter(d => d.workflow_step.toUpperCase() === stepName.toUpperCase());
-  if (matching.length === 0) {
-    defSelect.innerHTML = '<option value="">(Bu iş adımına henüz şablon tanım eklenmemiş)</option>';
-    return;
-  }
-  let options = '<option value="">Görev Tanımı Seçiniz (Katalog Şablonu)...</option>';
+  const matching = (state.taskDefinitions || []).filter(d => (d.step_name || d.workflow_step || '').toUpperCase() === stepName.toUpperCase());
+  let options = '<option value="">Görev Tanımı Seçiniz...</option>';
   matching.forEach(d => {
     const isSel = d.title === selectedTitle ? 'selected' : '';
-    options += `<option value="${escapeHtml(d.title)}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.department || '')}" ${isSel}>${escapeHtml(d.title)}</option>`;
+    options += `<option value="${escapeHtml(d.title)}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.suggested_department || d.department || '')}" ${isSel}>${escapeHtml(d.title)}</option>`;
   });
+  options += '<option value="__custom__">✍️ Farklı / Özel Tanım Yaz...</option>';
   defSelect.innerHTML = options;
   if (selectedTitle) defSelect.value = selectedTitle;
+  if (customInput) customInput.style.display = (defSelect.value === '__custom__') ? 'block' : 'none';
 }
 
 function setupWorkflowModalStepListeners() {
   const stepSelect = document.getElementById('tWorkflowStep');
   const defSelect = document.getElementById('tTaskDefinition');
+  const customInput = document.getElementById('tCustomDefInput');
   const titleInput = document.getElementById('tTitle');
   const startInput = document.getElementById('tStart');
   const dueInput = document.getElementById('tDue');
+
+  const syncTitle = () => {
+    const s = stepSelect ? stepSelect.value : '';
+    let d = defSelect ? defSelect.value : '';
+    if (d === '__custom__' && customInput) {
+      d = customInput.value.trim();
+    }
+    const finalT = (s && d) ? `[${s}] ${d}` : (d || s || '');
+    if (titleInput) titleInput.value = finalT;
+  };
 
   if (stepSelect && !stepSelect.dataset.listenerAttached) {
     stepSelect.dataset.listenerAttached = 'true';
     stepSelect.addEventListener('change', () => {
       const stepVal = stepSelect.value;
       populateTaskDefinitionDropdown(stepVal);
+      syncTitle();
 
       const stepObj = (state.workflowSteps || []).find(s => s.name === stepVal);
       if (stepVal) {
-        if (!titleInput.value || titleInput.value.startsWith('[')) {
-          titleInput.value = `[${stepVal}] `;
-        }
         const projSelect = document.getElementById('tProject');
         if (projSelect && projSelect.value) {
           populateTaskModalAssignees(stepObj?.department || null);
@@ -3834,15 +3853,18 @@ function setupWorkflowModalStepListeners() {
   if (defSelect && !defSelect.dataset.listenerAttached) {
     defSelect.dataset.listenerAttached = 'true';
     defSelect.addEventListener('change', () => {
-      const stepVal = stepSelect ? stepSelect.value : '';
       const defVal = defSelect.value;
-      if (defVal) {
-        if (stepVal) {
-          titleInput.value = `[${stepVal}] ${defVal}`;
-        } else {
-          titleInput.value = defVal;
+      if (defVal === '__custom__') {
+        if (customInput) {
+          customInput.style.display = 'block';
+          customInput.focus();
         }
+      } else {
+        if (customInput) customInput.style.display = 'none';
+      }
+      syncTitle();
 
+      if (defVal && defVal !== '__custom__') {
         const selOption = defSelect.selectedOptions[0];
         const durationDays = selOption?.dataset?.duration ? parseInt(selOption.dataset.duration, 10) : 7;
         const now = new Date();
@@ -3857,6 +3879,13 @@ function setupWorkflowModalStepListeners() {
           populateTaskModalAssignees(defDept);
         }
       }
+    });
+  }
+
+  if (customInput && !customInput.dataset.listenerAttached) {
+    customInput.dataset.listenerAttached = 'true';
+    customInput.addEventListener('input', () => {
+      syncTitle();
     });
   }
 }
@@ -3920,6 +3949,19 @@ function populateTaskModalSelects() {
       predEl.innerHTML = '<option value="">(Bireysel görevlerde öncül bağımlılık bulunmaz)</option>';
       predEl.disabled = true;
     }
+    const stepSelect = document.getElementById('tWorkflowStep');
+    const defSelect = document.getElementById('tTaskDefinition');
+    const customInput = document.getElementById('tCustomDefInput');
+    if (stepSelect) {
+      stepSelect.innerHTML = '<option value="KİŞİSEL" selected>📌 KİŞİSEL / BİREYSEL</option>';
+    }
+    if (defSelect) {
+      defSelect.innerHTML = '<option value="__custom__" selected>✍️ Kişisel Görevinizi / Notunuzu Yazınız...</option>';
+    }
+    if (customInput) {
+      customInput.style.display = 'block';
+      customInput.placeholder = 'Kişisel yapılacak işi yazınız...';
+    }
     updateCatalogBtnVisibility(null);
   } else {
     // PROJE YETKİLİSİ / ADMİN (Şirket projesi seçebilir veya bireysel to-do açabilir)
@@ -3953,6 +3995,21 @@ function populateTaskModalSelects() {
           predEl.innerHTML = '<option value="">(Bireysel görevlerde öncül bağımlılık bulunmaz)</option>';
           predEl.disabled = true;
         }
+
+        const stepSelect = document.getElementById('tWorkflowStep');
+        const defSelect = document.getElementById('tTaskDefinition');
+        const customInput = document.getElementById('tCustomDefInput');
+        if (stepSelect) {
+          stepSelect.innerHTML = '<option value="KİŞİSEL" selected>📌 KİŞİSEL / BİREYSEL</option><option value="GÖREV">📌 GÖREV</option><option value="NOT">📝 NOT / HATIRLATMA</option>' +
+            (state.workflowSteps || []).map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+        }
+        if (defSelect) {
+          defSelect.innerHTML = '<option value="__custom__" selected>✍️ Kişisel Görevinizi / Notunuzu Yazınız...</option>';
+        }
+        if (customInput) {
+          customInput.style.display = 'block';
+          customInput.placeholder = 'Kişisel yapılacak işi yazınız...';
+        }
       } else {
         // Şirket projesi seçildi
         if (projBadge) {
@@ -3973,6 +4030,11 @@ function populateTaskModalSelects() {
           predEl.innerHTML = '<option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>' +
             projTasks.map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'})</option>`).join('');
         }
+
+        populateWorkflowStepDropdown();
+        populateTaskDefinitionDropdown('');
+        const customInput = document.getElementById('tCustomDefInput');
+        if (customInput) customInput.style.display = 'none';
       }
     };
 

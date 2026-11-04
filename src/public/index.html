@@ -158,7 +158,8 @@
         <button class="nav-item admin-only" id="navBackupBtn" data-nav="view-backup-recovery">
           <span class="nav-icon">🛡️</span>
           <span class="nav-text">Yedekleme & Kurtarma</span>
-          <span class="nav-badge" style="background:#fee2e2; color:#b91c1c; font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:10px;">Disaster</span>
+          <span class="nav-badge"
+            style="background:#fee2e2; color:#b91c1c; font-size:0.68rem; font-weight:700; padding:2px 6px; border-radius:10px;">Disaster</span>
         </button>
       </nav>
 
@@ -194,69 +195,72 @@
         </div>
       </div>
     </aside>
-  <!-- Yeni İş Adımı Modalı -->
-  <div id="newWorkflowStepModal" class="modal-backdrop">
-    <div class="modal-content" style="max-width: 440px;">
-      <div class="modal-header">
-        <h3>🏷️ Yeni İş Adımı Tanımla</h3>
-        <button class="modal-close" data-close="newWorkflowStepModal">&times;</button>
+    <!-- Yeni İş Adımı Modalı -->
+    <div id="newWorkflowStepModal" class="modal-backdrop">
+      <div class="modal-content" style="max-width: 440px;">
+        <div class="modal-header">
+          <h3>🏷️ Yeni İş Adımı Tanımla</h3>
+          <button class="modal-close" data-close="newWorkflowStepModal">&times;</button>
+        </div>
+        <form id="newWorkflowStepForm" class="modal-body">
+          <div class="form-group">
+            <label for="stepInputName">İş Adımı Adı * (Büyük Harf)</label>
+            <input type="text" id="stepInputName" required class="styled-input"
+              placeholder="Örn: ÜTÜ PAKET veya AKSESUAR">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="stepInputColor">Etiket Rengi</label>
+              <input type="color" id="stepInputColor" class="styled-input" value="#3b82f6"
+                style="height:38px; padding:2px;">
+            </div>
+            <div class="form-group">
+              <label for="stepInputDept">İlgili Departman</label>
+              <input type="text" id="stepInputDept" class="styled-input" placeholder="Örn: Paketleme">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="action-btn secondary-btn" data-close="newWorkflowStepModal">İptal</button>
+            <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
+          </div>
+        </form>
       </div>
-      <form id="newWorkflowStepForm" class="modal-body">
-        <div class="form-group">
-          <label for="stepInputName">İş Adımı Adı * (Büyük Harf)</label>
-          <input type="text" id="stepInputName" required class="styled-input" placeholder="Örn: ÜTÜ PAKET veya AKSESUAR">
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="stepInputColor">Etiket Rengi</label>
-            <input type="color" id="stepInputColor" class="styled-input" value="#3b82f6" style="height:38px; padding:2px;">
-          </div>
-          <div class="form-group">
-            <label for="stepInputDept">İlgili Departman</label>
-            <input type="text" id="stepInputDept" class="styled-input" placeholder="Örn: Paketleme">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="action-btn secondary-btn" data-close="newWorkflowStepModal">İptal</button>
-          <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
-        </div>
-      </form>
     </div>
-  </div>
 
-  <!-- Yeni Görev Tanımı Modalı -->
-  <div id="newTaskDefModal" class="modal-backdrop">
-    <div class="modal-content" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3>📝 Yeni Görev Tanımı Ekle</h3>
-        <button class="modal-close" data-close="newTaskDefModal">&times;</button>
+    <!-- Yeni Görev Tanımı Modalı -->
+    <div id="newTaskDefModal" class="modal-backdrop">
+      <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+          <h3>📝 Yeni Görev Tanımı Ekle</h3>
+          <button class="modal-close" data-close="newTaskDefModal">&times;</button>
+        </div>
+        <form id="newTaskDefForm" class="modal-body">
+          <div class="form-group">
+            <label for="defInputStep">Bağlı Olduğu İş Adımı *</label>
+            <select id="defInputStep" required class="styled-select"></select>
+          </div>
+          <div class="form-group">
+            <label for="defInputTitle">Görev Tanımı Başlığı *</label>
+            <input type="text" id="defInputTitle" required class="styled-input"
+              placeholder="Örn: Numunelerin ütü ve etiketlenmesi">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="defInputDuration">Varsayılan Termin Süresi (Gün)</label>
+              <input type="number" id="defInputDuration" class="styled-input" value="7" min="1" max="180">
+            </div>
+            <div class="form-group">
+              <label for="defInputDept">Departman</label>
+              <input type="text" id="defInputDept" class="styled-input" placeholder="Örn: Paketleme">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="action-btn secondary-btn" data-close="newTaskDefModal">İptal</button>
+            <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
+          </div>
+        </form>
       </div>
-      <form id="newTaskDefForm" class="modal-body">
-        <div class="form-group">
-          <label for="defInputStep">Bağlı Olduğu İş Adımı *</label>
-          <select id="defInputStep" required class="styled-select"></select>
-        </div>
-        <div class="form-group">
-          <label for="defInputTitle">Görev Tanımı Başlığı *</label>
-          <input type="text" id="defInputTitle" required class="styled-input" placeholder="Örn: Numunelerin ütü ve etiketlenmesi">
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="defInputDuration">Varsayılan Termin Süresi (Gün)</label>
-            <input type="number" id="defInputDuration" class="styled-input" value="7" min="1" max="180">
-          </div>
-          <div class="form-group">
-            <label for="defInputDept">Departman</label>
-            <input type="text" id="defInputDept" class="styled-input" placeholder="Örn: Paketleme">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="action-btn secondary-btn" data-close="newTaskDefModal">İptal</button>
-          <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
-        </div>
-      </form>
     </div>
-  </div>
 
 
     <!-- SAĞ ANA İÇERİK (MAIN CONTENT) -->
@@ -322,7 +326,10 @@
           <button id="newProjectBtn" class="action-btn secondary-btn" style="display:none;" data-i18n="new_project_btn">
             + Yeni Proje
           </button>
-          <button id="applyTextileTemplateBtn" class="action-btn outline-btn sm-btn" style="display:none; font-size:0.78rem; font-weight:700; border-color:#8b5cf6; color:#7c3aed;" title="Excel tablosundaki 8 standart tekstil iş adımını ve ardışık bağımlılıklarını tek tıkla yükleyin">⚡ Tekstil Şablonunu Uygula</button>
+          <button id="applyTextileTemplateBtn" class="action-btn outline-btn sm-btn"
+            style="display:none; font-size:0.78rem; font-weight:700; border-color:#8b5cf6; color:#7c3aed;"
+            title="Excel tablosundaki 8 standart tekstil iş adımını ve ardışık bağımlılıklarını tek tıkla yükleyin">⚡
+            Tekstil Şablonunu Uygula</button>
           <button id="newTaskBtn" class="action-btn primary-btn" data-i18n="new_task_btn">
             + Görev Ekle
           </button>
@@ -1084,51 +1091,70 @@
         <div class="card email-auto-hero-card" style="margin-bottom:20px;">
           <div class="email-hero-left">
             <div class="email-hero-badge-row" style="flex-wrap:wrap; gap:8px;">
-              <span class="report-badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">DISASTER RECOVERY</span>
-              <span class="smtp-status-pill live" style="background:rgba(16,185,129,0.12); color:#047857; border:1px solid rgba(16,185,129,0.3);">
+              <span class="report-badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">DISASTER
+                RECOVERY</span>
+              <span class="smtp-status-pill live"
+                style="background:rgba(16,185,129,0.12); color:#047857; border:1px solid rgba(16,185,129,0.3);">
                 🛡️ Otomatik Güvenlik Koruması (Pre-Restore Safety) Aktif
               </span>
-              <span class="smtp-status-pill live" style="background:rgba(37,99,235,0.12); color:#1d4ed8; border:1px solid rgba(37,99,235,0.3);">
+              <span class="smtp-status-pill live"
+                style="background:rgba(37,99,235,0.12); color:#1d4ed8; border:1px solid rgba(37,99,235,0.3);">
                 🔒 SHA-256 Sağlama Doğrulamalı
               </span>
             </div>
             <h2>🛡️ Yedekleme & Felaket Kurtarma Merkezi</h2>
             <p class="email-hero-desc">
-              Sistem bütünlüğünü korumak, kritik veri kayıplarını engellemek ve istenirse yalnızca tek bir projeyi diğer projelere dokunmadan eski haline döndürmek için yedekleme ve kurtarma konsolu.
+              Sistem bütünlüğünü korumak, kritik veri kayıplarını engellemek ve istenirse yalnızca tek bir projeyi diğer
+              projelere dokunmadan eski haline döndürmek için yedekleme ve kurtarma konsolu.
             </p>
           </div>
           <div class="email-hero-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="file" id="backupFileInput" accept=".json" style="display:none;" />
-            <button type="button" class="action-btn secondary-btn" id="importBackupBtn" title="Harici bir JSON yedek dosyasını içe aktar">
+            <button type="button" class="action-btn secondary-btn" id="importBackupBtn"
+              title="Harici bir JSON yedek dosyasını içe aktar">
               <span>📤</span> Yedek İçe Aktar (.json)
             </button>
-            <button type="button" class="action-btn primary-btn" id="createBackupNowBtn" style="background:#dc2626; border-color:#b91c1c;">
+            <button type="button" class="action-btn primary-btn" id="createBackupNowBtn"
+              style="background:#dc2626; border-color:#b91c1c;">
               <span>⚡</span> Hemen Tam Yedek Al
             </button>
           </div>
         </div>
 
         <!-- 4 Adet KPI Kartı -->
-        <div class="kpi-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:20px;">
+        <div class="kpi-grid"
+          style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:20px;">
           <div class="card clean-card" style="padding:16px;">
-            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Son Başarılı Yedek</div>
-            <div id="kpiLastBackupTime" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:var(--text-primary);">-</div>
-            <div id="kpiLastBackupType" style="font-size:0.75rem; margin-top:4px; color:#059669; font-weight:600;">Henüz yedek alınmadı</div>
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Son
+              Başarılı Yedek</div>
+            <div id="kpiLastBackupTime"
+              style="font-size:1.15rem; font-weight:700; margin-top:6px; color:var(--text-primary);">-</div>
+            <div id="kpiLastBackupType" style="font-size:0.75rem; margin-top:4px; color:#059669; font-weight:600;">Henüz
+              yedek alınmadı</div>
           </div>
           <div class="card clean-card" style="padding:16px;">
-            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Toplam Yedek Sayısı & Boyut</div>
-            <div id="kpiTotalBackups" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:var(--text-primary);">0 Adet</div>
-            <div id="kpiTotalBackupSize" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">0 KB Disk Alanı</div>
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">
+              Toplam Yedek Sayısı & Boyut</div>
+            <div id="kpiTotalBackups"
+              style="font-size:1.15rem; font-weight:700; margin-top:6px; color:var(--text-primary);">0 Adet</div>
+            <div id="kpiTotalBackupSize" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">0 KB
+              Disk Alanı</div>
           </div>
           <div class="card clean-card" style="padding:16px;">
-            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Günlük Otomatik Plan</div>
-            <div id="kpiDailyStatus" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:#059669;">Aktif (02:00)</div>
-            <div id="kpiDailyRetention" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">14 gün saklama süresi</div>
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">
+              Günlük Otomatik Plan</div>
+            <div id="kpiDailyStatus" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:#059669;">Aktif
+              (02:00)</div>
+            <div id="kpiDailyRetention" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">14 gün
+              saklama süresi</div>
           </div>
           <div class="card clean-card" style="padding:16px;">
-            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">Haftalık Otomatik Plan</div>
-            <div id="kpiWeeklyStatus" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:#2563eb;">Aktif (Pazar 03:00)</div>
-            <div id="kpiWeeklyRetention" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">8 hafta saklama süresi</div>
+            <div style="font-size:0.78rem; font-weight:600; color:var(--text-tertiary); text-transform:uppercase;">
+              Haftalık Otomatik Plan</div>
+            <div id="kpiWeeklyStatus" style="font-size:1.15rem; font-weight:700; margin-top:6px; color:#2563eb;">Aktif
+              (Pazar 03:00)</div>
+            <div id="kpiWeeklyRetention" style="font-size:0.75rem; margin-top:4px; color:var(--text-secondary);">8 hafta
+              saklama süresi</div>
           </div>
         </div>
 
@@ -1136,33 +1162,40 @@
         <div style="display:grid; grid-template-columns: 360px 1fr; gap:20px; align-items:start;">
           <!-- SOL KART: Otomatik Zamanlayıcı Ayarları -->
           <div class="card clean-card" style="padding:20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+            <div
+              style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
               <h3 style="font-size:1.05rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px;">
                 <span>⏱️</span> Otomatik Yedekleme Planı
               </h3>
             </div>
             <form id="backupScheduleForm">
               <!-- Günlük Otomatik Yedekleme -->
-              <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px; margin-bottom:14px;">
-                <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-weight:600;">
+              <div
+                style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px; margin-bottom:14px;">
+                <label
+                  style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-weight:600;">
                   <span>📅 Günlük Otomatik Yedek</span>
                   <input type="checkbox" id="schedDailyEnabled" checked style="width:18px; height:18px;" />
                 </label>
                 <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
                   <div>
                     <label style="font-size:0.75rem; color:var(--text-tertiary);">Çalışma Saati</label>
-                    <input type="time" id="schedDailyTime" value="02:00" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                    <input type="time" id="schedDailyTime" value="02:00" class="styled-input"
+                      style="padding:6px 10px; font-size:0.85rem;" />
                   </div>
                   <div>
                     <label style="font-size:0.75rem; color:var(--text-tertiary);">Saklama (Gün)</label>
-                    <input type="number" id="schedDailyRetention" value="14" min="1" max="365" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                    <input type="number" id="schedDailyRetention" value="14" min="1" max="365" class="styled-input"
+                      style="padding:6px 10px; font-size:0.85rem;" />
                   </div>
                 </div>
               </div>
 
               <!-- Haftalık Otomatik Yedekleme -->
-              <div style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px; margin-bottom:14px;">
-                <label style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-weight:600;">
+              <div
+                style="background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px; margin-bottom:14px;">
+                <label
+                  style="display:flex; align-items:center; justify-content:space-between; cursor:pointer; font-weight:600;">
                   <span>🗓️ Haftalık Arşiv Yedeği</span>
                   <input type="checkbox" id="schedWeeklyEnabled" checked style="width:18px; height:18px;" />
                 </label>
@@ -1181,20 +1214,24 @@
                   </div>
                   <div>
                     <label style="font-size:0.75rem; color:var(--text-tertiary);">Çalışma Saati</label>
-                    <input type="time" id="schedWeeklyTime" value="03:00" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                    <input type="time" id="schedWeeklyTime" value="03:00" class="styled-input"
+                      style="padding:6px 10px; font-size:0.85rem;" />
                   </div>
                 </div>
                 <div style="margin-top:8px;">
                   <label style="font-size:0.75rem; color:var(--text-tertiary);">Saklama Süresi (Hafta)</label>
-                  <input type="number" id="schedWeeklyRetention" value="8" min="1" max="104" class="styled-input" style="padding:6px 10px; font-size:0.85rem;" />
+                  <input type="number" id="schedWeeklyRetention" value="8" min="1" max="104" class="styled-input"
+                    style="padding:6px 10px; font-size:0.85rem;" />
                 </div>
               </div>
 
               <!-- Bildirim E-postası -->
               <div class="form-group" style="margin-bottom:16px;">
-                <label for="schedNotifyEmail" style="font-size:0.82rem; font-weight:600;">Durum & Hata Bildirim E-postası</label>
+                <label for="schedNotifyEmail" style="font-size:0.82rem; font-weight:600;">Durum & Hata Bildirim
+                  E-postası</label>
                 <input type="email" id="schedNotifyEmail" class="styled-input" placeholder="admin@fggroup.com.tr" />
-                <span style="font-size:0.74rem; color:var(--text-tertiary);">Yedek alındığında veya hata oluştuğunda özet bildirim gönderilir.</span>
+                <span style="font-size:0.74rem; color:var(--text-tertiary);">Yedek alındığında veya hata oluştuğunda
+                  özet bildirim gönderilir.</span>
               </div>
 
               <button type="submit" class="action-btn primary-btn" style="width:100%; justify-content:center;">
@@ -1205,7 +1242,8 @@
 
           <!-- SAĞ KART: Mevcut Yedekler ve Kurtarma Masası -->
           <div class="card clean-card" style="padding:20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+            <div
+              style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
               <div>
                 <h3 style="font-size:1.05rem; font-weight:700; margin:0; display:flex; align-items:center; gap:8px;">
                   <span>📦</span> Alınan Yedekler & Kurtarma Noktaları
@@ -1214,7 +1252,8 @@
                   Herhangi bir yedeği doğrudan tam sistem olarak veya tek bir projeyi seçerek geri yükleyebilirsiniz.
                 </p>
               </div>
-              <button type="button" class="action-btn secondary-btn sm-btn" id="refreshBackupsBtn" title="Listeyi Yenile">
+              <button type="button" class="action-btn secondary-btn sm-btn" id="refreshBackupsBtn"
+                title="Listeyi Yenile">
                 🔄 Yenile
               </button>
             </div>
@@ -1262,53 +1301,51 @@
         <div class="form-group" id="tProjectRow" style="margin-bottom:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
             <label for="tProject" style="font-weight:600; margin:0;">📁 Ait Olduğu Proje *</label>
-            <span id="tProjectBadge" class="badge-role" style="font-size:0.75rem; background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:12px; font-weight:600;">Seçim Yapınız</span>
+            <span id="tProjectBadge" class="badge-role"
+              style="font-size:0.75rem; background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:12px; font-weight:600;">Seçim
+              Yapınız</span>
           </div>
           <select id="tProject" class="styled-select" style="font-weight:500;">
             <!-- JS ile dinamik dolacak -->
           </select>
         </div>
 
-        <div id="tPersonalNotice" style="display:none; padding:10px 14px; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; margin-bottom:14px; font-size:0.82rem; color:#5b21b6; line-height:1.4;">
-          💡 <strong>Kişisel Takip:</strong> Bu görev şirket projelerine dahil edilmez; yalnızca sizin <strong>Görevlerim</strong> ve <strong>Kişisel To-Do</strong> listenizde görünür. Sorumlu kişi doğrudan sizsiniz.
+        <div id="tPersonalNotice"
+          style="display:none; padding:10px 14px; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; margin-bottom:14px; font-size:0.82rem; color:#5b21b6; line-height:1.4;">
+          💡 <strong>Kişisel Takip:</strong> Bu görev şirket projelerine dahil edilmez; yalnızca sizin
+          <strong>Görevlerim</strong> ve <strong>Kişisel To-Do</strong> listenizde görünür. Sorumlu kişi doğrudan
+          sizsiniz.
         </div>
 
-        <!-- 🏷️ 1. İŞ ADIMI (Departman / Süreç Fazı) -->
-        <div class="form-group" id="tWorkflowStepRow" style="margin-bottom:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem;">🏷️ 1. İş Adımı (Süreç Katmanı) *</label>
-            <button type="button" id="tAddStepBtn" class="action-btn outline-btn sm-btn" style="font-size:0.72rem; padding:2px 8px; display:none;" title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Adım Ekle</button>
-          </div>
-          <select id="tWorkflowStep" class="styled-select" style="font-weight:500;">
-            <option value="">İş Adımı Seçiniz (KOLEKSİYON, KUMAŞ, TEKNİK ÇİZİM, YIKAMA, vb.)...</option>
-          </select>
-        </div>
-
-        <!-- 📝 2. GÖREV TANIMI (Standart İş Kataloğu) -->
-        <div class="form-group" id="tTaskDefinitionRow" style="margin-bottom:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem;">📝 2. Görev Tanımı (Yapılacak İş)</label>
-            <button type="button" id="tAddDefBtn" class="action-btn outline-btn sm-btn" style="font-size:0.72rem; padding:2px 8px; display:none;" title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Tanım Ekle</button>
-          </div>
-          <select id="tTaskDefinition" class="styled-select" style="font-weight:500;">
-            <option value="">Önce yukarıdan bir İş Adımı seçiniz...</option>
-          </select>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group" style="flex:2;">
-            <label for="tTitle">Görev / İş Paketi Adı (Önizleme & Düzenleme) *</label>
-            <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: [YIKAMA] Modellerin yıkama bölümüne aktarılması">
-          </div>
+        <!-- 🏷️ İŞ ADIMI (Süreç Katmanı) & 📝 GÖREV TANIMI (Yapılacak İş) -->
+        <div class="form-row" id="tWorkflowAndDefRow" style="margin-bottom:12px;">
           <div class="form-group" style="flex:1;">
-            <label for="tType">Tür</label>
-            <select id="tType" class="styled-select">
-              <option value="TASK">📌 Görev (Task)</option>
-              <option value="MILESTONE">🏁 Kilometre Taşı (Milestone)</option>
-              <option value="BUG">🐞 Hata (Bug)</option>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem;">🏷️ İş Adımı (Süreç Katmanı) *</label>
+              <button type="button" id="tAddStepBtn" class="action-btn outline-btn sm-btn"
+                style="font-size:0.72rem; padding:2px 8px; display:none;"
+                title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Adım Ekle</button>
+            </div>
+            <select id="tWorkflowStep" class="styled-select" style="font-weight:500;" required>
+              <option value="">İş Adımı Seçiniz...</option>
             </select>
           </div>
+
+          <div class="form-group" style="flex:1.4;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem;">📝 Görev Tanımı *</label>
+              <button type="button" id="tAddDefBtn" class="action-btn outline-btn sm-btn"
+                style="font-size:0.72rem; padding:2px 8px; display:none;"
+                title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Tanım Ekle</button>
+            </div>
+            <select id="tTaskDefinition" class="styled-select" style="font-weight:500;" required>
+              <option value="">Önce İş Adımı seçiniz...</option>
+            </select>
+            <input type="text" id="tCustomDefInput" class="styled-input" placeholder="Özel görev tanımını yazınız..." style="display:none; margin-top:4px;">
+          </div>
         </div>
+        <input type="hidden" id="tTitle" value="">
+        <input type="hidden" id="tType" value="TASK">
 
         <div class="form-row">
           <div class="form-group">
@@ -1886,7 +1923,8 @@
         <span class="op-project-tag" id="wpProjectTitle">FG Group Projesi</span>
         <div class="op-id-type-row">
           <span class="op-id-badge" id="wpId">#101</span>
-          <span class="op-type-badge" id="wpStepBadge" style="display:none; background:#8b5cf6; color:#ffffff; font-weight:700;"></span>
+          <span class="op-type-badge" id="wpStepBadge"
+            style="display:none; background:#8b5cf6; color:#ffffff; font-weight:700;"></span>
           <span class="op-type-badge" id="wpType">GÖREV</span>
           <span class="op-priority-badge" id="wpPriority">Normal</span>
           <select id="wpPrioritySelect" class="wp-inline-select" title="Önceliği Değiştir">
@@ -1973,7 +2011,8 @@
           </div>
         </div>
         <!-- Görevi Atayan Yetkili Satırı -->
-        <div id="wpAssignerRow" style="margin-top:8px; padding:6px 12px; background:var(--bg-secondary, #f8fafc); border:1px solid var(--border-subtle, #e2e8f0); border-radius:6px; font-size:0.78rem; color:var(--text-secondary); display:flex; align-items:center; justify-content:space-between;">
+        <div id="wpAssignerRow"
+          style="margin-top:8px; padding:6px 12px; background:var(--bg-secondary, #f8fafc); border:1px solid var(--border-subtle, #e2e8f0); border-radius:6px; font-size:0.78rem; color:var(--text-secondary); display:flex; align-items:center; justify-content:space-between;">
           <span>🎯 <strong>Görevi Atayan (Proje Yetkilisi):</strong></span>
           <strong id="wpAssignerName" style="color:var(--text-primary);">-</strong>
         </div>
@@ -1999,18 +2038,26 @@
         <div id="wpDelayBadge" class="op-delay-alert" style="display:none;"></div>
 
         <!-- Kişisel Takvime Ekleme Butonları -->
-        <div class="wp-calendar-actions-box" style="margin-top:10px; padding:10px 12px; background:var(--bg-secondary, #f8fafc); border:1px solid var(--border-subtle, #e2e8f0); border-radius:8px;">
-          <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary, #475569); margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+        <div class="wp-calendar-actions-box"
+          style="margin-top:10px; padding:10px 12px; background:var(--bg-secondary, #f8fafc); border:1px solid var(--border-subtle, #e2e8f0); border-radius:8px;">
+          <div
+            style="font-size:0.75rem; font-weight:700; color:var(--text-secondary, #475569); margin-bottom:6px; display:flex; align-items:center; gap:5px;">
             <span>📅 Kişisel Takvime Ekle (Hatırlatıcı Alarmlı):</span>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <a id="wpDownloadIcsBtn" href="#" class="action-btn sm-btn" style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;" title="Görevi Outlook veya telefon takviminize (.ics) indirin">
+            <a id="wpDownloadIcsBtn" href="#" class="action-btn sm-btn"
+              style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;"
+              title="Görevi Outlook veya telefon takviminize (.ics) indirin">
               📅 Takvimime Ekle (.ics)
             </a>
-            <a id="wpOutlookWebBtn" href="#" target="_blank" class="action-btn sm-btn" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;" title="Microsoft 365 / Outlook Web üzerinde takvim kaydı aç">
+            <a id="wpOutlookWebBtn" href="#" target="_blank" class="action-btn sm-btn"
+              style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;"
+              title="Microsoft 365 / Outlook Web üzerinde takvim kaydı aç">
               🌐 Outlook Web
             </a>
-            <a id="wpGoogleCalBtn" href="#" target="_blank" class="action-btn sm-btn" style="background:#ffffff; color:#334155; border:1px solid #cbd5e1; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;" title="Google Takvim'e ekle">
+            <a id="wpGoogleCalBtn" href="#" target="_blank" class="action-btn sm-btn"
+              style="background:#ffffff; color:#334155; border:1px solid #cbd5e1; font-size:0.75rem; text-decoration:none; padding:4px 8px; border-radius:6px; font-weight:600;"
+              title="Google Takvim'e ekle">
               📆 Google Takvim
             </a>
           </div>
@@ -2074,8 +2121,10 @@
         <div class="op-section-title">💬 Aktivite & Gecikme Açıklamaları</div>
         <div id="wpDelaysList" class="op-activity-list"></div>
 
-        <div id="wpInlineExpNotice" style="display:none; margin-top:10px; padding:10px 14px; background:#fef2f2; border:1px solid #fee2e2; border-radius:8px; font-size:0.8rem; color:#991b1b; align-items:center; gap:8px;">
-          🔒 <strong>Not Ekleme Kısıtlaması:</strong> Bu görev <strong><span id="wpInlineExpAssigneeName">atanmış personele</span></strong> aittir. Başkası adına aktivite notu veya gerekçe eklenemez.
+        <div id="wpInlineExpNotice"
+          style="display:none; margin-top:10px; padding:10px 14px; background:#fef2f2; border:1px solid #fee2e2; border-radius:8px; font-size:0.8rem; color:#991b1b; align-items:center; gap:8px;">
+          🔒 <strong>Not Ekleme Kısıtlaması:</strong> Bu görev <strong><span id="wpInlineExpAssigneeName">atanmış
+              personele</span></strong> aittir. Başkası adına aktivite notu veya gerekçe eklenemez.
         </div>
 
         <form id="wpInlineExpForm" class="op-inline-form">
@@ -2111,7 +2160,8 @@
       <form id="restoreProjectForm" class="modal-body" style="padding:20px;">
         <input type="hidden" id="restoreBackupId" />
 
-        <div id="restoreModalBackupInfo" style="padding:12px; background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; margin-bottom:14px; font-size:0.82rem;">
+        <div id="restoreModalBackupInfo"
+          style="padding:12px; background:var(--bg-secondary); border:1px solid var(--border-subtle); border-radius:8px; margin-bottom:14px; font-size:0.82rem;">
           <!-- Dinamik yedek bilgisi -->
         </div>
 
@@ -2124,17 +2174,22 @@
           </select>
         </div>
 
-        <div id="restoreProjectPreviewBox" style="display:none; padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; margin-bottom:14px; font-size:0.82rem; color:#166534;">
+        <div id="restoreProjectPreviewBox"
+          style="display:none; padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; margin-bottom:14px; font-size:0.82rem; color:#166534;">
           <!-- Seçilen projenin yedekteki görev ve üye sayısı -->
         </div>
 
-        <div style="padding:10px 14px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; margin-bottom:16px; font-size:0.8rem; color:#92400e; line-height:1.4;">
-          ⚠️ <strong>Güvenlik Garantisi:</strong> Geri yükleme başlatıldığı anda sistem mevcut durumun otomatik güvenlik yedeğini (<code>PRE_RESTORE_SAFETY</code>) anında alır. İstediğiniz zaman bu adımdan önceki duruma dönebilirsiniz.
+        <div
+          style="padding:10px 14px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; margin-bottom:16px; font-size:0.8rem; color:#92400e; line-height:1.4;">
+          ⚠️ <strong>Güvenlik Garantisi:</strong> Geri yükleme başlatıldığı anda sistem mevcut durumun otomatik güvenlik
+          yedeğini (<code>PRE_RESTORE_SAFETY</code>) anında alır. İstediğiniz zaman bu adımdan önceki duruma
+          dönebilirsiniz.
         </div>
 
         <div class="modal-footer" style="padding:0; border:none; display:flex; justify-content:flex-end; gap:8px;">
           <button type="button" class="action-btn secondary-btn" data-close="restoreProjectModal">İptal</button>
-          <button type="submit" class="action-btn primary-btn" id="confirmRestoreProjectBtn" style="background:#dc2626; border-color:#b91c1c;">
+          <button type="submit" class="action-btn primary-btn" id="confirmRestoreProjectBtn"
+            style="background:#dc2626; border-color:#b91c1c;">
             🚀 Seçili Projeyi Geri Yükle
           </button>
         </div>
