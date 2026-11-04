@@ -99,6 +99,43 @@ export class TaskService {
   }
 
   /**
+   * Görev Müdahale / İcra Yetkisi Kontrolü:
+   * Hiçbir kullanıcı başkasına atanmış bir görevi başlatamaz, ilerletemez, durumunu değiştiremez veya tamamlayamaz.
+   */
+  public assertCanExecuteTask(auth: AuthContext, task: Task, actionName: string = 'müdahale etme'): void {
+    if (task.assignee_id && task.assignee_id !== auth.user_id) {
+      const assignedUser = this.db.getUserById(auth.tenant_id, task.assignee_id);
+      const assigneeName = assignedUser ? assignedUser.name : 'ilgili personele';
+      throw new Error(
+        `Yetkisiz Müdahale Engellendi: Bu görev "${assigneeName}" adlı personele atanmıştır. Görevi yalnızca atanan sorumlu ${actionName} yetkisine sahiptir; başka bir kullanıcı başkası yerine işlem yapamaz.`
+      );
+    }
+  }
+
+  /**
+   * Görev Plan / Tanım Değişikliği Kontrolü:
+   * Görevin başlığını, açıklamasını, türünü, önceliğini veya plan tarihlerini yalnızca görevin sorumlusu
+   * veya o projenin yöneticisi / editörü (veya sistem yöneticisi) değiştirebilir.
+   */
+  public assertCanModifyTask(auth: AuthContext, task: Task): void {
+    if (!task.assignee_id || task.assignee_id === auth.user_id) {
+      return;
+    }
+    const caller = this.db.getUserById(auth.tenant_id, auth.user_id);
+    const isFullAdmin = caller?.system_role === 'ADMIN';
+    const member = task.project_id ? this.db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id) : undefined;
+    const isProjectManagerOrEditor = member && (member.role === 'PROJECT_MANAGER' || member.role === 'EDITOR');
+
+    if (!isFullAdmin && !isProjectManagerOrEditor) {
+      const assignedUser = this.db.getUserById(auth.tenant_id, task.assignee_id);
+      const assigneeName = assignedUser ? assignedUser.name : 'ilgili personele';
+      throw new Error(
+        `Yetkisiz İşlem: Bu görev "${assigneeName}" adlı personele atanmıştır. Görev tanımını veya planını değiştirme yetkiniz bulunmamaktadır.`
+      );
+    }
+  }
+
+  /**
    * Görev Atama (Geçmiş Atama Kayıtlarını Korur)
    */
   public assignTask(
@@ -156,6 +193,8 @@ export class TaskService {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
 
+    this.assertCanModifyTask(auth, task);
+
     const change: TaskPlanChange = {
       id: crypto.randomUUID(),
       tenant_id: auth.tenant_id,
@@ -185,12 +224,19 @@ export class TaskService {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
 
+    this.assertCanExecuteTask(auth, task, 'başlatma');
+
     if (task.work_status === 'BLOCKED') {
       throw new Error('Görev Başlatılamaz: Öncül görevler tamamlanmadığı için görev BLOCKED durumundadır.');
     }
 
     if (task.work_status === 'COMPLETED') {
       throw new Error('Görev zaten tamamlanmıştır.');
+    }
+
+    if (!task.assignee_id) {
+      this.assignTask(auth, task_id, auth.user_id);
+      task.assignee_id = auth.user_id;
     }
 
     const updated = this.db.updateTask(auth.tenant_id, task_id, {
@@ -211,8 +257,15 @@ export class TaskService {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
 
+    this.assertCanExecuteTask(auth, task, 'tamamlama');
+
     if (task.work_status === 'BLOCKED') {
       throw new Error('Öncülleri tamamlanmamış BLOCKED görev doğrudan tamamlanamaz.');
+    }
+
+    if (!task.assignee_id) {
+      this.assignTask(auth, task_id, auth.user_id);
+      task.assignee_id = auth.user_id;
     }
 
     const completionTime = new Date().toISOString();
@@ -249,6 +302,8 @@ export class TaskService {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
 
+    this.assertCanExecuteTask(auth, task, 'ilerletme ve not girme');
+
     const cleanedNote = (note_text || '').trim();
     if (cleanedNote.length < 2) {
       throw new Error('İlerleme yüzdesi güncellenirken yapılan çalışmayı veya durumu açıklayan bir not yazılması zorunludur!');
@@ -269,6 +324,11 @@ export class TaskService {
 
     if (task.work_status === 'BLOCKED') {
       throw new Error('Öncül görevler tamamlanmadığı için BLOCKED durumundaki görevde ilerleme kaydedilemez.');
+    }
+
+    if (!task.assignee_id) {
+      this.assignTask(auth, task_id, auth.user_id);
+      task.assignee_id = auth.user_id;
     }
 
     const newStatus: WorkStatus = safeProgress > 0 ? 'IN_PROGRESS' : 'READY';
@@ -299,6 +359,13 @@ export class TaskService {
   ): { task: Task; newlyReadyTaskIds?: UUID[] } {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
+
+    this.assertCanExecuteTask(auth, task, 'durumunu değiştirme');
+
+    if (!task.assignee_id) {
+      this.assignTask(auth, task_id, auth.user_id);
+      task.assignee_id = auth.user_id;
+    }
 
     if (targetStatus === 'COMPLETED') {
       return this.completeTask(auth, task_id);

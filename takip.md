@@ -313,3 +313,29 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 * **Kabul Testleri & Doğrulama:**
   - `FELAKET KURTARMA & YEDEKLEME SİSTEMİ` kabul testi yazıldı.
   - **29/29 Birim & Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** başarıyla geçti.
+
+---
+
+## 26. Görev Müdahale Koruması ve İcra İzolasyonu (Başkası Yerine İşlem Yapmayı Engelleme)
+
+### 26.1. İster Özeti & Karşılaşılan Eksiklik
+- **Kullanıcı Talebi:** Hiçbir kullanıcı bir diğeri yerine verilen görevleri başlatamamalı, ilerletememeli, durumunu değiştirememeli veya bitirememeli (kısaca başkasının görevine müdahale edememeli).
+- **Amaç:** Görev icra sorumluluğunu kesin olarak görev sahibine bağlamak; veri tahrifatını, yanlışlıkla başkasının işini kapatmayı engellemek ve performans ölçümlerinin adil olmasını garanti etmek.
+
+### 26.2. Uygulanan Mimari ve Güvenlik Mekanizmaları
+1. **İş Mantığı & Servis Katmanı (`src/modules/task/task.service.ts` & `src/modules/delay/delay.service.ts`):**
+   - `assertCanExecuteTask(auth, task, actionName)` metodu eklendi: Eğer görev bir personele atanmışsa (`task.assignee_id`) ve işlem yapan kişi (`auth.user_id`) görev sahibi değilse açıklayıcı hata ile işlem durdurulur (`Yetkisiz Müdahale Engellendi: Bu görev "${assigneeName}" adlı personele atanmıştır...`).
+   - `assertCanModifyTask(auth, task)` metodu eklendi: Görev tanımını, önceliğini ve plan tarihlerini yalnızca sorumlu veya projenin yöneticisi / editörü (veya sistem yöneticisi) değiştirebilir.
+   - `startTask`, `completeTask`, `updateTaskProgressWithNote`, `updateStatus` ve `delayService.submitExplanation` metotları bu yetki duvarı ile korundu.
+   - Sahipsiz (atanmamış) görevler başlatıldığında veya tamamlandığında işlemi başlatan personele otomatik olarak zimmetlenir.
+2. **REST API Güvenlik Duvarı (`src/server/index.ts`):**
+   - `GET /api/tasks/:id/details`: Yanıta `is_assignee` bayrağı eklendi.
+   - `PATCH /api/tasks/:id`: İlerleme güncellemesi için icra yetkisi; başlık/tanım/öncelik güncellemesi için yönetici/editör/sorumlu yetkisi zorunlu kılındı.
+   - `POST /api/tasks/:id/assign`: Sorumlu atama yetkisi yalnızca Proje Yöneticisi, Proje Editörü veya Sistem Yöneticisine sınırlandırıldı.
+3. **Kullanıcı Arayüzü & Çekmece Koruması (`src/public/index.html`, `src/public/styles.css`, `src/public/app.js`):**
+   - `#workPackageDrawer` içine kırmızı çerçeveli `#wpTaskLockBanner` bilgi bandı yerleştirildi: Başkasının görevi açıldığında *"🔒 Müdahale Kısıtlaması: Bu görev [Personel Adı] adlı personele atanmıştır. Görevi başlatma, tamamlama ve ilerleme kaydetme yetkisi yalnızca atanmış personele aittir"* uyarısı verilir.
+   - Başkasına ait görevlerde **"Göreve Başla"** ve **"Görevi Tamamla"** butonları gizlenir; ilerleme kaydırıcısı ve hızlı butonlar devre dışı bırakılır.
+   - Kanban panosunda (`renderBoard`) başkasına ait kartlar `draggable="false"` yapılır, hafif matlaştırılır (`.not-my-task`) ve sürükleme girişiminde uyarı bildirimi gösterilir.
+4. **Test ve Doğrulama:**
+   - `tests/acceptance.test.ts` içine kapsamlı kabul testi (`KORUMA & MÜDAHALE ENGELİ`) eklendi.
+   - **30/30 Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** hatasız tamamlandı.

@@ -353,3 +353,4 @@ Yukarıdaki şemaları inceledikten sonra yeni taleplerinizi belirlerken aşağ�
 - [ ] **5. Efor (Adam-Saat) & Maliyet Takibi:** Görev bazında harcanan çalışma saati girişi ve bütçe kontrolü.
 - [ ] **6. Denetim Kütüğü (Audit Log Ekranı):** Yönetici panelinde kimin hangi gün hangi kaydı değiştirdiğini gösteren izleme tablosu.
 - [ ] **7. Mevcut 8 Modülde Revizyon:** Yukarıdaki şemalarda gördüğünüz mevcut ekranlardan herhangi birinde değiştirmek veya sadeleştirmek istediğiniz kurallar.
+

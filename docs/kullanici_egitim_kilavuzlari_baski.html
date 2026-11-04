@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>FG Group Proje & Görev Yönetim Sistemi — Kullanıcı Eğitim Kılavuzları (PDF Baskı)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --bg: #ffffff;
+      --border: #e2e8f0;
+      --accent: #f8fafc;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+      font-size: 14px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+
+    /* Print Specific Rules */
+    @media print {
+      body { font-size: 12px; }
+      .container { max-width: 100%; padding: 20px; }
+      .page-break { page-break-before: always; }
+      .no-print { display: none !important; }
+      .cover-page { height: 95vh; page-break-after: always; display: flex; flex-direction: column; justify-content: center; }
+    }
+
+    .print-bar {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 16px 24px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .print-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .print-btn:hover { background: var(--primary-dark); }
+
+    /* Cover Page */
+    .cover-page {
+      text-align: center;
+      padding: 60px 20px;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 40px;
+    }
+    .cover-logo {
+      font-size: 42px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    .cover-subtitle {
+      font-size: 20px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 24px;
+    }
+    .cover-desc {
+      font-size: 15px;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 30px;
+    }
+    .cover-meta {
+      display: inline-flex;
+      gap: 20px;
+      background: var(--accent);
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 13px;
+      color: #64748b;
+      border: 1px solid var(--border);
+    }
+
+    /* Section Styles */
+    h1 { font-size: 24px; font-weight: 800; color: #0f172a; border-bottom: 2px solid var(--primary); padding-bottom: 8px; margin-top: 36px; }
+    h2 { font-size: 18px; font-weight: 700; color: #1e293b; margin-top: 24px; }
+    h3 { font-size: 15px; font-weight: 600; color: #334155; margin-top: 18px; }
+
+    .role-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .role-admin { background: #fee2e2; color: #991b1b; }
+    .role-pm { background: #fef3c7; color: #92400e; }
+    .role-user { background: #dcfce7; color: #166534; }
+
+    .card-box {
+      background: var(--accent);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+
+    .alert-box {
+      border-left: 4px solid var(--primary);
+      background: #f0fdf4;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 13px;
+      border-radius: 0 6px 6px 0;
+    }
+    .alert-box.danger {
+      border-left-color: #ef4444;
+      background: #fef2f2;
+      color: #991b1b;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 600;
+      color: #334155;
+    }
+    tr:nth-child(even) { background: #fafafa; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <div class="print-bar no-print">
+    <div>
+      <strong>📄 PDF Olarak Kaydet / Yazdır</strong>
+      <div style="font-size: 12px; color: #475569;">Bu sayfa A4 formatında hazırlandı. Tarayıcınızdan "Yazdır" seçip hedefi "PDF Olarak Kaydet" yapabilirsiniz.</div>
+    </div>
+    <button class="print-btn" onclick="window.print()">🖨️ PDF İndir / Yazdır</button>
+  </div>
+
+  <!-- KAPAK SAYFASI -->
+  <div class="cover-page">
+    <div class="cover-logo">FG GROUP</div>
+    <div class="cover-subtitle">Proje & Görev Yönetim Sistemi</div>
+    <div style="font-size: 22px; font-weight: 700; margin-bottom: 12px;">Kullanıcı Eğitim ve Operasyon Kılavuzları</div>
+    <p class="cover-desc">
+      Sistem Yöneticisi, Proje Yetkilisi ve Standart Kullanıcı rolleri için hazırlanmış tam kapsamlı operasyonel kılavuz ve iş akış rehberi.
+    </p>
+    <div class="cover-meta">
+      <span>📅 Sürüm: v0.3.0 Enterprise</span>
+      <span>🔒 Çok Kiracılı & PostgreSQL Korumalı</span>
+      <span>🏢 FG Group Kurumsal</span>
+    </div>
+  </div>
+
+  <!-- BÖLÜM 1: SİSTEM YÖNETİCİSİ -->
+  <div class="page-break"></div>
+  <span class="role-badge role-admin">BÖLÜM 1</span>
+  <h1>📘 Sistem Yöneticisi (Admin) Kullanım Kılavuzu</h1>
+  <p><strong>Hedef Kitle:</strong> Bilgi İşlem / IT Yöneticileri, Sistem Yöneticileri, Şirket Yöneticileri</p>
+  
+  <h2>1. Ekip & Personel Yönetimi</h2>
+  <ul>
+    <li><strong>Yeni Personel Ekleme:</strong> <em>Yönetim > Ekip & Personel</em> ekranından "+ Yeni Personel Ekle" butonuna tıklayın. İsim, e-posta, departman ve ülke bilgilerini girin. Kayıt anında personele şık tasarımlı <strong>Hoş Geldiniz Kartı</strong> e-posta ile otomatik iletilir.</li>
+    <li><strong>Hesap Dondurma (Erişim Engelleme):</strong> İşten ayrılan personelin yanındaki <strong>"⏸️ Dondur"</strong> butonuna basın. Personel anında sistemden düşürülür, giriş yapamaz ve görev seçicilerde kilitlenir.</li>
+    <li><strong>Yetki Ayarları:</strong> <code>can_create_project</code> (proje açma hakkı) ve <code>can_build_reports</code> (özel rapor oluşturma) yetkilerini tek tıkla açıp kapatabilirsiniz.</li>
+  </ul>
+
+  <h2>2. E-posta Entegrasyonu (Exchange Online) & AES-256 Kasası</h2>
+  <ul>
+    <li><strong>SMTP Yapılandırması:</strong> <code>smtp.office365.com</code>, Port <code>587</code> (STARTTLS) ayarlarını girin.</li>
+    <li><strong>Şifre Kasası:</strong> Girdiğiniz kurumsal SMTP parolası veritabanında açık metin olarak tutulmaz; donanım bazlı <strong>AES-256-GCM</strong> şifreleme kasasında mühürlenir.</li>
+    <li><strong>Zamanlanmış Raporlar:</strong> Günlük ve haftalık otomatik yönetici ilerleme raporlarını tek tıkla planlayın.</li>
+  </ul>
+
+  <h2>3. Yedekleme & Felaket Kurtarma (Disaster Recovery)</h2>
+  <ul>
+    <li><strong>Otomatik Zamanlanmış Yedek:</strong> Günlük (03:00) ve Haftalık (Pazar 04:00) otomatik yedekleme planı oluşturun.</li>
+    <li><strong>Tekil Proje Kurtarma:</strong> Yanlışlıkla silinen veya bozulan tek bir projeyi diğer projelere dokunmadan eski durumuna döndürün.</li>
+    <li><strong>Tam Geri Yükleme ve Güvenlik Yedeği (Pre-Restore Safety):</strong> Sistem tam geri yükleme yapmadan hemen önce anlık durumun güvenlik yedeğini otomatik alır.</li>
+  </ul>
+
+  <div class="alert-box danger">
+    <strong>Önemli Kural:</strong> Sistem Yöneticisi dahi olsanız, başka bir personele atanmış görevi başlatamaz, Kanban'da taşıyamaz veya tamamlayamazsınız. Görevin fiili icrası yalnızca atanmış personele aittir.
+  </div>
+
+  <!-- BÖLÜM 2: PROJE YETKİLİSİ -->
+  <div class="page-break"></div>
+  <span class="role-badge role-pm">BÖLÜM 2</span>
+  <h1>📙 Proje Yetkilisi (Yönetici & Editör) Kullanım Kılavuzu</h1>
+  <p><strong>Hedef Kitle:</strong> Proje Yöneticileri, Departman Şefleri, Takım Liderleri</p>
+
+  <h2>1. Proje Oluşturma ve Ekip Rolleri</h2>
+  <p><em>Projeler > + Yeni Proje Oluştur</em> butonuna tıklayın. Proje adı, tarih aralığı ve açıklamasını girin. Proje üyelerine rollerini atayın:</p>
+  <ul>
+    <li><strong>Proje Yöneticisi:</strong> Proje tarihlerini, plan revizyonlarını ve ekip dağılımını yönetir.</li>
+    <li><strong>Proje Editörü:</strong> Görev ekler, atama yapar ve bağımlılıkları tanımlar.</li>
+    <li><strong>Proje İzleyicisi:</strong> Görevleri ve Gantt takvimini salt-okunur inceler.</li>
+  </ul>
+
+  <h2>2. DAG Bağımlılık Yönetimi (Öncül & Ardıl Görevler)</h2>
+  <ul>
+    <li><strong>Döngü Engeli:</strong> A -> B -> C varken sistem C -> A döngüsü kurmanızı engeller.</li>
+    <li><strong>Otomatik Kilit (BLOCKED):</strong> Öncülü tamamlanmamış görevler otomatik olarak kilitli kalır.</li>
+    <li><strong>Otomatik Tetikleme (READY):</strong> Öncülü bittiğinde görev anında hazır hale gelir ve sorumlusuna bildirim kartı gider.</li>
+  </ul>
+
+  <h2>3. Zaman Çizelgesi (Gantt) ve Kanban Panosu</h2>
+  <p>Gantt üzerinde kritik darboğazları (🔥 ardıl bekleten görevler), takvim sürelerini ve gecikmeleri canlı izleyin. Kanban üzerinde projenin akışını takip edin.</p>
+
+  <h2>4. Plan Revizyonları ve Gerekçe Kaydı</h2>
+  <p>Tarih ertelemelerinde görev detayından <strong>"Plan Revizyonu Yap"</strong> butonuna basın ve zorunlu nedeninizi girin. Sistemin ilk baz planı (initial due date) asla silinmez; şeffaf raporda saklanır.</p>
+
+  <!-- BÖLÜM 3: STANDART KULLANICI -->
+  <div class="page-break"></div>
+  <span class="role-badge role-user">BÖLÜM 3</span>
+  <h1>📗 Standart Kullanıcı (Personel & Görev Sorumlusu) Kullanım Kılavuzu</h1>
+  <p><strong>Hedef Kitle:</strong> Tüm Şirket Çalışanları, Departman Personelleri, Operatörler</p>
+
+  <h2>1. Giriş ve Şifre Belirleme</h2>
+  <p>E-postanıza gelen karşılama bağlantısına tıklayın. Giriş yaptıktan sonra sağ üst profil menüsünden şifrenizi güncelleyin ve fotoğrafınızı (avatar) yükleyin.</p>
+
+  <h2>2. "Görevlerim" Ekranı ve Bireysel To-Do</h2>
+  <ul>
+    <li><strong>Görevlerim Sekmesi:</strong> Yalnızca sizin sorumlu olduğunuz açık işleri ve teslim tarihlerini listeler.</li>
+    <li><strong>Bireysel To-Do:</strong> Proje dışında kendi günlük işlerinizi organize etmek için "+ Yeni Görev" butonundan bireysel to-do açabilirsiniz.</li>
+  </ul>
+
+  <h2>3. Görev Başlatma, Notlu İlerleme ve Tamamlama</h2>
+  <ul>
+    <li><strong>Göreve Başla (READY -> IN_PROGRESS):</strong> Sıra size geldiğinde görev çekmecesini açıp "Göreve Başla" deyin.</li>
+    <li><strong>Zorunlu Notlu İlerleme (%40 / %60):</strong> İlerleme butonuna bastıktan sonra ne yaptığınızı anlatan kısa bir not yazarak kaydedin. Not yazılmadan ilerleme kaydedilemez.</li>
+    <li><strong>Görevi Tamamla (COMPLETED):</strong> İş bittiğinde yeşil butona basarak tamamlayın. Sizi bekleyen bir sonraki arkadaşınızın görevi otomatik olarak açılacaktır.</li>
+  </ul>
+
+  <div class="alert-box">
+    <strong>🔒 Görev Müdahale Koruması:</strong> Hiçbir personel başkasına ait görevi başlatamaz veya tamamlayamaz. Kanban panosunda yalnızca kendi görev kartlarınızı sürükleyebilirsiniz.
+  </div>
+
+  <table style="margin-top: 30px;">
+    <thead>
+      <tr>
+        <th>İşlem / Yetki</th>
+        <th>Sistem Yöneticisi</th>
+        <th>Proje Yetkilisi</th>
+        <th>Standart Personel</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Kendi Görevini Başlatma & Bitirme</td>
+        <td>✅ Evet</td>
+        <td>✅ Evet</td>
+        <td>✅ Evet</td>
+      </tr>
+      <tr>
+        <td>Başkasına Ait Göreve Müdahale Etme</td>
+        <td>⛔ Engellendi</td>
+        <td>⛔ Engellendi</td>
+        <td>⛔ Engellendi</td>
+      </tr>
+      <tr>
+        <td>Bireysel To-Do Oluşturma</td>
+        <td>✅ Evet</td>
+        <td>✅ Evet</td>
+        <td>✅ Evet</td>
+      </tr>
+      <tr>
+        <td>Yeni Şirket Projesi Açma</td>
+        <td>✅ Evet</td>
+        <td>✅ Evet (İzinli)</td>
+        <td>❌ Hayır</td>
+      </tr>
+      <tr>
+        <td>Yedekleme & Sistem Kurtarma</td>
+        <td>✅ Tam Yetkili</td>
+        <td>❌ Yetkisiz</td>
+        <td>❌ Yetkisiz</td>
+      </tr>
+    </tbody>
+  </table>
+
+</div>
+
+</body>
+</html>

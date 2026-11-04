@@ -1720,12 +1720,17 @@ function renderBoard() {
   filteredTasks.forEach(t => {
     const card = document.createElement('div');
     const isBlocked = t.work_status === 'BLOCKED';
-    card.className = `board-card ${isBlocked ? 'is-blocked' : ''}`;
-    card.setAttribute('draggable', 'true');
+    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
+    const isMyTask = !t.assignee_id || t.assignee_id === state.currentUser?.id;
+
+    card.className = `board-card ${isBlocked ? 'is-blocked' : ''} ${!isMyTask ? 'not-my-task' : ''}`;
+    card.setAttribute('draggable', isMyTask ? 'true' : 'false');
     card.setAttribute('data-task-id', t.id);
     card.setAttribute('data-status', t.work_status);
+    if (!isMyTask) {
+      card.setAttribute('title', `Bu görev ${assignee ? assignee.name : 'başka bir personel'} için atanmıştır. Başkasının görevini taşıyamaz veya müdahale edemezsiniz.`);
+    }
 
-    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
     const isOverdue = t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
     const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
     const typeLabel = t.type === 'MILESTONE' ? 'Kilometre Taşı' : (t.type === 'BUG' ? 'Hata' : 'Görev');
@@ -1772,6 +1777,11 @@ function renderBoard() {
 
     // Sürükleme Başlangıcı
     card.addEventListener('dragstart', (e) => {
+      if (!isMyTask) {
+        e.preventDefault();
+        showToast(`Bu görev ${assignee ? assignee.name : 'başka personele'} atanmıştır. Başkasının görevini taşıyamaz veya müdahale edemezsiniz.`, 'warning');
+        return false;
+      }
       e.dataTransfer.setData('text/plain', t.id);
       e.dataTransfer.effectAllowed = 'move';
       card.classList.add('is-dragging');
@@ -1929,13 +1939,42 @@ async function openTaskDrawer(taskId) {
     sb.className = `task-status-pill ${statusPillClass}`;
     sb.textContent = statusText;
 
+    const isAssignee = details.is_assignee ?? (!task.assignee_id || task.assignee_id === state.currentUser?.id);
+
+    // Başkasına Atanmış Görev Müdahale Kısıtlama Bandı
+    const lockBanner = document.getElementById('wpTaskLockBanner');
+    if (lockBanner) {
+      if (!isAssignee) {
+        lockBanner.style.display = 'flex';
+        const assignedName = assignee ? escapeHtml(assignee.name) : 'başka personele';
+        lockBanner.innerHTML = `🔒 <strong>Müdahale Kısıtlaması:</strong> Bu görev <strong>${assignedName}</strong> adlı personele atanmıştır. Görevi başlatma, tamamlama, durumunu veya ilerleme yüzdesini değiştirme yetkisi yalnızca atanmış sorumluya aittir; başkası yerine müdahale edilemez.`;
+      } else {
+        lockBanner.style.display = 'none';
+      }
+    }
+
     const prog = task.work_status === 'COMPLETED' ? 100 : (task.progress || 0);
     document.getElementById('wpProgressText').textContent = `%${prog}`;
     document.getElementById('wpProgressFill').style.width = `${prog}%`;
     const progSlider = document.getElementById('wpProgressSlider');
     if (progSlider) {
       progSlider.value = String(prog);
-      progSlider.disabled = !can_edit || task.work_status === 'COMPLETED';
+      progSlider.disabled = !isAssignee || task.work_status === 'COMPLETED' || task.work_status === 'BLOCKED';
+    }
+
+    const quickBox = document.getElementById('wpProgressQuickActionsBox');
+    if (quickBox) {
+      quickBox.style.display = isAssignee && task.work_status !== 'COMPLETED' && task.work_status !== 'BLOCKED' ? 'block' : 'none';
+    }
+    const inlineExpCard = document.getElementById('wpInlineExpCard');
+    if (inlineExpCard) {
+      const inlineExpText = document.getElementById('wpInlineExpText');
+      const inlineSaveBtn = document.getElementById('wpInlineSaveExpBtn');
+      if (inlineExpText) {
+        inlineExpText.disabled = !isAssignee;
+        if (!isAssignee) inlineExpText.placeholder = 'Yalnızca görev sorumlusu açıklama veya gerekçe girebilir.';
+      }
+      if (inlineSaveBtn) inlineSaveBtn.disabled = !isAssignee;
     }
 
     // Sorumlu Personel Seçici & Kartı
@@ -2090,7 +2129,10 @@ async function openTaskDrawer(taskId) {
     const startBtn = document.getElementById('wpStartBtn');
     const compBtn = document.getElementById('wpCompleteBtn');
 
-    if (task.work_status === 'READY') {
+    if (!isAssignee) {
+      startBtn.style.display = 'none';
+      compBtn.style.display = 'none';
+    } else if (task.work_status === 'READY') {
       startBtn.style.display = 'inline-flex';
       compBtn.style.display = 'inline-flex';
     } else if (task.work_status === 'IN_PROGRESS') {
@@ -5510,7 +5552,7 @@ async function loadBackupDashboard() {
       const last = backups[0];
       const d = new Date(last.created_at);
       document.getElementById('kpiLastBackupTime').textContent = `${d.toLocaleDateString('tr-TR')} ${d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
-      
+
       const typeLabels = {
         'SCHEDULED_DAILY': '📅 Günlük Otomatik',
         'SCHEDULED_WEEKLY': '🗓️ Haftalık Arşiv',
@@ -5644,7 +5686,7 @@ function renderBackupTable(backups) {
           <button type="button" class="action-btn sm-btn" onclick="triggerFullRestore('${b.id}', '${dateFormatted}')" title="Tüm sistemi bu tarihe geri yükle" style="background:#fee2e2; color:#b91c1c; border:1px solid #fecaca; font-size:0.75rem; padding:4px 8px; margin-right:4px;">
             🔄 Tam Geri Yükle
           </button>
-          <button type="button" class="action-btn secondary-btn sm-btn" onclick="downloadBackupFile('${b.id}', 'backup_${b.id.substring(0,8)}.json')" title="İndir" style="font-size:0.75rem; padding:4px 8px; margin-right:4px;">
+          <button type="button" class="action-btn secondary-btn sm-btn" onclick="downloadBackupFile('${b.id}', 'backup_${b.id.substring(0, 8)}.json')" title="İndir" style="font-size:0.75rem; padding:4px 8px; margin-right:4px;">
             📥
           </button>
           <button type="button" class="action-btn secondary-btn sm-btn" onclick="deleteBackupFile('${b.id}', '${(b.name || b.id).replace(/['"]/g, '')}')" title="Sil" style="color:#dc2626; font-size:0.75rem; padding:4px 8px;">
@@ -5656,7 +5698,7 @@ function renderBackupTable(backups) {
   }).join('');
 }
 
-window.openRestoreProjectModal = async function(backupId) {
+window.openRestoreProjectModal = async function (backupId) {
   try {
     const res = await apiCall(`/api/admin/backups/${backupId}/preview`);
     if (!res || !res.success) throw new Error('Yedek içeriği okunamadı');
@@ -5692,9 +5734,9 @@ window.openRestoreProjectModal = async function(backupId) {
   }
 };
 
-window.triggerFullRestore = async function(backupId, dateText) {
+window.triggerFullRestore = async function (backupId, dateText) {
   const confirmMsg = `⚠️ DİKKAT: TAM SİSTEM GERİ YÜKLEME\n\nTüm projeler, görevler, bağımlılıklar ve ayarlar seçilen yedeğin (${dateText}) alındığı durumuna dönecektir.\n\nİşlem başlamadan önce sistem OTOMATİK olarak mevcut anlık durumun güvenlik yedeğini (Pre-Restore Safety) alacaktır. Yanlışlıkla geri yükleseniz bile son duruma geri dönebilirsiniz.\n\nDevam etmek istiyor musunuz?`;
-  
+
   if (!confirm(confirmMsg)) return;
 
   try {
@@ -5710,7 +5752,7 @@ window.triggerFullRestore = async function(backupId, dateText) {
   }
 };
 
-window.downloadBackupFile = async function(backupId, filename) {
+window.downloadBackupFile = async function (backupId, filename) {
   try {
     const res = await fetch(`/api/admin/backups/${backupId}/download`, {
       headers: getHeaders()
@@ -5731,7 +5773,7 @@ window.downloadBackupFile = async function(backupId, filename) {
   }
 };
 
-window.deleteBackupFile = async function(backupId, filename) {
+window.deleteBackupFile = async function (backupId, filename) {
   if (!confirm(`"${filename}" isimli yedek dosyasını kalıcı olarak silmek istediğinize emin misiniz?`)) {
     return;
   }

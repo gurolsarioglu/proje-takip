@@ -187,8 +187,15 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
 
   await t.test('KAB10: Tamamlama sırasında güncel bitiş aşılmışsa gecikme kaydı eksiksiz oluşur', () => {
     const lateTask = taskService.createTask(authManagerA, projectA.id, 'Geç Biten Görev', '2026-10-01T00:00:00Z', '2026-10-05T00:00:00Z', assigneeA.id);
-    // Completing on 2026-10-08 (late)
-    const { task } = taskService.completeTask(authManagerA, lateTask.id);
+    
+    // Başkasının görevi olduğu için authManagerA tamamlayamaz, hata fırlatmalıdır
+    assert.throws(
+      () => taskService.completeTask(authManagerA, lateTask.id),
+      /Yetkisiz Müdahale Engellendi/
+    );
+
+    // Sorumlusu (authAssigneeA) tamamlar
+    const { task } = taskService.completeTask(authAssigneeA, lateTask.id);
     assert.equal(task.work_status, 'COMPLETED');
 
     const delays = delayService.getDelayRecords(tenantA.id, lateTask.id);
@@ -399,33 +406,39 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const t2Before = taskService.getTask(authManagerA, task2.id)!;
     assert.equal(t2Before.work_status, 'BLOCKED');
 
-    // 2. BLOCKED görevi doğrudan IN_PROGRESS veya COMPLETED sütununa sürükleme reddedilmelidir!
+    // 2. Başkasının görevi için updateStatus çağrılırsa Yetkisiz Müdahale Engeli fırlatılmalı
     assert.throws(
-      () => taskService.updateStatus(authManagerA, task2.id, 'IN_PROGRESS'),
+      () => taskService.updateStatus(authManagerA, task1.id, 'IN_PROGRESS'),
+      /Yetkisiz Müdahale Engellendi/
+    );
+
+    // 2.b BLOCKED görevi doğrudan IN_PROGRESS veya COMPLETED sütununa sürükleme reddedilmelidir!
+    assert.throws(
+      () => taskService.updateStatus(authAssigneeA, task2.id, 'IN_PROGRESS'),
       /BLOCKED durumundadır/
     );
     assert.throws(
-      () => taskService.updateStatus(authManagerA, task2.id, 'COMPLETED'),
+      () => taskService.updateStatus(authAssigneeA, task2.id, 'COMPLETED'),
       /BLOCKED görev doğrudan tamamlanamaz/
     );
 
-    // 3. Task 1'i IN_PROGRESS sütununa sürükleme (Başlatma)
-    const res1 = taskService.updateStatus(authManagerA, task1.id, 'IN_PROGRESS');
+    // 3. Task 1'i IN_PROGRESS sütununa sürükleme (Başlatma) - Atanan sorumlu (authAssigneeA)
+    const res1 = taskService.updateStatus(authAssigneeA, task1.id, 'IN_PROGRESS');
     assert.equal(res1.task.work_status, 'IN_PROGRESS');
     assert.equal(res1.task.progress, 25);
 
     // 4. Task 1'i COMPLETED sütununa sürükleme (Tamamlama) -> Task 2 ardıl olarak READY olmalıdır
-    const resDone = taskService.updateStatus(authManagerA, task1.id, 'COMPLETED');
+    const resDone = taskService.updateStatus(authAssigneeA, task1.id, 'COMPLETED');
     assert.equal(resDone.task.work_status, 'COMPLETED');
     assert.equal(resDone.task.progress, 100);
     assert.ok(resDone.newlyReadyTaskIds?.includes(task2.id));
 
     // 5. Şimdi Task 2 serbest kaldı (READY), IN_PROGRESS sütununa taşınabilir
-    const res2 = taskService.updateStatus(authManagerA, task2.id, 'IN_PROGRESS');
+    const res2 = taskService.updateStatus(authAssigneeA, task2.id, 'IN_PROGRESS');
     assert.equal(res2.task.work_status, 'IN_PROGRESS');
 
     // 6. Task 2'yi TODO sütununa geri sürükleme
-    const resTodo = taskService.updateStatus(authManagerA, task2.id, 'TODO');
+    const resTodo = taskService.updateStatus(authAssigneeA, task2.id, 'TODO');
     assert.equal(resTodo.task.work_status, 'READY'); // Öncülü bittiği için hazır durumda kalır
   });
 
@@ -1240,5 +1253,70 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     // Initial yedeğe dönüldüğünde pRestore1 projesi henüz hiç var olmamıştı
     const p1AfterFull = db.getProjectById(tenantA.id, pRestore1.id);
     assert.equal(p1AfterFull, undefined, 'Tam geri yükleme sonrasında ilk yedek durumuna eksiksiz dönülmelidir');
+  });
+
+  await t.test('KORUMA & MÜDAHALE ENGELİ: Hiçbir kullanıcı başkasına atanan görevi başlatamaz, ilerletemez, durumunu değiştiremez veya tamamlayamaz', () => {
+    // 1. Proje ve İki Farklı Personel Oluşturulur
+    const pTest = projectService.createProject(authManagerA, 'Müdahale Koruma Projesi', 'Güvenlik Testi', '2026-11-01T00:00:00Z', '2026-11-30T00:00:00Z');
+    
+    // Görev A -> assigneeA (Mehmet)
+    const taskMehmet = taskService.createTask(
+      authManagerA,
+      pTest.id,
+      'Mehmet Özel Numune Görevi',
+      '2026-11-01T09:00:00Z',
+      '2026-11-10T18:00:00Z',
+      assigneeA.id
+    );
+
+    // standardUser / authExternalA (Can İzleyici) bu görevin sorumlusu DEĞİL
+    const authCan = authExternalA;
+
+    // A) Can, Mehmet'in görevini BAŞLATAMAZ
+    assert.throws(
+      () => taskService.startTask(authCan, taskMehmet.id),
+      /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu başlatma yetkisine sahiptir/
+    );
+
+    // B) Can, Mehmet'in görevinde İLERLEME VE NOT GİREMEZ
+    assert.throws(
+      () => taskService.updateTaskProgressWithNote(authCan, taskMehmet.id, 50, 'Ben yaptım'),
+      /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu ilerletme ve not girme yetkisine sahiptir/
+    );
+
+    // C) Can, Mehmet'in görev durumunu DEĞİŞTİREMEZ (Kanban taşıma)
+    assert.throws(
+      () => taskService.updateStatus(authCan, taskMehmet.id, 'IN_PROGRESS'),
+      /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu durumunu değiştirme yetkisine sahiptir/
+    );
+
+    // D) Can, Mehmet'in görevini TAMAMLAYAMAZ
+    assert.throws(
+      () => taskService.completeTask(authCan, taskMehmet.id),
+      /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu tamamlama yetkisine sahiptir/
+    );
+
+    // E) Can, Mehmet'in görevi için GECİKME AÇIKLAMASI GİREMEZ
+    assert.throws(
+      () => delayService.submitExplanation(authCan, taskMehmet.id, 'Benim hatam değil'),
+      /Yetkisiz Müdahale Engellendi.*yalnızca atanan sorumlu tarafından girilebilir/
+    );
+
+    // F) Can (standart kullanıcı), Mehmet'in görev planını veya tanımını DEĞİŞTİREMEZ
+    assert.throws(
+      () => taskService.updateTaskPlan(authCan, taskMehmet.id, '2026-11-05T00:00:00Z', '2026-11-20T00:00:00Z', 'Erteleme'),
+      /Yetkisiz İşlem: Bu görev .* atanmıştır/
+    );
+
+    // G) Mehmet (atanan meşru sorumlu) kendi görevini sorunsuzca başlatır, ilerletir ve tamamlar
+    const started = taskService.startTask(authAssigneeA, taskMehmet.id);
+    assert.equal(started.work_status, 'IN_PROGRESS');
+
+    const progressed = taskService.updateTaskProgressWithNote(authAssigneeA, taskMehmet.id, 60, 'Numuneler başarıyla hazırlandı');
+    assert.equal(progressed.task.progress, 60);
+
+    const completed = taskService.completeTask(authAssigneeA, taskMehmet.id);
+    assert.equal(completed.task.work_status, 'COMPLETED');
+    assert.equal(completed.task.progress, 100);
   });
 });

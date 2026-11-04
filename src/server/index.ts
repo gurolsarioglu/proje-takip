@@ -594,6 +594,7 @@ app.get('/api/tasks/:id/details', (req, res) => {
     const plan_changes = db.getTaskPlanChanges(auth.tenant_id, task.id);
     const can_manage_plan = task.project_id ? projectService.canEditTasks(auth, task.project_id) : (task.assignee_id === auth.user_id);
     const can_edit = can_manage_plan || task.assignee_id === auth.user_id;
+    const is_assignee = !task.assignee_id || task.assignee_id === auth.user_id;
 
     res.json({
       task,
@@ -604,7 +605,8 @@ app.get('/api/tasks/:id/details', (req, res) => {
       delays,
       plan_changes,
       can_manage_plan,
-      can_edit
+      can_edit,
+      is_assignee
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -618,6 +620,16 @@ app.patch('/api/tasks/:id', (req, res) => {
     if (!task) return res.status(404).json({ error: 'Görev bulunamadı.' });
 
     const { progress, type, priority, description, title, note_text } = req.body;
+
+    // Görev icra ve müdahale kısıtlaması: Başkasına ait görevin ilerlemesini yalnızca atanan sorumlu güncelleyebilir
+    if (typeof progress === 'number') {
+      taskService.assertCanExecuteTask(auth, task, 'ilerletme');
+    }
+
+    // Görev tanımı/detayı düzenleme kısıtlaması: Yalnızca sorumlu, PM/Editor veya Admin düzenleyebilir
+    if (type !== undefined || priority !== undefined || description !== undefined || title !== undefined) {
+      taskService.assertCanModifyTask(auth, task);
+    }
 
     if (typeof progress === 'number' && note_text && String(note_text).trim().length >= 2) {
       const updRes = taskService.updateTaskProgressWithNote(auth, req.params.id, progress, String(note_text).trim());
@@ -679,12 +691,25 @@ app.post('/api/tasks/:id/progress', (req, res) => {
 app.post('/api/tasks/:id/assign', (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { assignee_id } = req.body;
-    const task = taskService.assignTask(auth, req.params.id, assignee_id);
-    if (assignee_id) {
-      void emailService.sendTaskAssignedActionableCard(auth.tenant_id, task.id, auth.name);
+    const task = db.getTaskById(auth.tenant_id, req.params.id);
+    if (!task) return res.status(404).json({ error: 'Görev bulunamadı.' });
+
+    // Yalnızca Proje Yöneticisi / Editörü veya Sistem Yöneticisi başkasına görev atayabilir veya atamayı değiştirebilir
+    const caller = db.getUserById(auth.tenant_id, auth.user_id);
+    const isFullAdmin = caller?.system_role === 'ADMIN';
+    const member = task.project_id ? db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id) : undefined;
+    const isProjectManagerOrEditor = member && (member.role === 'PROJECT_MANAGER' || member.role === 'EDITOR');
+
+    if (!isFullAdmin && !isProjectManagerOrEditor) {
+      return res.status(403).json({ error: 'Yetkisiz İşlem: Görev atama veya sorumlusunu değiştirme yetkiniz bulunmamaktadır.' });
     }
-    res.json(task);
+
+    const { assignee_id } = req.body;
+    const updatedTask = taskService.assignTask(auth, req.params.id, assignee_id);
+    if (assignee_id) {
+      void emailService.sendTaskAssignedActionableCard(auth.tenant_id, updatedTask.id, auth.name);
+    }
+    res.json(updatedTask);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
