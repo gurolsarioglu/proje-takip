@@ -1377,7 +1377,8 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     subHeaderHtml,
     gridLinesHtml,
     todayOffsetPx,
-    dateToPx
+    dateToPx,
+    colWidth: (zoomLevel === 'day' ? 44 : (zoomLevel === 'week' ? 68 : (zoomLevel === 'month' ? 84 : 76)))
   };
 }
 
@@ -1580,15 +1581,17 @@ function renderTimeline() {
     return;
   }
 
-  // 1. Tarih Aralığı Hesaplama
+  // 1. Tarih Aralığı Hesaplama (Gün sonları tam dahil edilir)
   let minTime = Infinity;
   let maxTime = -Infinity;
 
   tasksToRender.forEach(t => {
-    const s = new Date(t.current_start_date).getTime();
-    const d = new Date(t.current_due_date).getTime();
-    if (s < minTime) minTime = s;
-    if (d > maxTime) maxTime = d;
+    const s = new Date(t.current_start_date);
+    const d = new Date(t.current_due_date);
+    const sDay = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
+    const dDayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
+    if (sDay < minTime) minTime = sDay;
+    if (dDayEnd > maxTime) maxTime = dDayEnd;
   });
 
   if (minTime === Infinity) {
@@ -1743,17 +1746,18 @@ function renderTimeline() {
     track.dataset.id = t.id;
     track.style.width = `${scale.timelineWidth}px`;
 
-    const tStart = new Date(t.current_start_date).getTime();
-    const tDue = new Date(t.current_due_date).getTime();
+    const s = new Date(t.current_start_date);
+    const d = new Date(t.current_due_date);
+    const tStart = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
+    // Bitiş tarihi günün tamamını kapsayacak şekilde (bir sonraki günün 00:00:00'ına kadar) hesaplanır
+    const tDueEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
 
     const leftPx = Math.round(scale.dateToPx(tStart));
-    const rightPx = Math.round(scale.dateToPx(tDue));
+    const rightPx = Math.round(scale.dateToPx(tDueEnd));
 
-    // Metin ve iş adımı uzunluğuna göre dinamik genişlik hesabı (asla kesilmemesi ve okunur olması için)
-    const textLength = (t.workflow_step ? t.workflow_step.length : 0) + (t.title ? t.title.length : 0);
-    const dynamicMinWidth = Math.max(250, Math.min(520, Math.round(textLength * 7.5) + 70));
-    const minBarWidth = ganttZoomLevel === 'year' ? 100 : (ganttZoomLevel === 'month' ? 160 : dynamicMinWidth);
-    const widthPx = Math.max(minBarWidth, rightPx - leftPx);
+    // Çubuğun genişliği takvimdeki tarih aralığını (bitiş gününün sonuna kadar tam) kapsar
+    const colWidth = scale.colWidth || 44;
+    const widthPx = Math.max(colWidth, rightPx - leftPx);
 
     const barClass = {
       BLOCKED: 'bar-blocked',
@@ -1766,7 +1770,7 @@ function renderTimeline() {
 
     // KİLOMETRE TAŞI MI YOKSA NORMAL GÖREV Mİ?
     if (t.type === 'MILESTONE') {
-      const mLeftPx = Math.round(scale.dateToPx(tDue));
+      const mLeftPx = Math.round(scale.dateToPx(tStart + 12 * 60 * 60 * 1000));
 
       const marker = document.createElement('div');
       marker.className = `gantt-milestone-marker ${t.work_status === 'COMPLETED' ? 'done' : ''}`;

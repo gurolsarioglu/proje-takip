@@ -499,5 +499,25 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 4. **Test ve Doğrulama:**
    - 33/33 kabul testi başarıyla geçti, TypeScript derlemesi 0 hata ile tamamlandı.
 
+---
+
+## 33. GANTT ÇUBUĞUNUN BİTİŞ TARİHİNİ TAM VE DAHİLİ KAPSAMASI (INCLUSIVE DUE DATE) (04.11.2026)
+
+### 33.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** Görevin bitiş tarihi `10.11.2026` olmasına rağmen, Gantt çizelgesindeki çubuk gece yarısı (`00:00:00`) baz alınarak hesaplandığı için yalnızca 9 Kasım'ın sonuna (9 PZT ile 10 SAL arasındaki çizgiye) kadar uzanıyor, 10 Kasım Salı gününün sütununu içine almıyordu.
+- **Kullanıcı Talebi:** Resimde kırmızı okla işaretlenen yere kadar, görevin bitiş tarihi olan 10 Kasım Salı gününün tamamını takvim üzerinde otomatik olarak kapsaması.
+
+### 33.2. Gerçekleştirilen Geliştirmeler
+1. **Dahili Bitiş Günü (Inclusive Day Span) Hesaplaması (`src/public/app.js`):**
+   - Görev başlangıç tarihi ilgili günün `00:00:00` anı, bitiş tarihi ise günün tamamını kapsayacak şekilde `23:59:59.999` (ertesi günün `00:00:00` anı) olarak hesaplandı (`tDueEnd`).
+   - `04.11.2026 - 10.11.2026` aralığındaki bir görev 4, 5, 6, 7, 8, 9 ve 10 Kasım dahil olmak üzere tam 7 tam günü (`7 * 44px = 308px`) kapsayacak şekilde sağa doğru uzatıldı.
+   - Çubuğun sağ sınırı tam olarak 10 SAL ile 11 ÇAR arasındaki dikey çizgiye (kullanıcının kırmızı okla işaretlediği noktaya) oturtuldu.
+2. **Çubuk Genişliği ve CSS Uyumu (`src/public/styles.css`):**
+   - `.gantt-pill-bar` min-width değeri 44px olarak revize edildi; çubuk genişliği takvimdeki gerçek tarih süresini birebir yansıtacak şekilde ayarlandı.
+3. **Doğrulama:**
+   - 33/33 kabul testi başarıyla geçti.
+   - TypeScript derlemesi ve statik dosya senkronizasyonu hatasız tamamlandı.
+
+
 
 
