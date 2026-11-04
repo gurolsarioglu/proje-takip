@@ -501,7 +501,25 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 
 ---
 
-## 34. YENİ GÖREV EKLE MODAL TAŞMA SORUNU DÜZELTMESİ VE STANDART TEKSTİL GÖREV TANIMLARI ENTEGRASYONU (04.11.2026)
+## 35. ALT MODALLARIN (İŞ ADIMI VE GÖREV TANIMI EKLE) ÜST KATMAN (Z-INDEX) VE YIĞIN DÜZENLEMESİ (04.11.2026)
+
+### 35.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** "Yeni Görev Ekle" modalı (`#taskModal`) açıkken `+ Yeni Adım Ekle` veya `+ Yeni Tanım Ekle` butonlarına tıklandığında açılan "Yeni İş Adımı Tanımla" (`#newWorkflowStepModal`) veya "Yeni Görev Tanımı Ekle" (`#newTaskDefModal`) pencereleri, `#taskModal`'ın arkasında kalıyordu. Kullanıcı ancak birinci modalı kapattığında ikinci modalı görebiliyordu.
+- **Kök Neden:**
+  1. Her iki alt modal HTML içerisinde sidebar'ın hemen bitimine (DOM'un üst kısmına, satır 199 civarına) yerleştirilmişti, `#taskModal` ise satır 1293'te (DOM'un alt kısmında) yer alıyordu.
+  2. Bütün modallar `.modal-backdrop` sınıfı ile aynı `z-index: 100` değerine sahipti. Aynı `z-index` seviyesinde DOM'da sonra gelen eleman önde boyandığından `#taskModal` alt modalları tamamen örtüyordu.
+
+### 35.2. Gerçekleştirilen Mimari & Arayüz Düzeltmeleri
+1. **DOM Konumu Düzeltildi (`src/public/index.html`):**
+   - `#newWorkflowStepModal` ve `#newTaskDefModal`, sidebar bloğundan çıkarılıp ana modallar bölgesine (`#taskModal`'ın hemen ardına) taşındı.
+2. **Üst Katman Z-Index Güvencesi (`src/public/styles.css`):**
+   - `#newWorkflowStepModal` ve `#newTaskDefModal` pencereleri için `z-index: 300 !important;` ve `.modal-content` için `z-index: 301 !important;` tanımlandı.
+   - Böylece `+ Yeni Adım Ekle` veya `+ Yeni Tanım Ekle` butonuna basıldığında diyalog penceresi `#taskModal`'ın doğrudan en üstünde ve odağında açılır hale getirildi.
+   - Yeni adım/tanım eklendiğinde veya iptal edildiğinde alt modal kapanıp doğrudan arkasındaki `#taskModal`'a dönülmekte ve yeni veri anında seçili hale gelmektedir.
+3. **Doğrulama:**
+   - 33/33 kabul testi başarıyla geçti.
+   - `npm run build` ile TypeScript derlemesi 0 hata ile tamamlandı.
+
 
 ### 34.1. Kullanıcı Talebi & Problem Tespiti
 - **Problem:** "Yeni Görev Ekle" modalında "Görev Tanımı" açılır menüsündeki metinler uzun olduğunda menü modal penceresinin sağ tarafından dışarıya taşıyordu.

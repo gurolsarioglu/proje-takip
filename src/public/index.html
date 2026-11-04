@@ -195,73 +195,6 @@
         </div>
       </div>
     </aside>
-    <!-- Yeni İş Adımı Modalı -->
-    <div id="newWorkflowStepModal" class="modal-backdrop">
-      <div class="modal-content" style="max-width: 440px;">
-        <div class="modal-header">
-          <h3>🏷️ Yeni İş Adımı Tanımla</h3>
-          <button class="modal-close" data-close="newWorkflowStepModal">&times;</button>
-        </div>
-        <form id="newWorkflowStepForm" class="modal-body">
-          <div class="form-group">
-            <label for="stepInputName">İş Adımı Adı * (Büyük Harf)</label>
-            <input type="text" id="stepInputName" required class="styled-input"
-              placeholder="Örn: ÜTÜ PAKET veya AKSESUAR">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="stepInputColor">Etiket Rengi</label>
-              <input type="color" id="stepInputColor" class="styled-input" value="#3b82f6"
-                style="height:38px; padding:2px;">
-            </div>
-            <div class="form-group">
-              <label for="stepInputDept">İlgili Departman</label>
-              <input type="text" id="stepInputDept" class="styled-input" placeholder="Örn: Paketleme">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="action-btn secondary-btn" data-close="newWorkflowStepModal">İptal</button>
-            <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Yeni Görev Tanımı Modalı -->
-    <div id="newTaskDefModal" class="modal-backdrop">
-      <div class="modal-content" style="max-width: 480px;">
-        <div class="modal-header">
-          <h3>📝 Yeni Görev Tanımı Ekle</h3>
-          <button class="modal-close" data-close="newTaskDefModal">&times;</button>
-        </div>
-        <form id="newTaskDefForm" class="modal-body">
-          <div class="form-group">
-            <label for="defInputStep">Bağlı Olduğu İş Adımı *</label>
-            <select id="defInputStep" required class="styled-select"></select>
-          </div>
-          <div class="form-group">
-            <label for="defInputTitle">Görev Tanımı Başlığı *</label>
-            <input type="text" id="defInputTitle" required class="styled-input"
-              placeholder="Örn: Numunelerin ütü ve etiketlenmesi">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="defInputDuration">Varsayılan Termin Süresi (Gün)</label>
-              <input type="number" id="defInputDuration" class="styled-input" value="7" min="1" max="180">
-            </div>
-            <div class="form-group">
-              <label for="defInputDept">Departman</label>
-              <input type="text" id="defInputDept" class="styled-input" placeholder="Örn: Paketleme">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="action-btn secondary-btn" data-close="newTaskDefModal">İptal</button>
-            <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
 
     <!-- SAĞ ANA İÇERİK (MAIN CONTENT) -->
     <main class="app-main-area">
@@ -1321,7 +1254,8 @@
         <div class="form-row" id="tWorkflowAndDefRow" style="margin-bottom:12px;">
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:6px;">
-              <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem; white-space:nowrap;">🏷️ İş Adımı *</label>
+              <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem; white-space:nowrap;">🏷️
+                İş Adımı *</label>
               <button type="button" id="tAddStepBtn" class="action-btn outline-btn sm-btn"
                 style="font-size:0.72rem; padding:2px 8px; white-space:nowrap;"
                 title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Adım Ekle</button>
@@ -1333,7 +1267,8 @@
 
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:6px;">
-              <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem; white-space:nowrap;">📝 Görev Tanımı *</label>
+              <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem; white-space:nowrap;">📝
+                Görev Tanımı *</label>
               <button type="button" id="tAddDefBtn" class="action-btn outline-btn sm-btn"
                 style="font-size:0.72rem; padding:2px 8px; white-space:nowrap;"
                 title="Proje Yöneticisi yeni görev tanımı ekleyebilir">+ Yeni Tanım Ekle</button>
@@ -1341,7 +1276,8 @@
             <select id="tTaskDefinition" class="styled-select" style="font-weight:500;" required>
               <option value="">Önce İş Adımı seçiniz...</option>
             </select>
-            <input type="text" id="tCustomDefInput" class="styled-input" placeholder="Özel / Sezonluk görev tanımını yazınız (Örn: AW27, SS27 vb.)..."
+            <input type="text" id="tCustomDefInput" class="styled-input"
+              placeholder="Özel / Sezonluk görev tanımını yazınız (Örn: AW27, SS27 vb.)..."
               style="display:none; margin-top:6px;">
           </div>
         </div>
@@ -1390,6 +1326,73 @@
         <div class="modal-footer">
           <button type="button" class="action-btn secondary-btn" data-close="taskModal">İptal</button>
           <button type="submit" class="action-btn primary-btn">Görevi Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 1.1. Yeni İş Adımı Tanımla Modalı (Alt Modal - Üst Katman) -->
+  <div id="newWorkflowStepModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>🏷️ Yeni İş Adımı Tanımla</h3>
+        <button class="modal-close" data-close="newWorkflowStepModal">&times;</button>
+      </div>
+      <form id="newWorkflowStepForm" class="modal-body">
+        <div class="form-group">
+          <label for="stepInputName">İş Adımı Adı * (Büyük Harf)</label>
+          <input type="text" id="stepInputName" required class="styled-input"
+            placeholder="Örn: ÜTÜ PAKET veya AKSESUAR">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="stepInputColor">Etiket Rengi</label>
+            <input type="color" id="stepInputColor" class="styled-input" value="#3b82f6"
+              style="height:38px; padding:2px;">
+          </div>
+          <div class="form-group">
+            <label for="stepInputDept">İlgili Departman</label>
+            <input type="text" id="stepInputDept" class="styled-input" placeholder="Örn: Paketleme">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn secondary-btn" data-close="newWorkflowStepModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 1.2. Yeni Görev Tanımı Ekle Modalı (Alt Modal - Üst Katman) -->
+  <div id="newTaskDefModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>📝 Yeni Görev Tanımı Ekle</h3>
+        <button class="modal-close" data-close="newTaskDefModal">&times;</button>
+      </div>
+      <form id="newTaskDefForm" class="modal-body">
+        <div class="form-group">
+          <label for="defInputStep">Bağlı Olduğu İş Adımı *</label>
+          <select id="defInputStep" required class="styled-select"></select>
+        </div>
+        <div class="form-group">
+          <label for="defInputTitle">Görev Tanımı Başlığı *</label>
+          <input type="text" id="defInputTitle" required class="styled-input"
+            placeholder="Örn: Numunelerin ütü ve etiketlenmesi">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="defInputDuration">Varsayılan Termin Süresi (Gün)</label>
+            <input type="number" id="defInputDuration" class="styled-input" value="7" min="1" max="180">
+          </div>
+          <div class="form-group">
+            <label for="defInputDept">Departman</label>
+            <input type="text" id="defInputDept" class="styled-input" placeholder="Örn: Paketleme">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn secondary-btn" data-close="newTaskDefModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
         </div>
       </form>
     </div>
