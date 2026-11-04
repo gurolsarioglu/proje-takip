@@ -386,3 +386,32 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 3. **Test ve Doğrulama:**
    - `tests/acceptance.test.ts` içine editör veya başka bir personelin başkasının görevine not ekleyemediğini doğrulayan kabul senaryosu eklendi.
    - **31/31 Kabul Testi** başarıyla tamamlandı, derleme hatasız alındı.
+
+---
+
+## 29. Bildirim Merkezi Çekmecesinin Onarılması, Tekilleştirme ve Okundu Sayılarak Sıfırlanması
+
+### 29.1. İster Özeti
+- **Kullanıcı Talebi:** Bildirim zilinde 45 bildirim görünmesi ancak tıklandığında açılmaması; ayrıca açıldığında bildirimlerin görüntülenmesi ve okunmamış sayacının sıfırlanması talebi.
+- **Kök Neden Tespiti:**
+  1. `#notifDrawer` bileşeni `.drawer-backdrop` sınıfı taşıyordu; ancak CSS'te `.drawer-backdrop.open` kuralı ve `.drawer-panel` boyut/konum kuralları tanımlı değildi (`display: none` olarak kalıyordu).
+  2. Sistemde her bildirim olayı için 3 ayrı kanal (`IN_APP`, `EMAIL`, `WEB_PUSH`) kaydı üretildiğinden, arayüz filtresiz toplam 45 kaydı sayıyordu (15 gerçek olay x 3 kanal).
+  3. Bildirimler için okundu/okunmadı (`is_read`, `read_at`) takibi ve sıfırlama mekanizması eksikti.
+
+### 29.2. Geliştirilen Çözüm ve Mimari
+1. **Bildirim Çekmecesi Arayüz & CSS Onarımı (`src/public/styles.css`):**
+   - `#notifDrawer.drawer-backdrop` z-index 10050, arka plan karartma ve `backdrop-filter: blur(4px)` ile yapılandırıldı.
+   - `.drawer-panel` sağdan kayarak açılan (`width: 440px`, `height: 100vh`, `box-shadow: -10px 0 35px rgba(0,0,0,0.25)`) modern bir çekmece haline getirildi; dark mode desteği eklendi.
+   - Bildirim kartları (`.notif-card-item`) okundu/okunmadı durumuna göre belirginleştirildi (`.unread-item`), başlık, açıklama, tarih ve tıklandığında ilgili görevi açan `Görevi Aç ➔` aksiyonu sağlandı.
+   - Çekmece başlığına **"🗑️ Temizle"** ve **"🔄 Tara"** butonları eklendi.
+2. **Kanal Tekilleştirme & Otomatik Sayaç Sıfırlama (`src/public/app.js`):**
+   - Arayüzde `channel === 'IN_APP'` tekilleştirmesi yapılarak kullanıcının aynı olayı 3 kez görmesi engellendi.
+   - Çan ikonuna basıldığı anda çekmece akıcı animasyonla açılır; `POST /api/notifications/read-all` çağrısıyla tüm bildirimler okundu işaretlenir ve kırmızı sayaç rozeti (`#notifBadge`) anında sıfırlanır (gizlenir).
+   - ESC tuşuyla veya çekmece dışına tıklandığında kapanma sağlandı.
+3. **Veritabanı & REST API Desteği (`src/database/db.ts`, `src/modules/notification/notification.service.ts`, `src/server/index.ts`):**
+   - `Notification` modeline `is_read?: boolean` ve `read_at?: string` alanları eklendi (`schema.sql` güncellendi).
+   - `markAllNotificationsAsRead` ve `clearNotifications` veritabanı metotları yazıldı.
+   - `POST /api/notifications/read-all` ve `POST /api/notifications/clear-all` uç noktaları bağlandı.
+4. **Test ve Doğrulama:**
+   - `tests/acceptance.test.ts` içine okundu işaretleme, okunmamış rozet sıfırlama ve bildirim temizleme test senaryoları eklendi.
+   - **32/32 Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** başarıyla geçti.

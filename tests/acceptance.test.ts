@@ -1377,4 +1377,25 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.ok(emailItem?.html_preview.includes('🌐 Outlook Web (M365)'), 'HTML gövdesinde Outlook Web butonu olmalıdır');
     assert.ok(emailItem?.html_preview.includes('📆 Google Takvim'), 'HTML gövdesinde Google Calendar butonu olmalıdır');
   });
+
+  await t.test('BİLDİRİM MERKEZİ: Bildirimlerin okunması, rozet sıfırlama (read-all) ve temizleme (clear-all)', () => {
+    // 1. Yeni bildirim oluştur
+    const testEvt = 'evt_notif_test_' + Date.now();
+    notificationService.createNotification(tenantA.id, assigneeA.id, testEvt, 'IN_APP', 'Test Bildirim Başlığı', 'Test Bildirim Mesajı');
+
+    const notifsBefore = notificationService.getUserNotifications(authAssigneeA);
+    const unreadBefore = notifsBefore.filter(n => !n.is_read);
+    assert.ok(unreadBefore.length > 0, 'Okunmamış bildirim bulunmalıdır');
+
+    // 2. Tümünü Okundu İşaretle (Read All)
+    notificationService.markAllAsRead(authAssigneeA);
+    const notifsAfterRead = notificationService.getUserNotifications(authAssigneeA);
+    const unreadAfter = notifsAfterRead.filter(n => !n.is_read);
+    assert.equal(unreadAfter.length, 0, 'Tüm bildirimler okundu olmalı, okunmamış kalmamalıdır');
+
+    // 3. Bildirimleri Temizle (Clear All)
+    notificationService.clearAll(authAssigneeA);
+    const notifsAfterClear = notificationService.getUserNotifications(authAssigneeA);
+    assert.equal(notifsAfterClear.length, 0, 'Temizleme sonrasında kullanıcının bildirimi kalmamalıdır');
+  });
 });

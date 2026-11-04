@@ -402,6 +402,29 @@ export class Database {
     this.save();
     return n;
   }
+  public markAllNotificationsAsRead(tenant_id: UUID, recipient_id: UUID): void {
+    const now = new Date().toISOString();
+    let changed = false;
+    for (const n of this.state.notifications) {
+      if (n.tenant_id === tenant_id && n.recipient_id === recipient_id && !n.is_read) {
+        n.is_read = true;
+        n.read_at = now;
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.save();
+    }
+  }
+  public clearNotifications(tenant_id: UUID, recipient_id: UUID): void {
+    const initialLen = this.state.notifications.length;
+    this.state.notifications = this.state.notifications.filter(
+      n => !(n.tenant_id === tenant_id && n.recipient_id === recipient_id)
+    );
+    if (this.state.notifications.length !== initialLen) {
+      this.save();
+    }
+  }
 
   // --- Push Subscriptions ---
   public getPushSubscriptions(tenant_id: UUID, user_id?: UUID): PushSubscriptionData[] {

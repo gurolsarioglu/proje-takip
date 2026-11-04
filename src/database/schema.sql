@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   link_project_id TEXT,
   status TEXT NOT NULL,
   retry_count INTEGER NOT NULL DEFAULT 0,
+  is_read BOOLEAN DEFAULT FALSE,
+  read_at TEXT,
   sent_at TEXT,
   created_at TEXT NOT NULL
 );

@@ -948,6 +948,26 @@ app.get('/api/notifications', (req, res) => {
   }
 });
 
+app.post('/api/notifications/read-all', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    notificationService.markAllAsRead(auth);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/notifications/clear-all', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    notificationService.clearAll(auth);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/notifications/push-subscribe', (req, res) => {
   try {
     const auth = getAuthContext(req);

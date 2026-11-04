@@ -312,4 +312,12 @@ export class NotificationService {
   public getUserNotifications(auth: AuthContext): Notification[] {
     return this.db.getNotifications(auth.tenant_id, auth.user_id);
   }
+
+  public markAllAsRead(auth: AuthContext): void {
+    this.db.markAllNotificationsAsRead(auth.tenant_id, auth.user_id);
+  }
+
+  public clearAll(auth: AuthContext): void {
+    this.db.clearNotifications(auth.tenant_id, auth.user_id);
+  }
 }

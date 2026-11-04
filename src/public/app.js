@@ -506,19 +506,24 @@ async function triggerWorkerAndLoadNotifications(silent = true) {
 
 async function loadNotifications() {
   try {
-    state.notifications = await apiCall('/api/notifications');
+    const rawNotifs = await apiCall('/api/notifications');
+    // Tekilleştirme: Kullanıcıya aynı olayı hem IN_APP hem EMAIL hem WEB_PUSH olarak 3 kez göstermek yerine IN_APP kanalını al
+    const inAppOnly = Array.isArray(rawNotifs) ? rawNotifs.filter(n => n.channel === 'IN_APP') : [];
+    state.notifications = inAppOnly.length > 0 ? inAppOnly : (Array.isArray(rawNotifs) ? rawNotifs : []);
     renderNotifications();
   } catch (err) {
     state.notifications = [];
+    renderNotifications();
   }
 }
 
 function renderNotifications() {
   const notifs = state.notifications || [];
+  const unreadNotifs = notifs.filter(n => !n.is_read);
   const badge = document.getElementById('notifBadge');
   if (badge) {
-    if (notifs.length > 0) {
-      badge.textContent = String(notifs.length);
+    if (unreadNotifs.length > 0) {
+      badge.textContent = String(unreadNotifs.length);
       badge.style.display = 'inline-flex';
     } else {
       badge.style.display = 'none';
@@ -530,10 +535,10 @@ function renderNotifications() {
 
   if (notifs.length === 0) {
     listEl.innerHTML = `
-      <div style="padding:36px 20px; text-align:center; color:var(--text-tertiary);">
-        <div style="font-size:2rem; margin-bottom:8px;">🎉</div>
-        <strong style="color:var(--text-primary); display:block; margin-bottom:4px;">Yeni bildirim yok</strong>
-        <span style="font-size:0.8rem;">Tüm görevler ve teslim tarihleri kontrol altında.</span>
+      <div style="padding:40px 20px; text-align:center; color:var(--text-tertiary);">
+        <div style="font-size:2.5rem; margin-bottom:10px;">🎉</div>
+        <strong style="color:var(--text-primary); display:block; margin-bottom:4px; font-size:1rem;">Yeni bildirim yok</strong>
+        <span style="font-size:0.82rem; line-height:1.4; display:block;">Tüm görevler, teslim tarihleri ve bağımlılıklar kontrol altında.</span>
       </div>
     `;
     return;
@@ -541,16 +546,23 @@ function renderNotifications() {
 
   const sorted = [...notifs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   listEl.innerHTML = sorted.map(n => {
-    const icon = n.type === 'DELAY_EXPLANATION_REQUEST'
+    const isUnread = !n.is_read;
+    const icon = n.type === 'DELAY_EXPLANATION_REQUEST' || (n.title && n.title.includes('Gecik'))
       ? '⚠️'
-      : (n.type === 'DEPENDENCY_UNBLOCKED' ? '🔓' : (n.type === 'DUE_REMINDER_24H' ? '⏰' : '🔔'));
-    const typeClass = n.type === 'DELAY_EXPLANATION_REQUEST' ? 'notif-danger' : (n.type === 'DEPENDENCY_UNBLOCKED' ? 'notif-success' : 'notif-info');
+      : (n.type === 'DEPENDENCY_UNBLOCKED' || (n.title && n.title.includes('Hazır')) ? '🔓' : (n.type === 'DUE_REMINDER_24H' || (n.title && n.title.includes('Hatırlat')) ? '⏰' : '🔔'));
+    const typeClass = (n.type === 'DELAY_EXPLANATION_REQUEST' || (n.title && n.title.includes('Gecik'))) ? 'notif-danger' : (n.type === 'DEPENDENCY_UNBLOCKED' || (n.title && n.title.includes('Hazır')) ? 'notif-success' : 'notif-info');
     const timeStr = n.created_at ? new Date(n.created_at).toLocaleString('tr-TR') : '';
     return `
-      <div class="notif-card-item ${typeClass}" data-task-id="${n.link_task_id || ''}">
+      <div class="notif-card-item ${typeClass} ${isUnread ? 'unread-item' : 'read-item'}" data-task-id="${n.link_task_id || ''}">
         <div class="notif-icon-col">${icon}</div>
         <div class="notif-body-col">
-          <div class="notif-msg">${escapeHtml(n.message)}</div>
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:6px;">
+            <div class="notif-title" style="font-size:0.84rem; font-weight:700; color:var(--text-primary); line-height:1.3;">
+              ${escapeHtml(n.title || 'Sistem Bildirimi')}
+            </div>
+            ${isUnread ? '<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; flex-shrink:0; margin-top:4px;" title="Yeni"></span>' : ''}
+          </div>
+          <div class="notif-msg" style="margin-top:4px;">${escapeHtml(n.message)}</div>
           <div class="notif-meta">
             <span>${timeStr}</span>
             ${n.link_task_id ? '<span class="notif-goto-link">Görevi Aç ➔</span>' : ''}
@@ -2630,8 +2642,33 @@ function setupEventListeners() {
 
   // Bildirim Çanı ve Çekmecesi
   document.getElementById('notifBellBtn')?.addEventListener('click', async () => {
-    document.getElementById('notifDrawer')?.classList.add('open');
+    const drawer = document.getElementById('notifDrawer');
+    if (!drawer) return;
+    drawer.classList.add('open');
     await loadNotifications();
+
+    // Çekmece açıldığında okunmamış bildirim sayacı sıfırlansın ve sunucuda okundu işaretlensin
+    try {
+      await apiCall('/api/notifications/read-all', 'POST');
+      if (state.notifications) {
+        state.notifications.forEach(n => { n.is_read = true; });
+      }
+      const badge = document.getElementById('notifBadge');
+      if (badge) badge.style.display = 'none';
+    } catch (err) {
+      // ignore
+    }
+  });
+
+  document.getElementById('clearAllNotifsBtn')?.addEventListener('click', async () => {
+    try {
+      await apiCall('/api/notifications/clear-all', 'POST');
+      state.notifications = [];
+      renderNotifications();
+      showToast('Tüm bildirimler temizlendi.', 'info');
+    } catch (err) {
+      showToast('Bildirimler temizlenemedi: ' + err.message, 'error');
+    }
   });
 
   document.getElementById('closeDrawerBtn')?.addEventListener('click', () => {
@@ -2854,9 +2891,14 @@ function setupEventListeners() {
     }
   });
 
-  // ESC tuşu ile görev detay modalını kapatma
+  // ESC tuşu ile görev detay modalını veya bildirim çekmecesini kapatma
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      const notifDrawer = document.getElementById('notifDrawer');
+      if (notifDrawer && notifDrawer.classList.contains('open')) {
+        notifDrawer.classList.remove('open');
+        return;
+      }
       const drawer = document.getElementById('workPackageDrawer');
       if (drawer && drawer.classList.contains('open')) {
         closeTaskDrawer();

@@ -237,6 +237,8 @@ export interface Notification {
   link_project_id?: UUID;
   status: NotificationStatus;
   retry_count: number;
+  is_read?: boolean;
+  read_at?: string;
   sent_at?: string;
   created_at: string;
 }
