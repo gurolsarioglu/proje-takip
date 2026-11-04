@@ -208,9 +208,11 @@
         <div class="topbar-global-search" id="globalSearchContainer" role="search">
           <span class="global-search-icon" aria-hidden="true">🔍</span>
           <input type="text" id="globalTaskSearchInput" class="global-search-input"
+            name="search_filter_query_global"
             placeholder="Görev, açıklama veya personel ara... (Ctrl+K)"
             aria-label="Tüm görünümlerde görev, açıklama veya personel ara"
-            data-i18n-placeholder="global_search_placeholder" autocomplete="off">
+            data-i18n-placeholder="global_search_placeholder"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
           <span id="globalSearchCountBadge" class="global-search-badge" style="display:none;"
             title="Eşleşen görev sayısı">0 / 0</span>
           <button type="button" id="globalSearchClearBtn" class="global-search-clear-btn" style="display:none;"
@@ -287,7 +289,9 @@
           <div class="op-search-box">
             <span class="search-icon">🔍</span>
             <input type="text" id="taskSearchInput" class="op-search-input"
-              placeholder="İş paketlerinde veya görevlerde ara...">
+              name="search_filter_query_tasks"
+              placeholder="İş paketlerinde veya görevlerde ara..."
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
           </div>
           <div class="op-filter-tabs">
             <button class="op-tab-btn active" data-filter="all">Tümü (<span id="countAll">0</span>)</button>
@@ -326,7 +330,10 @@
               <span class="timeline-meta" id="timelineProjectName">Proje Çizelgesi</span>
               <div class="gantt-search-wrap">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="ganttSearchInput" class="gantt-search-input" placeholder="Görevlerde ara...">
+                <input type="text" id="ganttSearchInput" class="gantt-search-input"
+                  name="search_filter_query_gantt"
+                  placeholder="Görevlerde ara..."
+                  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true">
               </div>
             </div>
 
@@ -402,7 +409,9 @@
             <div class="kanban-search-box">
               <span class="kanban-search-icon">🔍</span>
               <input type="text" id="kanbanSearchInput" class="kanban-input"
-                placeholder="Panoda görev, kişi veya etiket ara..." />
+                name="search_filter_query_kanban"
+                placeholder="Panoda görev, kişi veya etiket ara..."
+                autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-lpignore="true" />
             </div>
             <div class="kanban-hint-pill">
               <span class="hint-icon">💡</span>

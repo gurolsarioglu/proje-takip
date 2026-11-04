@@ -266,3 +266,10 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - **Personel Tablosu (`#personnelTable`)**: Tabloya `Hesap Durumu` sütunu eklendi; pasif personel satırları hafif soluklaştırılıp kırmızı `⛔ Devre Dışı` rozetiyle işaretlenir.
 * **Tüm Testler ve Doğrulama:**
   - `PERSONNEL DEACTIVATION & ACCESS BLOCKING` kabul testi dahil olmak üzere **27/27 Birim & Kabul Testi (`npm test`)** başarıyla geçti.
+
+### 23. Arama & Canlı Filtre Alanlarının Temiz Başlaması (Tarayıcı Otomatik Doldurma Engellemesi)
+* **Gantt, Görevler ve Kanban Arama Kutularının Temiz Başlaması (`clearAllSearchFilters`):**
+  - Tarayıcıların (Chrome/Edge) kayıtlı giriş bilgisi nedeniyle Zaman Çizelgesi (Gantt) `#ganttSearchInput`, İş Paketleri `#taskSearchInput` veya Kanban `#kanbanSearchInput` alanlarına otomatik olarak "admin" doldurması (autofill) engellendi.
+  - Arama kutularına `autocomplete="off"`, `autocorrect="off"`, `autocapitalize="off"`, `spellcheck="false"`, `data-lpignore="true"` ve belirgin `name` öznitelikleri tanımlandı.
+  - Uygulama başlatıldığında (`DOMContentLoaded`), oturum açıldığında (`onLoginSuccess`), veri yüklendiğinde (`loadInitialData`), görünüm değiştirildiğinde (`switchView`) ve sayfa gösterildiğinde (`pageshow`) arama kutularının tamamen boş (`value = ''`) ve arama filtrelerinin temiz (`state.searchQuery = ''`) gelmesi garanti altına alındı.
+  - Kullanıcı `Escape` tuşuna bastığında aramanın anında sıfırlanması sağlandı.

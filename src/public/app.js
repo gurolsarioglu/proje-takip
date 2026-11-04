@@ -202,8 +202,30 @@ function applyGlobalTaskSearch(rawQuery, sourceInputId = '') {
   renderMicrosoftTodoList();
 }
 
+function clearAllSearchFilters() {
+  state.searchQuery = '';
+  ganttFilterQuery = '';
+  state.kanbanSearchQuery = '';
+  const inputIds = ['globalTaskSearchInput', 'taskSearchInput', 'ganttSearchInput', 'kanbanSearchInput'];
+  inputIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = '';
+    }
+  });
+  updateGlobalSearchUI();
+}
+
+// Sayfa her açıldığında veya geri gelindiğinde arama alanlarının temiz gelmesini garantiye al
+window.addEventListener('pageshow', () => {
+  if (!state.searchQuery) {
+    clearAllSearchFilters();
+  }
+});
+
 // ================= INITIALIZATION =================
 document.addEventListener('DOMContentLoaded', async () => {
+  clearAllSearchFilters();
   setupNavigation();
   setupModals();
   setupEventListeners();
@@ -424,6 +446,9 @@ function onLoginSuccess(user, tenant, token) {
     reportsNavBtn.style.display = canBuildReports ? 'flex' : 'none';
   }
 
+  // Girişte arama filtrelerini temizle (tüm görevler eksiksiz gelsin)
+  clearAllSearchFilters();
+
   loadInitialData();
 }
 
@@ -445,6 +470,7 @@ function logout() {
 
 // ================= LOAD DATA =================
 async function loadInitialData() {
+  clearAllSearchFilters();
   await Promise.all([
     loadProjects(),
     loadPersonnel(),
@@ -655,7 +681,12 @@ function renderMyTasks() {
   }
 
   // Arama Sorgusu (Başlık, Açıklama veya Atanan Personel)
-  if (state.searchQuery) {
+  if (!state.searchQuery) {
+    const taskInput = document.getElementById('taskSearchInput');
+    if (taskInput && taskInput.value !== '') {
+      taskInput.value = '';
+    }
+  } else {
     filtered = filtered.filter(t => matchesTaskQuery(t, state.searchQuery));
   }
 
@@ -870,11 +901,20 @@ function setupGanttInteractions() {
     });
   });
 
-  // 2. Arama Filtresi (Küresel arama ile senkronize)
+  // 2. Arama Filtresi (Küresel arama ile senkronize & varsayılan boş)
   const searchInput = document.getElementById('ganttSearchInput');
   if (searchInput) {
+    if (!state.searchQuery) {
+      searchInput.value = '';
+    }
     searchInput.addEventListener('input', (e) => {
       applyGlobalTaskSearch(e.target.value, 'ganttSearchInput');
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        applyGlobalTaskSearch('', '');
+        searchInput.blur();
+      }
     });
   }
 
@@ -1274,6 +1314,14 @@ function renderTimeline() {
   }
 
   // Arama / Filtreleme (Başlık, Açıklama veya Sorumlu Personel)
+  // Kullanıcı özellikle bir şey aramadıysa kutunun kesinlikle boş ve tüm görevlerin görünür olmasını sağla
+  if (!state.searchQuery) {
+    const ganttInput = document.getElementById('ganttSearchInput');
+    if (ganttInput && ganttInput.value !== '') {
+      ganttInput.value = '';
+    }
+    ganttFilterQuery = '';
+  }
   const activeGanttQuery = state.searchQuery || ganttFilterQuery;
   const tasksToRender = state.tasks.filter(t => {
     if (!activeGanttQuery) return true;
@@ -1624,6 +1672,13 @@ function renderBoard() {
   const counts = { TODO: 0, DOING: 0, DONE: 0 };
   Object.values(lists).forEach(l => l.innerHTML = '');
 
+  if (!state.searchQuery) {
+    const kanbanInput = document.getElementById('kanbanSearchInput');
+    if (kanbanInput && kanbanInput.value !== '') {
+      kanbanInput.value = '';
+    }
+    state.kanbanSearchQuery = '';
+  }
   const activeBoardQuery = state.searchQuery || state.kanbanSearchQuery || '';
   const filteredTasks = state.tasks.filter(t => {
     if (!activeBoardQuery) return true;
@@ -2149,6 +2204,11 @@ function switchView(viewId) {
   };
   document.getElementById('currentViewTitle').textContent = titles[viewId] || 'Panel';
 
+  // Görünüm geçişlerinde kullanıcı arama yapmamışsa arama alanlarının temiz kalmasını sağla
+  if (!state.searchQuery) {
+    clearAllSearchFilters();
+  }
+
   // Proje seçici göster/gizle
   const projContainer = document.getElementById('projectSelectorContainer');
   if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo' || viewId === 'view-email-automation') {
@@ -2432,8 +2492,15 @@ function setupEventListeners() {
   // OpenProject Filtre ve Arama Çubuğu
   const searchInput = document.getElementById('taskSearchInput');
   if (searchInput) {
+    if (!state.searchQuery) searchInput.value = '';
     searchInput.addEventListener('input', (e) => {
       applyGlobalTaskSearch(e.target.value, 'taskSearchInput');
+    });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        applyGlobalTaskSearch('', '');
+        searchInput.blur();
+      }
     });
   }
 
@@ -2688,8 +2755,15 @@ function setupEventListeners() {
   // Kanban Canlı Filtre / Arama (Küresel arama ile senkronize)
   const kanbanSearchInput = document.getElementById('kanbanSearchInput');
   if (kanbanSearchInput) {
+    if (!state.searchQuery) kanbanSearchInput.value = '';
     kanbanSearchInput.addEventListener('input', (e) => {
       applyGlobalTaskSearch(e.target.value, 'kanbanSearchInput');
+    });
+    kanbanSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        applyGlobalTaskSearch('', '');
+        kanbanSearchInput.blur();
+      }
     });
   }
 
