@@ -21,6 +21,8 @@ import {
   BackupMetadata,
   BackupScheduleConfig,
   BackupPayload,
+  WorkflowStep,
+  TaskDefinitionTemplate,
   UUID
 } from '../core/types.js';
 import { CryptoVault } from '../core/crypto-vault.js';
@@ -45,6 +47,8 @@ export interface DatabaseState {
   email_outbox: EmailOutboxItem[];
   backups: BackupMetadata[];
   backup_schedules: Record<string, BackupScheduleConfig>;
+  workflow_steps: WorkflowStep[];
+  task_definition_templates: TaskDefinitionTemplate[];
 }
 
 export class Database {
@@ -80,6 +84,12 @@ export class Database {
         }
         if (!this.state.backup_schedules || typeof this.state.backup_schedules !== 'object') {
           this.state.backup_schedules = {};
+        }
+        if (!Array.isArray(this.state.workflow_steps)) {
+          this.state.workflow_steps = [];
+        }
+        if (!Array.isArray(this.state.task_definition_templates)) {
+          this.state.task_definition_templates = [];
         }
         // Düz metin kalmış SMTP şifresi varsa anında AES-256-GCM ile şifrele
         let smtpMigrated = false;
@@ -148,7 +158,9 @@ export class Database {
       scheduled_reports: [],
       email_outbox: [],
       backups: [],
-      backup_schedules: {}
+      backup_schedules: {},
+      workflow_steps: [],
+      task_definition_templates: []
     };
   }
 
@@ -424,6 +436,51 @@ export class Database {
     if (this.state.notifications.length !== initialLen) {
       this.save();
     }
+  }
+
+  // --- Workflow Steps & Task Definition Templates ---
+  public getWorkflowSteps(tenant_id: UUID): WorkflowStep[] {
+    return this.state.workflow_steps
+      .filter(s => s.tenant_id === tenant_id)
+      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  }
+
+  public insertWorkflowStep(step: WorkflowStep): WorkflowStep {
+    const finalStep: WorkflowStep = {
+      ...step,
+      id: step.id || crypto.randomUUID(),
+      created_at: step.created_at || new Date().toISOString()
+    };
+    const existing = this.state.workflow_steps.find(
+      s => s.tenant_id === finalStep.tenant_id && s.name.trim().toLowerCase() === finalStep.name.trim().toLowerCase()
+    );
+    if (existing) return existing;
+    this.state.workflow_steps.push(finalStep);
+    this.save();
+    return finalStep;
+  }
+
+  public getTaskDefinitionTemplates(tenant_id: UUID, step_name?: string): TaskDefinitionTemplate[] {
+    return this.state.task_definition_templates.filter(
+      t => t.tenant_id === tenant_id && (!step_name || t.step_name.trim().toLowerCase() === step_name.trim().toLowerCase())
+    );
+  }
+
+  public insertTaskDefinitionTemplate(tpl: TaskDefinitionTemplate): TaskDefinitionTemplate {
+    const finalTpl: TaskDefinitionTemplate = {
+      ...tpl,
+      id: tpl.id || crypto.randomUUID(),
+      created_at: tpl.created_at || new Date().toISOString()
+    };
+    const existing = this.state.task_definition_templates.find(
+      t => t.tenant_id === finalTpl.tenant_id &&
+           t.step_name.trim().toLowerCase() === finalTpl.step_name.trim().toLowerCase() &&
+           t.title.trim().toLowerCase() === finalTpl.title.trim().toLowerCase()
+    );
+    if (existing) return existing;
+    this.state.task_definition_templates.push(finalTpl);
+    this.save();
+    return finalTpl;
   }
 
   // --- Push Subscriptions ---

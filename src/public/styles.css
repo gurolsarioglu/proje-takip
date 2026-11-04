@@ -2424,6 +2424,16 @@ html, body {
   border-radius: var(--radius-sm);
 }
 
+.op-step-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: #8b5cf6;
+  color: #ffffff;
+  letter-spacing: 0.03em;
+}
+
 .op-type-badge {
   font-size: 0.72rem;
   font-weight: 700;

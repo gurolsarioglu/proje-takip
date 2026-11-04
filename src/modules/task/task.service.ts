@@ -30,7 +30,14 @@ export class TaskService {
     initial_due_date: string,
     assignee_id?: UUID,
     description?: string,
-    extra?: { type?: 'TASK' | 'MILESTONE' | 'BUG'; priority?: 'LOW' | 'NORMAL' | 'HIGH'; progress?: number }
+    extra?: {
+      type?: 'TASK' | 'MILESTONE' | 'BUG';
+      priority?: 'LOW' | 'NORMAL' | 'HIGH';
+      progress?: number;
+      workflow_step?: string;
+      task_definition?: string;
+      assigned_by_user_id?: UUID;
+    }
   ): Task {
     const taskId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -79,6 +86,9 @@ export class TaskService {
       initial_due_date,
       current_start_date: initial_start_date,
       current_due_date: initial_due_date,
+      workflow_step: extra?.workflow_step,
+      task_definition: extra?.task_definition,
+      assigned_by_user_id: extra?.assigned_by_user_id || auth.user_id,
       created_at: now
     };
 

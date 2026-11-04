@@ -13,8 +13,33 @@ let state = {
   currentView: 'view-my-tasks',
   activeFilter: 'all',
   searchQuery: '',
-  activeTaskId: null
+  activeTaskId: null,
+  workflowSteps: [],
+  taskDefinitions: []
 };
+
+function getStepColor(stepName) {
+  if (!stepName) return '#8b5cf6';
+  const found = (state.workflowSteps || []).find(s => s.name.toUpperCase() === stepName.toUpperCase());
+  if (found && found.color) return found.color;
+  const colors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#4f46e5', '#db2777'];
+  let hash = 0;
+  for (let i = 0; i < stepName.length; i++) hash = stepName.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
+
+async function loadWorkflowCatalog() {
+  try {
+    const [steps, defs] = await Promise.all([
+      apiCall('/api/workflow-steps'),
+      apiCall('/api/task-definitions')
+    ]);
+    state.workflowSteps = Array.isArray(steps) ? steps : [];
+    state.taskDefinitions = Array.isArray(defs) ? defs : [];
+  } catch (err) {
+    console.warn('İş adımları kataloğu yüklenirken uyarı:', err);
+  }
+}
 
 const I18N = {
   tr: {
@@ -474,6 +499,7 @@ async function loadInitialData() {
   await Promise.all([
     loadProjects(),
     loadPersonnel(),
+    loadWorkflowCatalog(),
     loadAndRenderMicrosoftTodo(),
     triggerWorkerAndLoadNotifications(true)
   ]);
@@ -668,6 +694,17 @@ async function loadProjectTasks(projectId) {
   state.tasks = [...projTasks, ...personalTasks];
   state.dependencies = dependencies;
 
+  // Tekstil Şablonunu Uygula Butonu Görünürlüğü (Yalnızca Proje Yetkilisi / Admin için)
+  const textileBtn = document.getElementById('applyTextileTemplateBtn');
+  if (textileBtn) {
+    const currProj = state.projects.find(p => p.id === projectId);
+    const u = state.currentUser;
+    const isAdmin = u?.system_role === 'ADMIN';
+    const canCreate = !!u?.can_create_project;
+    const isManager = currProj?.created_by_user_id === u?.id || (currProj?.members || []).some(m => m.user_id === u?.id && m.role === 'PROJECT_MANAGER');
+    textileBtn.style.display = (projectId && (isAdmin || canCreate || isManager)) ? 'inline-block' : 'none';
+  }
+
   updateGlobalSearchUI();
   renderMyTasks();
   renderTimeline();
@@ -800,6 +837,7 @@ function renderMyTasks() {
           <span>${typeLabel}</span>
           ${priorityDot}
           ${projPill}
+          ${task.workflow_step ? `<span class="op-step-badge" style="font-size:0.7rem; padding:2px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(task.workflow_step)}; display:inline-block;">${escapeHtml(task.workflow_step)}</span>` : ''}
           <span class="task-main-title ${isDone ? 'done-title' : ''}">${task.title}</span>
         </div>
         ${depNote}
@@ -1429,6 +1467,7 @@ function renderTimeline() {
       <div class="g-col g-col-id">#${shortId}</div>
       <div class="g-col g-col-title" title="${t.title}">
         <span class="g-type-icon">${typeIcon}</span>
+        ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 5px; border-radius:3px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; margin-right:4px;">${escapeHtml(t.workflow_step)}</span>` : ''}
         <span class="g-title-text">${t.title}</span>
         <span class="g-progress-pill">${prog}%</span>
       </div>
@@ -1758,6 +1797,7 @@ function renderBoard() {
 
     card.innerHTML = `
       <div class="board-card-header">
+        ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; display:inline-block;">${escapeHtml(t.workflow_step)}</span>` : ''}
         <span class="board-card-type ${typeClass}">${typeIcon} ${typeLabel}</span>
         <span class="board-card-priority ${priorityClass}">${priorityLabel}</span>
       </div>
@@ -1916,6 +1956,18 @@ async function openTaskDrawer(taskId) {
     document.getElementById('wpProjectTitle').textContent = project?.title || 'FG Group Projesi';
     document.getElementById('wpId').textContent = `#${task.id.slice(0, 6)}`;
 
+    // İş Adımı Rozeti
+    const stepBadge = document.getElementById('wpStepBadge');
+    if (stepBadge) {
+      if (task.workflow_step) {
+        stepBadge.style.display = 'inline-block';
+        stepBadge.textContent = task.workflow_step;
+        stepBadge.style.backgroundColor = details.workflow_step_info?.color || getStepColor(task.workflow_step);
+      } else {
+        stepBadge.style.display = 'none';
+      }
+    }
+
     const typeBadge = document.getElementById('wpType');
     typeBadge.textContent = task.type === 'MILESTONE' ? '🏁 KİLOMETRE TAŞI' : (task.type === 'BUG' ? '🐞 HATA' : '📌 GÖREV');
     typeBadge.className = `op-type-badge ${task.type === 'MILESTONE' ? 'milestone' : (task.type === 'BUG' ? 'bug' : '')}`;
@@ -2031,6 +2083,18 @@ async function openTaskDrawer(taskId) {
       deptEl.textContent = '-';
       emailEl.textContent = '-';
       phoneEl.textContent = '-';
+    }
+
+    // Görevi Atayan Yetkili Satırı (Excel "Görevi Atayan: Musa" formatı)
+    const assignerRow = document.getElementById('wpAssignerRow');
+    const assignerNameEl = document.getElementById('wpAssignerName');
+    if (assignerRow && assignerNameEl) {
+      if (details.assigner) {
+        assignerRow.style.display = 'flex';
+        assignerNameEl.textContent = `${details.assigner.name} (${details.assigner.department || 'Proje Yetkilisi'})`;
+      } else {
+        assignerRow.style.display = 'none';
+      }
     }
 
     // Tarihler, İlk Plan & Plan Revizyonu
@@ -2946,6 +3010,8 @@ function setupEventListeners() {
     const type = document.getElementById('tType')?.value || 'TASK';
     const priority = document.getElementById('tPriority')?.value || 'NORMAL';
     const selectedProjectId = document.getElementById('tProject')?.value || null;
+    const workflow_step = document.getElementById('tWorkflowStep')?.value || undefined;
+    const task_definition = document.getElementById('tTaskDefinition')?.value || undefined;
     const finalAssigneeId = selectedProjectId
       ? (document.getElementById('tAssignee').value || undefined)
       : state.currentUser?.id;
@@ -2959,6 +3025,8 @@ function setupEventListeners() {
       title,
       type,
       priority,
+      workflow_step,
+      task_definition,
       assignee_id: finalAssigneeId,
       initial_start_date,
       initial_due_date,
@@ -2971,6 +3039,85 @@ function setupEventListeners() {
     document.getElementById('taskModal').classList.remove('open');
     e.target.reset();
     await loadProjectTasks(selectedProjectId || state.currentProjectId || '');
+  });
+
+  // Tekstil Şablonunu Uygula Butonu Dinleyicisi
+  document.getElementById('applyTextileTemplateBtn')?.addEventListener('click', async () => {
+    if (!state.currentProjectId) {
+      showToast('Lütfen önce bir proje seçiniz.', 'warning');
+      return;
+    }
+    const currProj = state.projects.find(p => p.id === state.currentProjectId);
+    const projTitle = currProj?.title || 'Seçili Proje';
+    if (!confirm(`"${projTitle}" projesine FG Group Tekstil İş Akışı şablonundaki 8 standart adım (Koleksiyon, Kumaş, Teknik Çizim, Yıkama, Kalıp, Dikim, Yıkama 2, Finishing) ve ardışık bağımlılıkları eklensin mi?`)) {
+      return;
+    }
+    try {
+      const res = await apiCall(`/api/projects/${state.currentProjectId}/apply-textile-template`, 'POST');
+      showToast(`⚡ ${res.message || 'Tekstil şablonu başarıyla uygulandı.'}`, 'success');
+      await loadProjectTasks(state.currentProjectId);
+    } catch (err) {
+      showToast(err.message || 'Şablon uygulanırken bir hata oluştu.', 'error');
+    }
+  });
+
+  // Yeni İş Adımı ve Görev Tanımı Modalları Dinleyicileri
+  document.getElementById('tAddStepBtn')?.addEventListener('click', () => {
+    document.getElementById('newWorkflowStepForm')?.reset();
+    document.getElementById('newWorkflowStepModal')?.classList.add('open');
+  });
+
+  document.getElementById('newWorkflowStepForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('stepInputName').value.trim().toUpperCase();
+    const color = document.getElementById('stepInputColor').value;
+    const department = document.getElementById('stepInputDept').value.trim() || undefined;
+
+    try {
+      const created = await apiCall('/api/workflow-steps', 'POST', { name, color, department });
+      showToast(`🏷️ "${created.name}" iş adımı kataloğa eklendi.`, 'success');
+      document.getElementById('newWorkflowStepModal')?.classList.remove('open');
+      await loadWorkflowCatalog();
+      populateWorkflowStepDropdown(created.name);
+      document.getElementById('tWorkflowStep')?.dispatchEvent(new Event('change'));
+    } catch (err) {
+      showToast(err.message || 'İş adımı eklenemedi.', 'error');
+    }
+  });
+
+  document.getElementById('tAddDefBtn')?.addEventListener('click', () => {
+    const stepSelect = document.getElementById('defInputStep');
+    if (stepSelect) {
+      stepSelect.innerHTML = (state.workflowSteps || []).map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+      const currentStep = document.getElementById('tWorkflowStep')?.value;
+      if (currentStep) stepSelect.value = currentStep;
+    }
+    document.getElementById('newTaskDefForm')?.reset();
+    document.getElementById('newTaskDefModal')?.classList.add('open');
+  });
+
+  document.getElementById('newTaskDefForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const workflow_step = document.getElementById('defInputStep').value;
+    const title = document.getElementById('defInputTitle').value.trim();
+    const duration = parseInt(document.getElementById('defInputDuration').value, 10) || 7;
+    const department = document.getElementById('defInputDept').value.trim() || undefined;
+
+    try {
+      const created = await apiCall('/api/task-definitions', 'POST', {
+        workflow_step,
+        title,
+        default_duration_days: duration,
+        department
+      });
+      showToast(`📝 "${created.title}" görev tanımı kataloğa eklendi.`, 'success');
+      document.getElementById('newTaskDefModal')?.classList.remove('open');
+      await loadWorkflowCatalog();
+      populateTaskDefinitionDropdown(workflow_step, created.title);
+      document.getElementById('tTaskDefinition')?.dispatchEvent(new Event('change'));
+    } catch (err) {
+      showToast(err.message || 'Görev tanımı eklenemedi.', 'error');
+    }
   });
 
   // Yeni Proje Modalı
@@ -3584,6 +3731,136 @@ function openExplanationModal(taskId, title) {
   document.getElementById('explanationModal').classList.add('open');
 }
 
+function populateTaskModalAssignees(recommendedDept = null) {
+  const assigneeEl = document.getElementById('tAssignee');
+  if (!assigneeEl || assigneeEl.disabled) return;
+  const activeUsers = (state.personnelList || []).filter(p => p.is_active !== false);
+  const currentVal = assigneeEl.value;
+
+  if (!recommendedDept) {
+    assigneeEl.innerHTML = '<option value="">(Atanmamış)</option>' +
+      activeUsers.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${escapeHtml(p.department || 'Genel')})</option>`).join('');
+    if (currentVal) assigneeEl.value = currentVal;
+    return;
+  }
+
+  const normDept = recommendedDept.toLowerCase().trim();
+  const recUsers = activeUsers.filter(p => {
+    const d = (p.department || '').toLowerCase();
+    const t = (p.job_title || '').toLowerCase();
+    const n = (p.name || '').toLowerCase();
+    return d.includes(normDept) || t.includes(normDept) || n.includes(normDept);
+  });
+  const otherUsers = activeUsers.filter(p => !recUsers.some(r => r.id === p.id));
+
+  let html = '<option value="">(Atanmamış)</option>';
+  if (recUsers.length > 0) {
+    html += `<optgroup label="⭐ Önerilen Personel (${escapeHtml(recommendedDept)})">` +
+      recUsers.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${escapeHtml(p.department || 'Genel')})</option>`).join('') +
+      '</optgroup>';
+  }
+  if (otherUsers.length > 0) {
+    html += '<optgroup label="Diğer Ekip Üyeleri">' +
+      otherUsers.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${escapeHtml(p.department || 'Genel')})</option>`).join('') +
+      '</optgroup>';
+  }
+  assigneeEl.innerHTML = html;
+  if (currentVal && activeUsers.some(u => u.id === currentVal)) {
+    assigneeEl.value = currentVal;
+  } else if (recUsers.length === 1) {
+    assigneeEl.value = recUsers[0].id;
+  }
+}
+
+function populateWorkflowStepDropdown(selectedName = '') {
+  const stepSelect = document.getElementById('tWorkflowStep');
+  if (!stepSelect) return;
+  let options = '<option value="">İş Adımı Seçiniz (KOLEKSİYON, KUMAŞ, TEKNİK ÇİZİM, YIKAMA, vb.)...</option>';
+  (state.workflowSteps || []).forEach(s => {
+    const isSel = s.name === selectedName ? 'selected' : '';
+    options += `<option value="${escapeHtml(s.name)}" ${isSel}>${escapeHtml(s.name)}</option>`;
+  });
+  stepSelect.innerHTML = options;
+  if (selectedName) stepSelect.value = selectedName;
+}
+
+function populateTaskDefinitionDropdown(stepName = '', selectedTitle = '') {
+  const defSelect = document.getElementById('tTaskDefinition');
+  if (!defSelect) return;
+  if (!stepName) {
+    defSelect.innerHTML = '<option value="">Önce yukarıdan bir İş Adımı seçiniz...</option>';
+    return;
+  }
+  const matching = (state.taskDefinitions || []).filter(d => d.workflow_step.toUpperCase() === stepName.toUpperCase());
+  if (matching.length === 0) {
+    defSelect.innerHTML = '<option value="">(Bu iş adımına henüz şablon tanım eklenmemiş)</option>';
+    return;
+  }
+  let options = '<option value="">Görev Tanımı Seçiniz (Katalog Şablonu)...</option>';
+  matching.forEach(d => {
+    const isSel = d.title === selectedTitle ? 'selected' : '';
+    options += `<option value="${escapeHtml(d.title)}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.department || '')}" ${isSel}>${escapeHtml(d.title)}</option>`;
+  });
+  defSelect.innerHTML = options;
+  if (selectedTitle) defSelect.value = selectedTitle;
+}
+
+function setupWorkflowModalStepListeners() {
+  const stepSelect = document.getElementById('tWorkflowStep');
+  const defSelect = document.getElementById('tTaskDefinition');
+  const titleInput = document.getElementById('tTitle');
+  const startInput = document.getElementById('tStart');
+  const dueInput = document.getElementById('tDue');
+
+  if (stepSelect && !stepSelect.dataset.listenerAttached) {
+    stepSelect.dataset.listenerAttached = 'true';
+    stepSelect.addEventListener('change', () => {
+      const stepVal = stepSelect.value;
+      populateTaskDefinitionDropdown(stepVal);
+
+      const stepObj = (state.workflowSteps || []).find(s => s.name === stepVal);
+      if (stepVal) {
+        if (!titleInput.value || titleInput.value.startsWith('[')) {
+          titleInput.value = `[${stepVal}] `;
+        }
+        const projSelect = document.getElementById('tProject');
+        if (projSelect && projSelect.value) {
+          populateTaskModalAssignees(stepObj?.department || null);
+        }
+      }
+    });
+  }
+
+  if (defSelect && !defSelect.dataset.listenerAttached) {
+    defSelect.dataset.listenerAttached = 'true';
+    defSelect.addEventListener('change', () => {
+      const stepVal = stepSelect ? stepSelect.value : '';
+      const defVal = defSelect.value;
+      if (defVal) {
+        if (stepVal) {
+          titleInput.value = `[${stepVal}] ${defVal}`;
+        } else {
+          titleInput.value = defVal;
+        }
+
+        const selOption = defSelect.selectedOptions[0];
+        const durationDays = selOption?.dataset?.duration ? parseInt(selOption.dataset.duration, 10) : 7;
+        const now = new Date();
+        const due = new Date();
+        due.setDate(due.getDate() + durationDays);
+
+        if (startInput) startInput.value = now.toISOString().slice(0, 10);
+        if (dueInput) dueInput.value = due.toISOString().slice(0, 10);
+
+        const defDept = selOption?.dataset?.dept;
+        if (defDept) {
+          populateTaskModalAssignees(defDept);
+        }
+      }
+    });
+  }
+}
+
 function populateTaskModalSelects() {
   const u = state.currentUser;
   const isAdmin = u?.system_role === 'ADMIN';
@@ -3602,8 +3879,23 @@ function populateTaskModalSelects() {
   const personalNotice = document.getElementById('tPersonalNotice');
   const assigneeEl = document.getElementById('tAssignee');
   const predEl = document.getElementById('tPredecessor');
+  const addStepBtn = document.getElementById('tAddStepBtn');
+  const addDefBtn = document.getElementById('tAddDefBtn');
+
+  // Adım ve Tanım Seçicilerini Doldur
+  populateWorkflowStepDropdown();
+  populateTaskDefinitionDropdown('');
+  setupWorkflowModalStepListeners();
 
   if (!projSelect) return;
+
+  const updateCatalogBtnVisibility = (selectedProjId) => {
+    const currProj = state.projects.find(p => p.id === selectedProjId);
+    const isManager = currProj?.created_by_user_id === u?.id || (currProj?.members || []).some(m => m.user_id === u?.id && m.role === 'PROJECT_MANAGER');
+    const canManageCatalog = isAdmin || canCreate || isManager;
+    if (addStepBtn) addStepBtn.style.display = canManageCatalog ? 'inline-block' : 'none';
+    if (addDefBtn) addDefBtn.style.display = canManageCatalog ? 'inline-block' : 'none';
+  };
 
   if (authorizedProjects.length === 0) {
     // STANDART ÇALIŞAN (Yalnızca Bireysel Görev / Kişisel To-Do açabilir)
@@ -3628,6 +3920,7 @@ function populateTaskModalSelects() {
       predEl.innerHTML = '<option value="">(Bireysel görevlerde öncül bağımlılık bulunmaz)</option>';
       predEl.disabled = true;
     }
+    updateCatalogBtnVisibility(null);
   } else {
     // PROJE YETKİLİSİ / ADMİN (Şirket projesi seçebilir veya bireysel to-do açabilir)
     projSelect.disabled = false;
@@ -3640,6 +3933,7 @@ function populateTaskModalSelects() {
     projSelect.value = activeProjValid ? state.currentProjectId : '';
 
     const updateFieldsForSelection = (selectedId) => {
+      updateCatalogBtnVisibility(selectedId);
       if (!selectedId) {
         // Bireysel görev seçildi
         if (projBadge) {
@@ -3670,8 +3964,7 @@ function populateTaskModalSelects() {
 
         if (assigneeEl) {
           assigneeEl.disabled = false;
-          assigneeEl.innerHTML = '<option value="">(Atanmamış)</option>' +
-            state.personnelList.filter(p => p.is_active !== false).map(p => `<option value="${p.id}">${p.name} (${p.department || 'Genel'})</option>`).join('');
+          populateTaskModalAssignees(null);
         }
 
         if (predEl) {

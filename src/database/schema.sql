@@ -102,6 +102,31 @@ CREATE TABLE IF NOT EXISTS tasks (
   actual_start_date TEXT,
   actual_completion_date TEXT,
   completed_by_user_id TEXT,
+  workflow_step TEXT,
+  task_definition TEXT,
+  assigned_by_user_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workflow_steps (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#3b82f6',
+  department TEXT,
+  display_order INTEGER DEFAULT 0,
+  created_by_user_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_definition_templates (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  step_name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  default_duration_days INTEGER DEFAULT 7,
+  suggested_department TEXT,
+  created_by_user_id TEXT,
   created_at TEXT NOT NULL
 );
 

@@ -194,6 +194,70 @@
         </div>
       </div>
     </aside>
+  <!-- Yeni İş Adımı Modalı -->
+  <div id="newWorkflowStepModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3>🏷️ Yeni İş Adımı Tanımla</h3>
+        <button class="modal-close" data-close="newWorkflowStepModal">&times;</button>
+      </div>
+      <form id="newWorkflowStepForm" class="modal-body">
+        <div class="form-group">
+          <label for="stepInputName">İş Adımı Adı * (Büyük Harf)</label>
+          <input type="text" id="stepInputName" required class="styled-input" placeholder="Örn: ÜTÜ PAKET veya AKSESUAR">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="stepInputColor">Etiket Rengi</label>
+            <input type="color" id="stepInputColor" class="styled-input" value="#3b82f6" style="height:38px; padding:2px;">
+          </div>
+          <div class="form-group">
+            <label for="stepInputDept">İlgili Departman</label>
+            <input type="text" id="stepInputDept" class="styled-input" placeholder="Örn: Paketleme">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn secondary-btn" data-close="newWorkflowStepModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Yeni Görev Tanımı Modalı -->
+  <div id="newTaskDefModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>📝 Yeni Görev Tanımı Ekle</h3>
+        <button class="modal-close" data-close="newTaskDefModal">&times;</button>
+      </div>
+      <form id="newTaskDefForm" class="modal-body">
+        <div class="form-group">
+          <label for="defInputStep">Bağlı Olduğu İş Adımı *</label>
+          <select id="defInputStep" required class="styled-select"></select>
+        </div>
+        <div class="form-group">
+          <label for="defInputTitle">Görev Tanımı Başlığı *</label>
+          <input type="text" id="defInputTitle" required class="styled-input" placeholder="Örn: Numunelerin ütü ve etiketlenmesi">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="defInputDuration">Varsayılan Termin Süresi (Gün)</label>
+            <input type="number" id="defInputDuration" class="styled-input" value="7" min="1" max="180">
+          </div>
+          <div class="form-group">
+            <label for="defInputDept">Departman</label>
+            <input type="text" id="defInputDept" class="styled-input" placeholder="Örn: Paketleme">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn secondary-btn" data-close="newTaskDefModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Kataloğa Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 
     <!-- SAĞ ANA İÇERİK (MAIN CONTENT) -->
     <main class="app-main-area">
@@ -258,6 +322,7 @@
           <button id="newProjectBtn" class="action-btn secondary-btn" style="display:none;" data-i18n="new_project_btn">
             + Yeni Proje
           </button>
+          <button id="applyTextileTemplateBtn" class="action-btn outline-btn sm-btn" style="display:none; font-size:0.78rem; font-weight:700; border-color:#8b5cf6; color:#7c3aed;" title="Excel tablosundaki 8 standart tekstil iş adımını ve ardışık bağımlılıklarını tek tıkla yükleyin">⚡ Tekstil Şablonunu Uygula</button>
           <button id="newTaskBtn" class="action-btn primary-btn" data-i18n="new_task_btn">
             + Görev Ekle
           </button>
@@ -1208,10 +1273,32 @@
           💡 <strong>Kişisel Takip:</strong> Bu görev şirket projelerine dahil edilmez; yalnızca sizin <strong>Görevlerim</strong> ve <strong>Kişisel To-Do</strong> listenizde görünür. Sorumlu kişi doğrudan sizsiniz.
         </div>
 
+        <!-- 🏷️ 1. İŞ ADIMI (Departman / Süreç Fazı) -->
+        <div class="form-group" id="tWorkflowStepRow" style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem;">🏷️ 1. İş Adımı (Süreç Katmanı) *</label>
+            <button type="button" id="tAddStepBtn" class="action-btn outline-btn sm-btn" style="font-size:0.72rem; padding:2px 8px; display:none;" title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Adım Ekle</button>
+          </div>
+          <select id="tWorkflowStep" class="styled-select" style="font-weight:500;">
+            <option value="">İş Adımı Seçiniz (KOLEKSİYON, KUMAŞ, TEKNİK ÇİZİM, YIKAMA, vb.)...</option>
+          </select>
+        </div>
+
+        <!-- 📝 2. GÖREV TANIMI (Standart İş Kataloğu) -->
+        <div class="form-group" id="tTaskDefinitionRow" style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem;">📝 2. Görev Tanımı (Yapılacak İş)</label>
+            <button type="button" id="tAddDefBtn" class="action-btn outline-btn sm-btn" style="font-size:0.72rem; padding:2px 8px; display:none;" title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Tanım Ekle</button>
+          </div>
+          <select id="tTaskDefinition" class="styled-select" style="font-weight:500;">
+            <option value="">Önce yukarıdan bir İş Adımı seçiniz...</option>
+          </select>
+        </div>
+
         <div class="form-row">
           <div class="form-group" style="flex:2;">
-            <label for="tTitle">Görev / İş Paketi Adı *</label>
-            <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: Arayüz Tasarımı ve Onay">
+            <label for="tTitle">Görev / İş Paketi Adı (Önizleme & Düzenleme) *</label>
+            <input type="text" id="tTitle" required class="styled-input" placeholder="Örn: [YIKAMA] Modellerin yıkama bölümüne aktarılması">
           </div>
           <div class="form-group" style="flex:1;">
             <label for="tType">Tür</label>
@@ -1799,6 +1886,7 @@
         <span class="op-project-tag" id="wpProjectTitle">FG Group Projesi</span>
         <div class="op-id-type-row">
           <span class="op-id-badge" id="wpId">#101</span>
+          <span class="op-type-badge" id="wpStepBadge" style="display:none; background:#8b5cf6; color:#ffffff; font-weight:700;"></span>
           <span class="op-type-badge" id="wpType">GÖREV</span>
           <span class="op-priority-badge" id="wpPriority">Normal</span>
           <select id="wpPrioritySelect" class="wp-inline-select" title="Önceliği Değiştir">
@@ -1883,6 +1971,11 @@
               <span id="wpAssigneePhone">+90 532 111 22 33</span>
             </div>
           </div>
+        </div>
+        <!-- Görevi Atayan Yetkili Satırı -->
+        <div id="wpAssignerRow" style="margin-top:8px; padding:6px 12px; background:var(--bg-secondary, #f8fafc); border:1px solid var(--border-subtle, #e2e8f0); border-radius:6px; font-size:0.78rem; color:var(--text-secondary); display:flex; align-items:center; justify-content:space-between;">
+          <span>🎯 <strong>Görevi Atayan (Proje Yetkilisi):</strong></span>
+          <strong id="wpAssignerName" style="color:var(--text-primary);">-</strong>
         </div>
       </div>
 

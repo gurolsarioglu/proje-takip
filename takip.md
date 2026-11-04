@@ -415,3 +415,45 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 4. **Test ve Doğrulama:**
    - `tests/acceptance.test.ts` içine okundu işaretleme, okunmamış rozet sıfırlama ve bildirim temizleme test senaryoları eklendi.
    - **32/32 Kabul Testi (`npm test`)** ve **TypeScript Derlemesi (`npm run build`)** başarıyla geçti.
+
+---
+
+## 30. TEKSTİL İŞ AKIŞI MİMARİSİ: İŞ ADIMLARI, GÖREV TANIMLARI KATALOĞU VE OTOMATİK ŞABLON (04 Kasım 2026)
+
+### 30.1. İster ve Problem Özeti
+- **Kullanıcı Talebi:** FG Group tekstil üretim akışını temsil eden Excel tablosunun (İş Adımları, Görev Tanımı, Başlangıç/Bitiş Tarihi, Görevi Atayan: Musa, Görev Sahibi) sisteme entegre edilmesi.
+- **Kritik Gereksinimler:**
+  1. Görev oluşturulurken serbest metin yerine departman bazlı **İş Adımları** (`KOLEKSİYON OLUŞTURMA`, `KUMAŞ`, `TEKNİK ÇİZİM`, `KALIP MODELHANE`, `DİKİM`, `YIKAMA`, `FINISHING`) seçimi.
+  2. Tür/Tanım kısmında seçilen iş adımına ait **Görev Tanımları** kataloğundan seçim yapılması.
+  3. Yeni iş adımı ve görev tanımı ekleme yetkisinin **yalnızca Proje Yöneticisi ve Sistem Yöneticisi (Admin)** rollerine verilmesi.
+  4. Tablodaki çift `YIKAMA` gibi aynı adı taşıyan adımların karışmaması için görev başlığının `[İş Adımı] Görev Tanımı` formatında otomatik birleştirilmesi.
+  5. Excel'deki "Görevi Atayan: Musa Bey" bilgisinin sistemde görev atayan yetkili (`assigned_by_user_id`) olarak saklanması ve görev detay çekmecesinde gösterilmesi.
+  6. Seçilen iş adımına göre departman personelinin (Dilara Kızıldağ, Cem AYLA, Devrim, Nilüfer, İbrahim Yıldız, Gönül) sorumlu seçiminde akıllıca önerilmesi.
+  7. Tek tıkla 8 adımlı FG Group tekstil üretim akışını oluşturan `⚡ Tekstil Şablonunu Uygula` motoru.
+
+### 30.2. Gerçekleştirilen Mimari & Kod Değişiklikleri
+1. **Veri Modeli & Şema (`src/core/types.ts`, `src/database/schema.sql`, `src/database/db.ts`):**
+   - `Task` arayüzüne `workflow_step?: string`, `task_definition?: string`, `assigned_by_user_id?: UUID` alanları eklendi.
+   - `WorkflowStep` ve `TaskDefinitionTemplate` veri tipleri ve tabloları oluşturuldu.
+   - Veritabanı sınıfına `getWorkflowSteps`, `insertWorkflowStep`, `getTaskDefinitionTemplates`, `insertTaskDefinitionTemplate` metotları eklendi.
+2. **Seed Verisi & Personel Eşlemesi (`src/database/seed.ts`):**
+   - Excel tablosundaki tüm personeller (Musa Bey - Proje Yetkilisi, Dilara Kızıldağ - Tasarım, Cem AYLA - Kumaş, İbrahim Yıldız - Yıkama, Devrim Modelist - Modelhane, Nilüfer Usta - Dikim, Gönül Finish - Finishing) sisteme dahil edildi.
+   - 7 adet standart iş adımı ve 8 adet standart tekstil görev şablonu varsayılan olarak tanımlandı.
+3. **Servis ve REST API Katmanı (`src/modules/task/task.service.ts`, `src/server/index.ts`):**
+   - `taskService.createTask` metodu `workflow_step`, `task_definition` ve `assigned_by_user_id` alanlarını destekleyecek şekilde güncellendi.
+   - `GET /api/workflow-steps` & `POST /api/workflow-steps` (Yalnızca Proje Yöneticisi / Admin yetkili).
+   - `GET /api/task-definitions` & `POST /api/task-definitions` (Yalnızca Proje Yöneticisi / Admin yetkili).
+   - `GET /api/tasks/:id/details`: Görevi atayan yetkili bilgisini (`assigner`) ve iş adımı rengini (`workflow_step_info`) döndürecek şekilde zenginleştirildi.
+   - `POST /api/projects/:id/apply-textile-template`: Excel tablosundaki 8 adımlı süreci tarihleri, termin süreleri ve ardışık bağımlılıkları (DAG) ile tek tıkla otomatik oluşturan motor geliştirildi.
+4. **Kullanıcı Arayüzü & Ergonomi (`src/public/index.html`, `src/public/styles.css`, `src/public/app.js`):**
+   - Görev oluşturma modalında 1. İş Adımı ve 2. Görev Tanımı açılır listeleri entegre edildi. Yetkili kullanıcılar için modal içinden çıkmadan anında yeni adım/tanım ekleme butonları (`+ Yeni Adım Ekle`, `+ Yeni Tanım Ekle`) ve pop-up modalları eklendi.
+   - İş adımı seçildiğinde ilgili departman personeli `⭐ Önerilen Personel` başlığı altında listenin en tepesinde gruplandı.
+   - Görev tanımı seçildiğinde termin süresi (gün) otomatik hesaplandı ve `#tTitle` alanına `[İş Adımı] Görev Tanımı` başlığı otomatik dolduruldu.
+   - Görev detay çekmecesine iş adımı renk rozeti (`#wpStepBadge`) ve **"🎯 Görevi Atayan (Proje Yetkilisi): Musa Bey"** satırı (`#wpAssignerRow`) eklendi.
+   - Üst çubuğa Proje Yöneticisi için **"⚡ Tekstil Şablonunu Uygula"** butonu yerleştirildi.
+   - Kanban kartlarında, Zaman Çizelgesi (Gantt) tablosunda ve Görevlerim listesinde iş adımı etiketleri renklendirilmiş rozetlerle gösterildi.
+5. **Test ve Doğrulama:**
+   - `tests/acceptance.test.ts` içine dinamik iş adımı ekleme, görev tanımı şablonu kaydetme, görev atayan kaydı ve 8 adımlı tekstil bağımlılık yaşam döngüsü test senaryosu eklendi.
+   - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
+   - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
+

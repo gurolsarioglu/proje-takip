@@ -1398,4 +1398,135 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const notifsAfterClear = notificationService.getUserNotifications(authAssigneeA);
     assert.equal(notifsAfterClear.length, 0, 'Temizleme sonrasında kullanıcının bildirimi kalmamalıdır');
   });
+
+  await t.test('TEKSTİL İŞ AKIŞI: İş Adımları, Görev Tanımları Kataloğu, Otomatik Şablon ve Proje Yetkilisi Atayan Kaydı', async () => {
+    // 1. İş Adımı ve Görev Tanımı Kataloğu Doğrulaması
+    const customStep = db.insertWorkflowStep({
+      id: crypto.randomUUID(),
+      tenant_id: tenantA.id,
+      name: 'AKSESUAR',
+      color: '#f97316',
+      department: 'Satın Alma',
+      created_at: new Date().toISOString()
+    });
+    assert.ok(customStep.id, 'Yeni iş adımı ID almalıdır');
+    assert.equal(customStep.name, 'AKSESUAR');
+
+    const steps = db.getWorkflowSteps(tenantA.id);
+    assert.ok(steps.some(s => s.name === 'AKSESUAR'), 'Eklenen adım listede bulunmalıdır');
+
+    const customDef = db.insertTaskDefinitionTemplate({
+      id: crypto.randomUUID(),
+      tenant_id: tenantA.id,
+      step_name: 'AKSESUAR',
+      title: 'Fermuar ve Düğme Numunelerinin Temini',
+      default_duration_days: 5,
+      suggested_department: 'Satın Alma',
+      created_at: new Date().toISOString()
+    });
+    assert.ok(customDef.id, 'Yeni görev tanımı ID almalıdır');
+    assert.equal(customDef.step_name, 'AKSESUAR');
+
+    const defs = db.getTaskDefinitionTemplates(tenantA.id, 'AKSESUAR');
+    assert.equal(defs.length, 1);
+    assert.equal(defs[0].title, 'Fermuar ve Düğme Numunelerinin Temini');
+
+    // 2. İş Adımı ve Görev Tanımıyla Görev Oluşturma & Atayan Yetkili (Görevi Atayan: Musa Bey)
+    const taskTextile = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      '[AKSESUAR] Fermuar ve Düğme Numunelerinin Temini',
+      '2026-11-15T09:00:00Z',
+      '2026-11-20T18:00:00Z',
+      assigneeA.id,
+      'Numune kartelaları için acil temin',
+      {
+        type: 'TASK',
+        priority: 'HIGH',
+        workflow_step: 'AKSESUAR',
+        task_definition: 'Fermuar ve Düğme Numunelerinin Temini',
+        assigned_by_user_id: managerA.id
+      }
+    );
+
+    assert.equal(taskTextile.workflow_step, 'AKSESUAR');
+    assert.equal(taskTextile.task_definition, 'Fermuar ve Düğme Numunelerinin Temini');
+    assert.equal(taskTextile.assigned_by_user_id, managerA.id);
+
+    // 3. Tekstil İş Akışı Şablonunun Uygulanması (Excel 8 Adım Simülasyonu)
+    const textileProject = projectService.createProject(
+      authManagerA,
+      '2027 İlkbahar/Yaz Koleksiyonu',
+      'Tekstil üretim aşamaları',
+      '2026-11-13T09:00:00Z',
+      '2026-12-04T18:00:00Z'
+    );
+
+    const TEXTILE_STANDARD_STEPS = [
+      { step: 'KOLEKSİYON OLUŞTURMA', def: 'AW27 koleksiyonunun eksiklerini oluşturma', days: 21, dept: 'Tasarım' },
+      { step: 'KUMAŞ', def: 'Tasarım ve satış departmanının beklentisi doğrultusunda kumaşların organize edilmesi', days: 9, dept: 'Kumaş' },
+      { step: 'TEKNİK ÇİZİM', def: 'Koleksiyonun teknik çizimlerinin hazırlanması', days: 7, dept: 'Tasarım' },
+      { step: 'YIKAMA', def: 'Koleksiyon model hazırlığı yıkamaların belirlenmesi', days: 7, dept: 'Yıkama' },
+      { step: 'KALIP MODELHANE', def: 'Modellerin kalıp departmanına aktarılması', days: 7, dept: 'Modelhane' },
+      { step: 'DİKİM', def: 'Modellerin dikim departmanına aktarılması', days: 12, dept: 'Dikim' },
+      { step: 'YIKAMA', def: 'Modellerin yıkama bölümüne aktarılması', days: 14, dept: 'Yıkama' },
+      { step: 'FINISHING', def: 'Modellerin finish bölümüne aktarılması', days: 12, dept: 'Finishing' }
+    ];
+
+    const createdTasks = [];
+    const baseDate = new Date('2026-11-13T08:00:00Z');
+
+    for (let i = 0; i < TEXTILE_STANDARD_STEPS.length; i++) {
+      const item = TEXTILE_STANDARD_STEPS[i];
+      const sDate = new Date(baseDate);
+      sDate.setDate(sDate.getDate() + (i * 2));
+      const eDate = new Date(sDate);
+      eDate.setDate(eDate.getDate() + item.days);
+
+      const t = taskService.createTask(
+        authManagerA,
+        textileProject.id,
+        `[${item.step}] ${item.def}`,
+        sDate.toISOString(),
+        eDate.toISOString(),
+        assigneeA.id,
+        `FG Group ${item.step} aşaması standart iş akışı görevi.`,
+        {
+          type: 'TASK',
+          priority: 'NORMAL',
+          workflow_step: item.step,
+          task_definition: item.def,
+          assigned_by_user_id: managerA.id
+        }
+      );
+      createdTasks.push(t);
+    }
+
+    assert.equal(createdTasks.length, 8, '8 standart adım başarıyla üretilmelidir');
+
+    // Bağımlılıkları bağla (Örn: Kalıp -> Dikim, Dikim -> Yıkama 2, Yıkama 2 -> Finishing)
+    // Kalıp (index 4) -> Dikim (index 5)
+    dependencyService.addDependency(authManagerA, createdTasks[4].id, createdTasks[5].id);
+    // Dikim (index 5) -> Yıkama 2 (index 6)
+    dependencyService.addDependency(authManagerA, createdTasks[5].id, createdTasks[6].id);
+    // Yıkama 2 (index 6) -> Finishing (index 7)
+    dependencyService.addDependency(authManagerA, createdTasks[6].id, createdTasks[7].id);
+
+    // Bağımlılık durum kontrolü:
+    // Kalıp görevi öncülü olmadığı için READY olmalıdır
+    const kalipTask = db.getTaskById(tenantA.id, createdTasks[4].id);
+    const dikimTask = db.getTaskById(tenantA.id, createdTasks[5].id);
+    const yikama2Task = db.getTaskById(tenantA.id, createdTasks[6].id);
+
+    assert.equal(kalipTask?.work_status, 'READY', 'Kalıp görevinin öncülü olmadığı için READY başlamalıdır');
+    assert.equal(dikimTask?.work_status, 'BLOCKED', 'Kalıp tamamlanmadığı için Dikim BLOCKED olmalıdır');
+    assert.equal(yikama2Task?.work_status, 'BLOCKED', 'Dikim tamamlanmadığı için Yıkama 2 BLOCKED olmalıdır');
+
+    // Kalıp görevi tamamlandığında Dikim READY durumuna geçmelidir (Atanmış sorumlu tamamlar)
+    taskService.completeTask(authAssigneeA, createdTasks[4].id);
+    const dikimAfterKalipDone = db.getTaskById(tenantA.id, createdTasks[5].id);
+    assert.equal(dikimAfterKalipDone?.work_status, 'READY', 'Öncülü Kalıp bitince Dikim READY olmalıdır');
+    const yikamaAfterKalipDone = db.getTaskById(tenantA.id, createdTasks[6].id);
+    assert.equal(yikamaAfterKalipDone?.work_status, 'BLOCKED', 'Dikim henüz bitmediği için Yıkama 2 hala BLOCKED kalmalıdır');
+  });
 });

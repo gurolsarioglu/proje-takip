@@ -465,7 +465,9 @@ app.post('/api/tasks', (req, res) => {
       description,
       type,
       priority,
-      predecessor_id
+      predecessor_id,
+      workflow_step,
+      task_definition
     } = req.body;
 
     const normalizedProjectId = (project_id && String(project_id).trim() !== '') ? String(project_id).trim() : null;
@@ -484,7 +486,13 @@ app.post('/api/tasks', (req, res) => {
       initial_due_date,
       normalizedProjectId ? assignee_id : auth.user_id,
       description,
-      { type, priority }
+      {
+        type,
+        priority,
+        workflow_step,
+        task_definition,
+        assigned_by_user_id: auth.user_id
+      }
     );
 
     // Eğer bir projeye aitse ve öncül seçildiyse otomatik bağımlılık ekle (OpenProject akışı)
@@ -560,6 +568,18 @@ app.get('/api/tasks/:id/details', (req, res) => {
       department: assignee.department
     } : null;
 
+    const assigner = task.assigned_by_user_id ? db.getUserById(auth.tenant_id, task.assigned_by_user_id) : null;
+    const safeAssigner = assigner ? {
+      id: assigner.id,
+      name: assigner.name,
+      email: assigner.email,
+      department: assigner.department
+    } : null;
+
+    // İş Adımı Bilgisi & Rengi
+    const allSteps = db.getWorkflowSteps(auth.tenant_id);
+    const stepInfo = task.workflow_step ? allSteps.find(s => s.name.toUpperCase() === task.workflow_step?.toUpperCase()) : null;
+
     // Öncüller ve Ardıllar
     const allDeps = db.getDependencies(auth.tenant_id);
     const predIds = allDeps.filter(d => d.successor_id === task.id).map(d => d.predecessor_id);
@@ -615,10 +635,231 @@ app.get('/api/tasks/:id/details', (req, res) => {
       can_manage_plan,
       can_edit,
       is_assignee,
+      assigner: safeAssigner,
+      workflow_step_info: stepInfo,
       calendar_links
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ================= İŞ ADIMLARI & GÖREV TANIMLARI KATALOĞU =================
+app.get('/api/workflow-steps', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    let steps = db.getWorkflowSteps(auth.tenant_id);
+    if (steps.length === 0) {
+      const defaultSteps = [
+        { name: 'KOLEKSİYON OLUŞTURMA', color: '#8b5cf6', department: 'Moda Tasarım & Koleksiyon', display_order: 1 },
+        { name: 'KUMAŞ', color: '#2563eb', department: 'Kumaş & Tedarik', display_order: 2 },
+        { name: 'TEKNİK ÇİZİM', color: '#f59e0b', department: 'Moda Tasarım & Koleksiyon', display_order: 3 },
+        { name: 'KALIP MODELHANE', color: '#d97706', department: 'Kalıp & Modelhane', display_order: 4 },
+        { name: 'DİKİM', color: '#10b981', department: 'Dikim Atölyesi', display_order: 5 },
+        { name: 'YIKAMA', color: '#06b6d4', department: 'Yıkama & AR-GE', display_order: 6 },
+        { name: 'FINISHING', color: '#ef4444', department: 'Finishing & Paket', display_order: 7 }
+      ];
+      for (const s of defaultSteps) {
+        db.insertWorkflowStep({
+          id: crypto.randomUUID(),
+          tenant_id: auth.tenant_id,
+          name: s.name,
+          color: s.color,
+          department: s.department,
+          display_order: s.display_order,
+          created_by_user_id: auth.user_id,
+          created_at: new Date().toISOString()
+        });
+      }
+      steps = db.getWorkflowSteps(auth.tenant_id);
+    }
+    res.json(steps);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/workflow-steps', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    const isAuthority = user?.system_role === 'ADMIN' || user?.can_create_project || user?.department?.includes('Yönetim');
+    if (!isAuthority) {
+      return res.status(403).json({ error: 'Yetkisiz İşlem: İş Adımları kataloğuna yeni adım ekleme yetkisi yalnızca Proje Yöneticisi ve Sistem Yöneticisine aittir.' });
+    }
+
+    const { name, color, department } = req.body;
+    const cleanName = String(name || '').trim().toUpperCase();
+    if (cleanName.length < 2) {
+      return res.status(400).json({ error: 'İş Adımı adı en az 2 karakter olmalıdır.' });
+    }
+
+    const existingSteps = db.getWorkflowSteps(auth.tenant_id);
+    const step = db.insertWorkflowStep({
+      id: crypto.randomUUID(),
+      tenant_id: auth.tenant_id,
+      name: cleanName,
+      color: color || '#3b82f6',
+      department: department || undefined,
+      display_order: existingSteps.length + 1,
+      created_by_user_id: auth.user_id,
+      created_at: new Date().toISOString()
+    });
+
+    res.status(201).json(step);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/task-definitions', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const stepName = req.query.step as string | undefined;
+    let defs = db.getTaskDefinitionTemplates(auth.tenant_id, stepName);
+    if (defs.length === 0 && !stepName) {
+      const defaultTemplates = [
+        { step_name: 'KOLEKSİYON OLUŞTURMA', title: 'AW27 koleksiyonun eksiklerini oluşturma', default_duration_days: 21, suggested_department: 'Moda Tasarım & Koleksiyon' },
+        { step_name: 'KUMAŞ', title: 'Tasarım ve satış departmanının beklentisi doğrultusunda kumaşların organize edilmesi', default_duration_days: 9, suggested_department: 'Kumaş & Tedarik' },
+        { step_name: 'TEKNİK ÇİZİM', title: 'Koleksiyonun teknik çizimlerinin hazırlanması', default_duration_days: 7, suggested_department: 'Moda Tasarım & Koleksiyon' },
+        { step_name: 'YIKAMA', title: 'Koleksiyon model hazırlığı yıkamaların belirlenmesi', default_duration_days: 7, suggested_department: 'Yıkama & AR-GE' },
+        { step_name: 'KALIP MODELHANE', title: 'Modellerin kalıp departmanına aktarılması', default_duration_days: 7, suggested_department: 'Kalıp & Modelhane' },
+        { step_name: 'DİKİM', title: 'Modellerin dikim departmanına aktarılması', default_duration_days: 12, suggested_department: 'Dikim Atölyesi' },
+        { step_name: 'YIKAMA', title: 'Modellerin yıkama bölümüne aktarılması', default_duration_days: 14, suggested_department: 'Yıkama & AR-GE' },
+        { step_name: 'FINISHING', title: 'Modellerin finish bölümüne aktarılması', default_duration_days: 12, suggested_department: 'Finishing & Paket' }
+      ];
+      for (const t of defaultTemplates) {
+        db.insertTaskDefinitionTemplate({
+          id: crypto.randomUUID(),
+          tenant_id: auth.tenant_id,
+          step_name: t.step_name,
+          title: t.title,
+          default_duration_days: t.default_duration_days,
+          suggested_department: t.suggested_department,
+          created_by_user_id: auth.user_id,
+          created_at: new Date().toISOString()
+        });
+      }
+      defs = db.getTaskDefinitionTemplates(auth.tenant_id);
+    }
+    res.json(defs);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/task-definitions', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    const isAuthority = user?.system_role === 'ADMIN' || user?.can_create_project || user?.department?.includes('Yönetim');
+    if (!isAuthority) {
+      return res.status(403).json({ error: 'Yetkisiz İşlem: Görev Tanımları kataloğuna yeni tanım ekleme yetkisi yalnızca Proje Yöneticisi ve Sistem Yöneticisine aittir.' });
+    }
+
+    const cleanStep = String(req.body.step_name || req.body.workflow_step || '').trim().toUpperCase();
+    const cleanTitle = String(req.body.title || '').trim();
+    const cleanDuration = Number(req.body.default_duration_days) || 7;
+    const cleanDept = req.body.suggested_department || req.body.department || undefined;
+    if (!cleanStep || cleanTitle.length < 3) {
+      return res.status(400).json({ error: 'İş Adımı ve geçerli bir Görev Tanımı başlığı girilmelidir.' });
+    }
+
+    const tpl = db.insertTaskDefinitionTemplate({
+      id: crypto.randomUUID(),
+      tenant_id: auth.tenant_id,
+      step_name: cleanStep,
+      title: cleanTitle,
+      default_duration_days: cleanDuration,
+      suggested_department: cleanDept,
+      created_by_user_id: auth.user_id,
+      created_at: new Date().toISOString()
+    });
+
+    res.status(201).json(tpl);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/:id/apply-textile-template', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const projectId = req.params.id;
+    const project = db.getProjectById(auth.tenant_id, projectId);
+    if (!project) return res.status(404).json({ error: 'Proje bulunamadı.' });
+
+    if (!projectService.canEditTasks(auth, projectId)) {
+      return res.status(403).json({ error: 'Bu projede şablon uygulama yetkiniz bulunmamaktadır.' });
+    }
+
+    const baseDate = new Date(project.initial_start_date || new Date().toISOString());
+
+    const textileTemplateRows = [
+      { step: 'KOLEKSİYON OLUŞTURMA', title: 'AW27 koleksiyonun eksiklerini oluşturma', days: 21, dept: 'Moda Tasarım', nameKeyword: 'Dilara' },
+      { step: 'KUMAŞ', title: 'Tasarım ve satış departmanının beklentisi doğrultusunda kumaşların organize edilmesi', days: 9, dept: 'Kumaş', nameKeyword: 'Cem' },
+      { step: 'TEKNİK ÇİZİM', title: 'Koleksiyonun teknik çizimlerinin hazırlanması', days: 7, dept: 'Moda Tasarım', nameKeyword: 'Dilara' },
+      { step: 'YIKAMA', title: 'Koleksiyon model hazırlığı yıkamaların belirlenmesi', days: 7, dept: 'Yıkama', nameKeyword: 'İbrahim' },
+      { step: 'KALIP MODELHANE', title: 'Modellerin kalıp departmanına aktarılması', days: 7, dept: 'Kalıp', nameKeyword: 'Devrim' },
+      { step: 'DİKİM', title: 'Modellerin dikim departmanına aktarılması', days: 12, dept: 'Dikim', nameKeyword: 'Nilüfer' },
+      { step: 'YIKAMA', title: 'Modellerin yıkama bölümüne aktarılması', days: 14, dept: 'Yıkama', nameKeyword: 'İbrahim' },
+      { step: 'FINISHING', title: 'Modellerin finish bölümüne aktarılması', days: 12, dept: 'Finishing', nameKeyword: 'Gönül' }
+    ];
+
+    const users = db.getUsers(auth.tenant_id);
+    const createdTasks: any[] = [];
+    let curDate = new Date(baseDate);
+
+    for (let i = 0; i < textileTemplateRows.length; i++) {
+      const row = textileTemplateRows[i];
+      const taskStart = new Date(curDate);
+      const taskDue = new Date(taskStart);
+      taskDue.setDate(taskDue.getDate() + row.days);
+
+      const matchedUser = users.find(u =>
+        u.is_active !== false &&
+        (u.name.toLowerCase().includes(row.nameKeyword.toLowerCase()) ||
+         (row.dept && u.department && u.department.toLowerCase().includes(row.dept.toLowerCase())))
+      );
+
+      const taskTitle = `[${row.step}] ${row.title}`;
+      const task = taskService.createTask(
+        auth,
+        projectId,
+        taskTitle,
+        taskStart.toISOString().slice(0, 10),
+        taskDue.toISOString().slice(0, 10),
+        matchedUser ? matchedUser.id : undefined,
+        `${row.step} aşaması kapsamında ${row.title}.`,
+        {
+          type: 'TASK',
+          priority: 'NORMAL',
+          workflow_step: row.step,
+          task_definition: row.title,
+          assigned_by_user_id: auth.user_id
+        }
+      );
+
+      if (createdTasks.length > 0) {
+        const prevTask = createdTasks[createdTasks.length - 1];
+        try {
+          dependencyService.addDependency(auth, prevTask.id, task.id);
+        } catch (e) {
+          // ignore loop/conflict
+        }
+      }
+
+      createdTasks.push(task);
+      curDate.setDate(curDate.getDate() + 3);
+    }
+
+    res.json({
+      success: true,
+      message: `${createdTasks.length} adet standart tekstil iş adımı ve bağımlılık zinciri projeye uygulandı.`,
+      tasks: createdTasks
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 

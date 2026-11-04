@@ -164,6 +164,33 @@ export interface Task {
   actual_start_date?: string;
   actual_completion_date?: string;
   completed_by_user_id?: UUID;
+  workflow_step?: string;
+  task_definition?: string;
+  assigned_by_user_id?: UUID;
+  created_at: string;
+}
+
+// Kurumsal İş Adımları Kataloğu
+export interface WorkflowStep {
+  id: UUID;
+  tenant_id: UUID;
+  name: string;
+  color: string;
+  department?: string;
+  display_order?: number;
+  created_by_user_id?: UUID;
+  created_at: string;
+}
+
+// Standart Görev Tanımları Kataloğu
+export interface TaskDefinitionTemplate {
+  id: UUID;
+  tenant_id: UUID;
+  step_name: string;
+  title: string;
+  default_duration_days?: number;
+  suggested_department?: string;
+  created_by_user_id?: UUID;
   created_at: string;
 }
 

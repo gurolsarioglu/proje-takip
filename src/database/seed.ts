@@ -133,6 +133,166 @@ export function seedDatabase(db: Database, forceReset = false) {
     }
   );
 
+  // 3.1. Tekstil Departman Ekibi (Excel Tablosundaki Görev Sahipleri & Atayan)
+  const musa = authService.createUser(
+    tenantFG.id,
+    'Musa Bey',
+    'musa@fggroup.com.tr',
+    'entra-oid-musa',
+    {
+      phone: '+90 532 555 1001',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: true,
+      can_build_reports: true,
+      department: 'Koleksiyon & Proje Yönetimi'
+    }
+  );
+
+  const dilara = authService.createUser(
+    tenantFG.id,
+    'Dilara Kızıldağ',
+    'dilara@fggroup.com.tr',
+    'entra-oid-dilara',
+    {
+      phone: '+90 532 555 1002',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false,
+      can_build_reports: false,
+      department: 'Moda Tasarım & Koleksiyon'
+    }
+  );
+
+  const cem = authService.createUser(
+    tenantFG.id,
+    'Cem AYLA',
+    'cem@fggroup.com.tr',
+    'entra-oid-cem',
+    {
+      phone: '+90 532 555 1003',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false,
+      can_build_reports: false,
+      department: 'Kumaş & Tedarik'
+    }
+  );
+
+  const ibrahim = authService.createUser(
+    tenantFG.id,
+    'İbrahim Yıldız',
+    'ibrahim@fggroup.com.tr',
+    'entra-oid-ibrahim',
+    {
+      phone: '+90 532 555 1004',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false,
+      can_build_reports: false,
+      department: 'Yıkama & AR-GE'
+    }
+  );
+
+  const devrim = authService.createUser(
+    tenantFG.id,
+    'Devrim Modelist',
+    'devrim@fggroup.com.tr',
+    'entra-oid-devrim',
+    {
+      phone: '+90 532 555 1005',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false,
+      can_build_reports: false,
+      department: 'Kalıp & Modelhane'
+    }
+  );
+
+  const nilufer = authService.createUser(
+    tenantFG.id,
+    'Nilüfer Usta',
+    'nilufer@fggroup.com.tr',
+    'entra-oid-nilufer',
+    {
+      phone: '+90 532 555 1006',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false,
+      can_build_reports: false,
+      department: 'Dikim Atölyesi'
+    }
+  );
+
+  const gonul = authService.createUser(
+    tenantFG.id,
+    'Gönül Finish',
+    'gonul@fggroup.com.tr',
+    'entra-oid-gonul',
+    {
+      phone: '+90 532 555 1007',
+      country: 'Türkiye',
+      password: '123',
+      system_role: 'USER',
+      can_create_project: false,
+      can_build_reports: false,
+      department: 'Finishing & Paket'
+    }
+  );
+
+  // 3.2. Kurumsal İş Adımları Kataloğu
+  const defaultSteps = [
+    { name: 'KOLEKSİYON OLUŞTURMA', color: '#8b5cf6', department: 'Moda Tasarım & Koleksiyon', display_order: 1 },
+    { name: 'KUMAŞ', color: '#2563eb', department: 'Kumaş & Tedarik', display_order: 2 },
+    { name: 'TEKNİK ÇİZİM', color: '#f59e0b', department: 'Moda Tasarım & Koleksiyon', display_order: 3 },
+    { name: 'KALIP MODELHANE', color: '#d97706', department: 'Kalıp & Modelhane', display_order: 4 },
+    { name: 'DİKİM', color: '#10b981', department: 'Dikim Atölyesi', display_order: 5 },
+    { name: 'YIKAMA', color: '#06b6d4', department: 'Yıkama & AR-GE', display_order: 6 },
+    { name: 'FINISHING', color: '#ef4444', department: 'Finishing & Paket', display_order: 7 }
+  ];
+  for (const s of defaultSteps) {
+    db.insertWorkflowStep({
+      id: crypto.randomUUID(),
+      tenant_id: tenantFG.id,
+      name: s.name,
+      color: s.color,
+      department: s.department,
+      display_order: s.display_order,
+      created_by_user_id: admin.id,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  // 3.3. Standart Görev Tanımları Kataloğu
+  const defaultTemplates = [
+    { step_name: 'KOLEKSİYON OLUŞTURMA', title: 'AW27 koleksiyonun eksiklerini oluşturma', default_duration_days: 21, suggested_department: 'Moda Tasarım & Koleksiyon' },
+    { step_name: 'KUMAŞ', title: 'Tasarım ve satış departmanının beklentisi doğrultusunda kumaşların organize edilmesi', default_duration_days: 9, suggested_department: 'Kumaş & Tedarik' },
+    { step_name: 'TEKNİK ÇİZİM', title: 'Koleksiyonun teknik çizimlerinin hazırlanması', default_duration_days: 7, suggested_department: 'Moda Tasarım & Koleksiyon' },
+    { step_name: 'YIKAMA', title: 'Koleksiyon model hazırlığı yıkamaların belirlenmesi', default_duration_days: 7, suggested_department: 'Yıkama & AR-GE' },
+    { step_name: 'KALIP MODELHANE', title: 'Modellerin kalıp departmanına aktarılması', default_duration_days: 7, suggested_department: 'Kalıp & Modelhane' },
+    { step_name: 'DİKİM', title: 'Modellerin dikim departmanına aktarılması', default_duration_days: 12, suggested_department: 'Dikim Atölyesi' },
+    { step_name: 'YIKAMA', title: 'Modellerin yıkama bölümüne aktarılması', default_duration_days: 14, suggested_department: 'Yıkama & AR-GE' },
+    { step_name: 'FINISHING', title: 'Modellerin finish bölümüne aktarılması', default_duration_days: 12, suggested_department: 'Finishing & Paket' }
+  ];
+  for (const t of defaultTemplates) {
+    db.insertTaskDefinitionTemplate({
+      id: crypto.randomUUID(),
+      tenant_id: tenantFG.id,
+      step_name: t.step_name,
+      title: t.title,
+      default_duration_days: t.default_duration_days,
+      suggested_department: t.suggested_department,
+      created_by_user_id: admin.id,
+      created_at: new Date().toISOString()
+    });
+  }
+
   const authAdmin = { tenant_id: tenantFG.id, user_id: admin.id, email: admin.email, name: admin.name };
   const authAhmet = { tenant_id: tenantFG.id, user_id: ahmet.id, email: ahmet.email, name: ahmet.name };
   const authZeynep = { tenant_id: tenantFG.id, user_id: zeynep.id, email: zeynep.email, name: zeynep.name };
