@@ -958,6 +958,18 @@ function formatDateTR(isoStr) {
   return `${day}.${month}.${year}`;
 }
 
+function formatDateTimeTR(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return String(isoStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
+}
+
 // 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE) - OPENPROJECT MODELİ BÖLÜNMÜŞ (SPLIT) EKRAN & ÇOKLU ZOOM (GÜNLÜK, HAFTALIK, AYLIK, YILLIK)
 let ganttFilterQuery = '';
 let ganttListenersInitialized = false;
@@ -1376,7 +1388,23 @@ function showGanttTaskHoverPopup(task, targetElement) {
 
   const project = task.project_id ? state.projects.find(p => p.id === task.project_id) : null;
   const assignee = task.assignee_id ? state.personnelList.find(p => p.id === task.assignee_id) : null;
-  const assigner = task.assigned_by_user_id ? state.personnelList.find(p => p.id === task.assigned_by_user_id) : null;
+
+  // Görevi Atayan Personel ve Atama Zamanı Çözümleme
+  let assignerName = task.assigned_by_name;
+  if (!assignerName && task.assigned_by_user_id) {
+    const u = state.personnelList.find(p => p.id === task.assigned_by_user_id);
+    if (u) assignerName = u.name;
+  }
+  if (!assignerName && project?.created_by_user_id) {
+    const creator = state.personnelList.find(p => p.id === project.created_by_user_id);
+    if (creator) assignerName = creator.name;
+  }
+  if (!assignerName) {
+    assignerName = task.project_id ? 'Proje Yetkilisi' : 'Sistem';
+  }
+
+  const assignedAtRaw = task.assigned_at || task.created_at;
+  const assignedAtFormatted = assignedAtRaw ? formatDateTimeTR(assignedAtRaw) : '-';
 
   const prog = task.work_status === 'COMPLETED' ? 100 : (task.progress || 0);
 
@@ -1435,12 +1463,14 @@ function showGanttTaskHoverPopup(task, targetElement) {
           ${escapeHtml(assignee ? `${assignee.name}` : 'Atanmamış')}
         </span>
       </div>
-      ${assigner ? `
-        <div class="gh-meta-item">
-          <span class="gh-meta-lbl">🎯 Görevi Atayan</span>
-          <span class="gh-meta-val" title="${escapeHtml(assigner.name)}">${escapeHtml(assigner.name)}</span>
-        </div>
-      ` : ''}
+      <div class="gh-meta-item">
+        <span class="gh-meta-lbl">🎯 Görevi Atayan</span>
+        <span class="gh-meta-val" style="color:#2563eb; font-weight:700;" title="${escapeHtml(assignerName)}">${escapeHtml(assignerName)}</span>
+      </div>
+      <div class="gh-meta-item">
+        <span class="gh-meta-lbl">⏰ Atama Zamanı</span>
+        <span class="gh-meta-val" style="color:var(--text-primary); font-weight:600;" title="${assignedAtFormatted}">${assignedAtFormatted}</span>
+      </div>
       <div class="gh-meta-item">
         <span class="gh-meta-lbl">📅 Zaman Planı</span>
         <span class="gh-meta-val ${isOverdue ? 'style="color:#dc2626;"' : ''}">${startFormatted} → ${dueFormatted}</span>
@@ -2238,7 +2268,8 @@ async function openTaskDrawer(taskId) {
     if (assignerRow && assignerNameEl) {
       if (details.assigner) {
         assignerRow.style.display = 'flex';
-        assignerNameEl.textContent = `${details.assigner.name} (${details.assigner.department || 'Proje Yetkilisi'})`;
+        const atamaZamani = details.assigner.assigned_at ? ` • Atama: ${formatDateTimeTR(details.assigner.assigned_at)}` : '';
+        assignerNameEl.textContent = `${details.assigner.name} (${details.assigner.department || 'Proje Yetkilisi'})${atamaZamani}`;
       } else {
         assignerRow.style.display = 'none';
       }

@@ -457,3 +457,25 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
    - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
 
+---
+
+## 31. GÖREV ATAYAN PERSONEL VE ATAMA ZAMANI ÖNİZLEME ENTEGRASYONU (04.11.2026)
+
+### 31.1. Kullanıcı Talebi & Gereksinim
+- **Kullanıcı Talebi:** Gantt canlı önizleme hover popup kartında ve görev detaylarında; görevi atayan personelin adı ve görevin atandığı tarih/saat bilgisinin açık ve net biçimde gösterilmesi.
+
+### 31.2. Gerçekleştirilen Geliştirmeler
+1. **Arka Yüz (Backend) API Zenginleştirmesi (`src/server/index.ts`):**
+   - `GET /api/projects/:id/tasks`, `GET /api/tasks/search` ve `GET /api/tasks/personal` uçlarında dönen her görev nesnesi `assigned_by_user_id`, `assigned_by_name` ve `assigned_at` alanlarıyla zenginleştirildi (`task.assigned_by_user_id` -> `task_assignments` geçmişi -> `project.created_by_user_id` -> `Proje Yetkilisi` zincirleme çözümleme).
+   - `GET /api/tasks/:id/details` ucunda `safeAssigner` nesnesi atama tarihi (`assigned_at`) ile birlikte garanti altına alındı.
+2. **Ön Yüz (Frontend) Entegrasyonu (`src/public/app.js`):**
+   - Türkçe tarih ve saat biçimlendirici `formatDateTimeTR(isoStr)` fonksiyonu eklendi (`GG.AA.YYYY SS:dd`).
+   - Gantt hover önizleme kartında (`showGanttTaskHoverPopup`) `📁 Proje` ve `👤 Görev Sahibi` satırlarının hemen altına:
+     - `🎯 Görevi Atayan`: Görevi atayan yetkilinin adı (örn: Musa Bey, Gürol Sarıoğlu).
+     - `⏰ Atama Zamanı`: Atamanın gerçekleştirildiği tarih ve saat (örn: 25.10.2026 09:00).
+   - Görev detay çekmecesinde (`openTaskDrawer`), `wpAssignerRow` içerisine atama zamanı eklendi.
+3. **Doğrulama:**
+   - `npm test` ile 33 kabul testi eksiksiz geçti.
+   - `npm run build` ile TypeScript derlemesi ve statik dosya senkronizasyonu hatasız tamamlandı.
+
+

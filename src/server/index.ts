@@ -403,10 +403,31 @@ app.get('/api/tasks/search', (req, res) => {
     const q = (req.query.q as string) || '';
     const projectId = (req.query.project_id as string) || undefined;
     const matched = taskService.searchTasks(auth, q, projectId);
-    const enriched = matched.map(t => ({
-      ...t,
-      limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
-    }));
+
+    const enrichTaskWithAssignerAndDeps = (t: Task) => {
+      let assignerId = t.assigned_by_user_id;
+      let assignedAt = t.created_at;
+      const assignments = db.getTaskAssignments(auth.tenant_id, t.id);
+      if (assignments && assignments.length > 0) {
+        const latest = assignments[assignments.length - 1];
+        if (!assignerId) assignerId = latest.assigned_by_user_id;
+        if (latest.assigned_at) assignedAt = latest.assigned_at;
+      }
+      if (!assignerId && t.project_id) {
+        const proj = db.getProjectById(auth.tenant_id, t.project_id);
+        if (proj) assignerId = proj.created_by_user_id;
+      }
+      const assignerUser = assignerId ? db.getUserById(auth.tenant_id, assignerId) : null;
+      return {
+        ...t,
+        assigned_by_user_id: assignerId,
+        assigned_by_name: assignerUser ? assignerUser.name : (t.project_id ? 'Proje Yetkilisi' : 'Sistem'),
+        assigned_at: assignedAt || t.created_at,
+        limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
+      };
+    };
+
+    const enriched = matched.map(t => enrichTaskWithAssignerAndDeps(t));
     res.json(enriched);
   } catch (err: any) {
     res.status(403).json({ error: err.message });
@@ -422,21 +443,38 @@ app.get('/api/projects/:id/tasks', (req, res) => {
       ? taskService.searchTasks(auth, q, req.params.id)
       : taskService.listTasks(auth, req.params.id);
 
+    const enrichTaskWithAssignerAndDeps = (t: Task) => {
+      let assignerId = t.assigned_by_user_id;
+      let assignedAt = t.created_at;
+      const assignments = db.getTaskAssignments(auth.tenant_id, t.id);
+      if (assignments && assignments.length > 0) {
+        const latest = assignments[assignments.length - 1];
+        if (!assignerId) assignerId = latest.assigned_by_user_id;
+        if (latest.assigned_at) assignedAt = latest.assigned_at;
+      }
+      if (!assignerId && t.project_id) {
+        const proj = db.getProjectById(auth.tenant_id, t.project_id);
+        if (proj) assignerId = proj.created_by_user_id;
+      }
+      const assignerUser = assignerId ? db.getUserById(auth.tenant_id, assignerId) : null;
+      return {
+        ...t,
+        assigned_by_user_id: assignerId,
+        assigned_by_name: assignerUser ? assignerUser.name : (t.project_id ? 'Proje Yetkilisi' : 'Sistem'),
+        assigned_at: assignedAt || t.created_at,
+        limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
+      };
+    };
+
     // KAB02: Görev sorumlusu yalnızca kendi görevini ve sınırlı bağımlılık özetini görür
     if (!isFullViewer) {
       const myTasks = allTasks.filter(t => t.assignee_id === auth.user_id);
-      const tasksWithSummary = myTasks.map(t => ({
-        ...t,
-        limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
-      }));
+      const tasksWithSummary = myTasks.map(t => enrichTaskWithAssignerAndDeps(t));
       return res.json(tasksWithSummary);
     }
 
     // Tam erişimli kullanıcılar tüm görevleri ve bağımlılık özetlerini görür
-    const enriched = allTasks.map(t => ({
-      ...t,
-      limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
-    }));
+    const enriched = allTasks.map(t => enrichTaskWithAssignerAndDeps(t));
     res.json(enriched);
   } catch (err: any) {
     res.status(403).json({ error: err.message });
@@ -447,7 +485,15 @@ app.get('/api/tasks/personal', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const personalTasks = db.getTasks(auth.tenant_id).filter(t => !t.project_id && t.assignee_id === auth.user_id);
-    res.json(personalTasks);
+    const creatorUser = db.getUserById(auth.tenant_id, auth.user_id);
+    const enriched = personalTasks.map(t => ({
+      ...t,
+      assigned_by_user_id: auth.user_id,
+      assigned_by_name: creatorUser ? creatorUser.name : 'Siz',
+      assigned_at: t.created_at,
+      limited_dependencies: []
+    }));
+    res.json(enriched);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -568,13 +614,32 @@ app.get('/api/tasks/:id/details', (req, res) => {
       department: assignee.department
     } : null;
 
-    const assigner = task.assigned_by_user_id ? db.getUserById(auth.tenant_id, task.assigned_by_user_id) : null;
+    let assigner = task.assigned_by_user_id ? db.getUserById(auth.tenant_id, task.assigned_by_user_id) : null;
+    let assignedAt = task.created_at;
+    const assignments = db.getTaskAssignments(auth.tenant_id, task.id);
+    if (assignments && assignments.length > 0) {
+      const latest = assignments[assignments.length - 1];
+      if (!assigner && latest.assigned_by_user_id) {
+        assigner = db.getUserById(auth.tenant_id, latest.assigned_by_user_id);
+      }
+      if (latest.assigned_at) assignedAt = latest.assigned_at;
+    }
+    if (!assigner && project) {
+      assigner = db.getUserById(auth.tenant_id, project.created_by_user_id);
+    }
     const safeAssigner = assigner ? {
       id: assigner.id,
       name: assigner.name,
       email: assigner.email,
-      department: assigner.department
-    } : null;
+      department: assigner.department,
+      assigned_at: assignedAt
+    } : {
+      id: 'system',
+      name: project ? 'Proje Yetkilisi' : 'Sistem',
+      email: '',
+      department: 'Yönetim',
+      assigned_at: assignedAt
+    };
 
     // İş Adımı Bilgisi & Rengi
     const allSteps = db.getWorkflowSteps(auth.tenant_id);
