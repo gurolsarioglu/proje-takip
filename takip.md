@@ -273,3 +273,20 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - Arama kutularına `autocomplete="off"`, `autocorrect="off"`, `autocapitalize="off"`, `spellcheck="false"`, `data-lpignore="true"` ve belirgin `name` öznitelikleri tanımlandı.
   - Uygulama başlatıldığında (`DOMContentLoaded`), oturum açıldığında (`onLoginSuccess`), veri yüklendiğinde (`loadInitialData`), görünüm değiştirildiğinde (`switchView`) ve sayfa gösterildiğinde (`pageshow`) arama kutularının tamamen boş (`value = ''`) ve arama filtrelerinin temiz (`state.searchQuery = ''`) gelmesi garanti altına alındı.
   - Kullanıcı `Escape` tuşuna bastığında aramanın anında sıfırlanması sağlandı.
+
+### 24. Yeni Görev Ekle Modalında Proje Seçimi ve Bireysel Görev (Kişisel To-Do) Mimarisi
+* **Yeni Görev Ekle Modalı (`#taskModal`) Proje Seçim Açılır Kutusu (`#tProject`):**
+  - Modala `📁 Ait Olduğu Proje` seçim alanı ve seçim durumuna göre dinamik rozet (`#tProjectBadge`) ile bilgilendirme kutusu (`#tPersonalNotice`) eklendi.
+  - Açılır kutuda en üstte `📌 Bireysel Görev / Kişisel To-Do (Projesiz Takip)` seçeneği ve altında yetkili olunan şirket projeleri listelenir.
+* **Yetki Kuralı & Standart Personel Kısıtlaması (`TaskService.createTask`):**
+  - **Standart Çalışanlar (`can_create_project: false` ve proje editörü olmayanlar):** Şirket projelerine izinsiz görev açamaz; modal açıldığında proje alanı kilitli olarak `📌 Bireysel Görev` gelir, sorumlu kişi kendisi olur (`assignee_id = auth.user_id`) ve öncül bağımlılık alanı devre dışı bırakılır.
+  - **Proje Yetkilileri (Admin, Proje Lideri, PM / Editör):** Yetkili oldukları projeleri seçerek projedeki herhangi bir çalışana görev atayabilir; dilerlerse projeyi boş bırakıp (bireysel seçip) kendileri için takip amaçlı şahsi to-do oluşturabilirler.
+* **Veritabanı & PostgreSQL Null Desteği:**
+  - `tasks.project_id` esnetilerek `NULL` desteği sağlandı (`ALTER TABLE tasks ALTER COLUMN project_id DROP NOT NULL;`).
+  - Bireysel görevlerde `project_id = null` ve `assignee_id = auth.user_id` olarak saklanır.
+* **Görevler, Gantt ve Kanban Görünümlerinde Ayrım:**
+  - **Görevlerim (`view-my-tasks`):** Hem şirket projelerindeki görevler (`📁 Proje Adı` etiketiyle) hem de bireysel işler (`📌 Kişisel To-Do` mor rozetiyle) listelenir. Sekme çubuğuna `📌 Kişisel To-Do` filtre sekmesi eklendi.
+  - **Zaman Çizelgesi (Gantt):** Yalnızca o projeye ait görevleri çizer (`t.project_id === state.currentProjectId`); personelin kişisel to-do'ları şirket Gantt takvimini asla kirletmez.
+  - **Kanban Panosu:** Seçili projenin iş akışını korur.
+* **Tüm Testler ve Doğrulama:**
+  - `PROJE GÖREVİ & BİREYSEL TO-DO AYRIMI` kabul testi dahil olmak üzere **28/28 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.

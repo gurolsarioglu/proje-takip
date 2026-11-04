@@ -623,16 +623,38 @@ async function loadProjects() {
 
   if (state.currentProjectId) {
     await loadProjectTasks(state.currentProjectId);
+  } else {
+    await loadProjectTasks('');
   }
 }
 
 async function loadProjectTasks(projectId) {
-  state.currentProjectId = projectId;
+  state.currentProjectId = projectId || null;
   const projectSelect = document.getElementById('projectSelect');
-  if (projectSelect) projectSelect.value = projectId;
+  if (projectSelect && projectId) projectSelect.value = projectId;
 
-  state.tasks = await apiCall(`/api/projects/${projectId}/tasks`);
-  state.dependencies = await apiCall(`/api/projects/${projectId}/dependencies`);
+  let projTasks = [];
+  let dependencies = [];
+  if (projectId) {
+    try {
+      projTasks = await apiCall(`/api/projects/${projectId}/tasks`);
+      dependencies = await apiCall(`/api/projects/${projectId}/dependencies`);
+    } catch (err) {
+      projTasks = [];
+      dependencies = [];
+    }
+  }
+
+  // Kullanıcının bireysel (projesiz) görevlerini de yükle
+  let personalTasks = [];
+  try {
+    personalTasks = await apiCall('/api/tasks/personal');
+  } catch (err) {
+    personalTasks = [];
+  }
+
+  state.tasks = [...projTasks, ...personalTasks];
+  state.dependencies = dependencies;
 
   updateGlobalSearchUI();
   renderMyTasks();
@@ -676,6 +698,8 @@ function renderMyTasks() {
   // Filtre Sekmesi
   if (state.activeFilter === 'mine') {
     filtered = filtered.filter(t => t.assignee_id === state.currentUser?.id);
+  } else if (state.activeFilter === 'personal') {
+    filtered = filtered.filter(t => !t.project_id && t.assignee_id === state.currentUser?.id);
   } else if (state.activeFilter !== 'all') {
     filtered = filtered.filter(t => t.work_status === state.activeFilter);
   }
@@ -752,13 +776,18 @@ function renderMyTasks() {
     const typeLabel = task.type === 'MILESTONE' ? '🏁' : (task.type === 'BUG' ? '🐞' : '📌');
     const priorityDot = task.priority === 'HIGH' ? '<span title="Yüksek Öncelik" style="color:#f59e0b; margin-right:4px;">●</span>' : '';
     const assignee = state.personnelList.find(p => p.id === task.assignee_id);
+    const proj = task.project_id ? state.projects.find(p => p.id === task.project_id) : null;
+    const projPill = proj
+      ? `<span class="task-proj-pill" style="font-size:0.72rem; background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-weight:500;">📁 ${escapeHtml(proj.title)}</span>`
+      : `<span class="task-personal-pill" style="font-size:0.72rem; background:#f3e8ff; color:#7e22ce; padding:2px 6px; border-radius:4px; font-weight:600;">📌 Kişisel To-Do</span>`;
 
     row.innerHTML = `
       <button class="task-check-btn ${isDone ? 'checked' : ''}" data-id="${task.id}" title="${isDone ? 'Tamamlandı' : 'Tamamla'}"></button>
       <div class="task-info-col">
-        <div style="display:flex; align-items:center; gap:6px;">
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
           <span>${typeLabel}</span>
           ${priorityDot}
+          ${projPill}
           <span class="task-main-title ${isDone ? 'done-title' : ''}">${task.title}</span>
         </div>
         ${depNote}
@@ -1324,6 +1353,8 @@ function renderTimeline() {
   }
   const activeGanttQuery = state.searchQuery || ganttFilterQuery;
   const tasksToRender = state.tasks.filter(t => {
+    // Kişisel görevler şirket gantt takvimine karışmaz, yalnızca seçili projeye ait görevler çizilir
+    if (t.project_id !== state.currentProjectId) return false;
     if (!activeGanttQuery) return true;
     return matchesTaskQuery(t, activeGanttQuery);
   });
@@ -1681,6 +1712,7 @@ function renderBoard() {
   }
   const activeBoardQuery = state.searchQuery || state.kanbanSearchQuery || '';
   const filteredTasks = state.tasks.filter(t => {
+    if (state.currentProjectId && t.project_id !== state.currentProjectId) return false;
     if (!activeBoardQuery) return true;
     return matchesTaskQuery(t, activeBoardQuery);
   });
@@ -2767,34 +2799,38 @@ function setupEventListeners() {
     });
   }
 
-  // Yeni Görev Kaydet (Öncül Bağımlılığı da Otomatik Ekler!)
+  // Yeni Görev Kaydet (Proje Görevi veya Bireysel To-Do)
   document.getElementById('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('tTitle').value.trim();
     const type = document.getElementById('tType')?.value || 'TASK';
     const priority = document.getElementById('tPriority')?.value || 'NORMAL';
-    const assignee_id = document.getElementById('tAssignee').value || undefined;
+    const selectedProjectId = document.getElementById('tProject')?.value || null;
+    const finalAssigneeId = selectedProjectId
+      ? (document.getElementById('tAssignee').value || undefined)
+      : state.currentUser?.id;
     const initial_start_date = new Date(document.getElementById('tStart').value).toISOString();
     const initial_due_date = new Date(document.getElementById('tDue').value).toISOString();
     const description = document.getElementById('tDesc').value.trim();
-    const predecessor_id = document.getElementById('tPredecessor').value;
+    const predecessor_id = selectedProjectId ? document.getElementById('tPredecessor')?.value : undefined;
 
     const newTask = await apiCall('/api/tasks', 'POST', {
-      project_id: state.currentProjectId,
+      project_id: selectedProjectId,
       title,
       type,
       priority,
-      assignee_id,
+      assignee_id: finalAssigneeId,
       initial_start_date,
       initial_due_date,
       description,
       predecessor_id
     });
 
-    showToast('Görev başarıyla oluşturuldu.', 'success');
+    const isPersonal = !selectedProjectId;
+    showToast(isPersonal ? '📌 Kişisel To-Do başarıyla oluşturuldu.' : '✅ Proje görevi başarıyla oluşturuldu.', 'success');
     document.getElementById('taskModal').classList.remove('open');
     e.target.reset();
-    await loadProjectTasks(state.currentProjectId);
+    await loadProjectTasks(selectedProjectId || state.currentProjectId || '');
   });
 
   // Yeni Proje Modalı
@@ -3409,13 +3445,110 @@ function openExplanationModal(taskId, title) {
 }
 
 function populateTaskModalSelects() {
-  const assigneeEl = document.getElementById('tAssignee');
-  assigneeEl.innerHTML = '<option value="">(Atanmamış)</option>' +
-    state.personnelList.filter(p => p.is_active !== false).map(p => `<option value="${p.id}">${p.name} (${p.department || 'Genel'})</option>`).join('');
+  const u = state.currentUser;
+  const isAdmin = u?.system_role === 'ADMIN';
+  const canCreate = !!u?.can_create_project;
 
+  // Yetkili olunan projeler listesi
+  const authorizedProjects = (state.projects || []).filter(p => {
+    if (isAdmin || canCreate) return true;
+    if (p.created_by_user_id === u?.id) return true;
+    const isMember = (p.members || []).some(m => m.user_id === u?.id && (m.role === 'PROJECT_MANAGER' || m.role === 'EDITOR'));
+    return isMember;
+  });
+
+  const projSelect = document.getElementById('tProject');
+  const projBadge = document.getElementById('tProjectBadge');
+  const personalNotice = document.getElementById('tPersonalNotice');
+  const assigneeEl = document.getElementById('tAssignee');
   const predEl = document.getElementById('tPredecessor');
-  predEl.innerHTML = '<option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>' +
-    state.tasks.map(t => `<option value="${t.id}">${t.title} (${t.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'})</option>`).join('');
+
+  if (!projSelect) return;
+
+  if (authorizedProjects.length === 0) {
+    // STANDART ÇALIŞAN (Yalnızca Bireysel Görev / Kişisel To-Do açabilir)
+    projSelect.innerHTML = '<option value="">📌 Bireysel Görev / Kişisel To-Do (Kendi Takibiniz)</option>';
+    projSelect.value = '';
+    projSelect.disabled = true;
+
+    if (projBadge) {
+      projBadge.textContent = 'Standart Personel (Yalnızca Kişisel To-Do)';
+      projBadge.style.background = '#fef3c7';
+      projBadge.style.color = '#b45309';
+    }
+    if (personalNotice) personalNotice.style.display = 'block';
+
+    if (assigneeEl) {
+      assigneeEl.innerHTML = `<option value="${u?.id || ''}">${u?.name || 'Siz'} (Siz - Kişisel Görev)</option>`;
+      assigneeEl.value = u?.id || '';
+      assigneeEl.disabled = true;
+    }
+
+    if (predEl) {
+      predEl.innerHTML = '<option value="">(Bireysel görevlerde öncül bağımlılık bulunmaz)</option>';
+      predEl.disabled = true;
+    }
+  } else {
+    // PROJE YETKİLİSİ / ADMİN (Şirket projesi seçebilir veya bireysel to-do açabilir)
+    projSelect.disabled = false;
+    let projOptions = '<option value="">📌 Bireysel Görev / Kişisel To-Do (Projesiz Takip)</option>';
+    projOptions += authorizedProjects.map(p => `<option value="${p.id}">📁 ${escapeHtml(p.title)}</option>`).join('');
+    projSelect.innerHTML = projOptions;
+
+    // Varsayılan seçim: Aktif proje yetkiliyse o proje seçili gelsin
+    const activeProjValid = authorizedProjects.some(p => p.id === state.currentProjectId);
+    projSelect.value = activeProjValid ? state.currentProjectId : '';
+
+    const updateFieldsForSelection = (selectedId) => {
+      if (!selectedId) {
+        // Bireysel görev seçildi
+        if (projBadge) {
+          projBadge.textContent = 'Bireysel Takip (Projesiz)';
+          projBadge.style.background = '#ede9fe';
+          projBadge.style.color = '#6d28d9';
+        }
+        if (personalNotice) personalNotice.style.display = 'block';
+
+        if (assigneeEl) {
+          assigneeEl.innerHTML = `<option value="${u?.id || ''}">${u?.name || 'Siz'} (Siz - Bireysel Görev)</option>`;
+          assigneeEl.value = u?.id || '';
+          assigneeEl.disabled = true;
+        }
+
+        if (predEl) {
+          predEl.innerHTML = '<option value="">(Bireysel görevlerde öncül bağımlılık bulunmaz)</option>';
+          predEl.disabled = true;
+        }
+      } else {
+        // Şirket projesi seçildi
+        if (projBadge) {
+          projBadge.textContent = 'Şirket Projesi Görevi';
+          projBadge.style.background = '#dcfce7';
+          projBadge.style.color = '#15803d';
+        }
+        if (personalNotice) personalNotice.style.display = 'none';
+
+        if (assigneeEl) {
+          assigneeEl.disabled = false;
+          assigneeEl.innerHTML = '<option value="">(Atanmamış)</option>' +
+            state.personnelList.filter(p => p.is_active !== false).map(p => `<option value="${p.id}">${p.name} (${p.department || 'Genel'})</option>`).join('');
+        }
+
+        if (predEl) {
+          predEl.disabled = false;
+          const projTasks = (state.tasks || []).filter(t => t.project_id === selectedId);
+          predEl.innerHTML = '<option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>' +
+            projTasks.map(t => `<option value="${t.id}">${escapeHtml(t.title)} (${t.work_status === 'COMPLETED' ? 'Tamamlandı' : 'Sürüyor'})</option>`).join('');
+        }
+      }
+    };
+
+    updateFieldsForSelection(projSelect.value);
+
+    projSelect.onchange = (e) => {
+      updateFieldsForSelection(e.target.value);
+    };
+  }
 }
 
 function showToast(message, type = 'info') {

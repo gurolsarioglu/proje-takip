@@ -102,7 +102,7 @@ export class DelayService {
     // Sorumlu, proje yöneticisi/editörü veya sistem yöneticisi girebilir
     if (task.assignee_id !== auth.user_id) {
       const caller = this.db.getUserById(auth.tenant_id, auth.user_id);
-      const member = this.db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id);
+      const member = task.project_id ? this.db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id) : undefined;
       if (caller?.system_role !== 'ADMIN' && member?.role !== 'PROJECT_MANAGER' && member?.role !== 'EDITOR') {
         throw new Error('Yalnızca görev sorumlusu veya proje yöneticisi açıklama girebilir.');
       }

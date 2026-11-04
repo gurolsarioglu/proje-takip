@@ -428,6 +428,16 @@ app.get('/api/projects/:id/tasks', (req, res) => {
   }
 });
 
+app.get('/api/tasks/personal', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const personalTasks = db.getTasks(auth.tenant_id).filter(t => !t.project_id && t.assignee_id === auth.user_id);
+    res.json(personalTasks);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/tasks', (req, res) => {
   try {
     const auth = getAuthContext(req);
@@ -443,23 +453,27 @@ app.post('/api/tasks', (req, res) => {
       predecessor_id
     } = req.body;
 
-    if (!projectService.canEditTasks(auth, project_id)) {
-      return res.status(403).json({ error: 'Görev ekleme yetkiniz yok.' });
+    const normalizedProjectId = (project_id && String(project_id).trim() !== '') ? String(project_id).trim() : null;
+
+    if (normalizedProjectId) {
+      if (!projectService.canEditTasks(auth, normalizedProjectId)) {
+        return res.status(403).json({ error: 'Bu projede görev oluşturma yetkiniz bulunmamaktadır. Standart kullanıcılar yalnızca bireysel görev / kişisel to-do açabilir.' });
+      }
     }
 
     const task = taskService.createTask(
       auth,
-      project_id,
+      normalizedProjectId,
       title,
       initial_start_date,
       initial_due_date,
-      assignee_id,
+      normalizedProjectId ? assignee_id : auth.user_id,
       description,
       { type, priority }
     );
 
-    // Eğer öncül seçildiyse otomatik bağımlılık ekle (OpenProject akışı)
-    if (predecessor_id) {
+    // Eğer bir projeye aitse ve öncül seçildiyse otomatik bağımlılık ekle (OpenProject akışı)
+    if (normalizedProjectId && predecessor_id) {
       try {
         dependencyService.addDependency(auth, predecessor_id, task.id);
       } catch (depErr) {
@@ -477,8 +491,8 @@ app.post('/api/tasks', (req, res) => {
     }
 
     const createdWithStatus = db.getTaskById(auth.tenant_id, task.id);
-    if (createdWithStatus && createdWithStatus.assignee_id) {
-      // Kullanıcıya görev atandığında hem atama bilgisini hem de canlı Adaptive Card'ı gönder
+    // Yalnızca şirket projesinde başkasına görev atandığında bilgilendirme maili gönder
+    if (normalizedProjectId && createdWithStatus && createdWithStatus.assignee_id && createdWithStatus.assignee_id !== auth.user_id) {
       void emailService.sendTaskAssignedActionableCard(auth.tenant_id, createdWithStatus.id, auth.name);
     }
     res.status(201).json(createdWithStatus || task);
@@ -563,7 +577,7 @@ app.get('/api/tasks/:id/details', (req, res) => {
     // Gecikme, Plan Revizyonu ve Açıklama Kayıtları
     const delays = delayService.getDelayRecords(auth.tenant_id, task.id);
     const plan_changes = db.getTaskPlanChanges(auth.tenant_id, task.id);
-    const can_manage_plan = projectService.canEditTasks(auth, task.project_id);
+    const can_manage_plan = task.project_id ? projectService.canEditTasks(auth, task.project_id) : (task.assignee_id === auth.user_id);
     const can_edit = can_manage_plan || task.assignee_id === auth.user_id;
 
     res.json({
@@ -826,14 +840,16 @@ app.post('/api/tasks/:id/explanation', (req, res) => {
 
     const task = db.getTaskById(auth.tenant_id, req.params.id);
     if (task) {
-      notificationService.notifyExplanationSubmitted(
-        auth.tenant_id,
-        task.project_id,
-        task.id,
-        auth.name,
-        task.title,
-        cleaned
-      );
+      if (task.project_id) {
+        notificationService.notifyExplanationSubmitted(
+          auth.tenant_id,
+          task.project_id,
+          task.id,
+          auth.name,
+          task.title,
+          cleaned
+        );
+      }
       void emailService.sendTaskProgressUpdateToManagersCard(auth.tenant_id, task.id, auth.user_id, task.progress || 0, cleaned);
     }
 

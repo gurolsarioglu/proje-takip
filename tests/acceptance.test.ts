@@ -1055,4 +1055,54 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const reactivatedLogin = authService.login('mert@acme.com', 'MertPass!2026');
     assert.equal(reactivatedLogin.user.id, testStaff.id);
   });
+
+  await t.test('PROJE GÖREVİ & BİREYSEL TO-DO AYRIMI: Standart çalışan yalnızca kişisel to-do açabilir, yetkili personel hem proje hem bireysel görev açabilir', async () => {
+    // 1. Standart çalışan (can_create_project = false, proje yetkilisi değil) şirket projesine izinsiz görev açamaz
+    assert.throws(() => {
+      taskService.createTask(
+        authAssigneeA,
+        projectA.id,
+        'Yetkisiz Proje Görevi Denemesi',
+        '2026-11-04',
+        '2026-11-06'
+      );
+    }, /Bu projede görev oluşturma yetkiniz bulunmamaktadır/);
+
+    // 2. Standart çalışan kendi kişisel takibi için bireysel görev (project_id = null) açabilir
+    const personalTask = taskService.createTask(
+      authAssigneeA,
+      null,
+      'Kişisel Dokümantasyon İncelemesi',
+      '2026-11-04',
+      '2026-11-06',
+      undefined,
+      'Kendi günlük kişisel to-do kaydım'
+    );
+    assert.equal(personalTask.project_id, null);
+    assert.equal(personalTask.assignee_id, authAssigneeA.user_id);
+    assert.equal(personalTask.title, 'Kişisel Dokümantasyon İncelemesi');
+
+    // 3. Proje yetkilisi (Admin veya Proje Lideri) projeye görev açabilir ve başka personele atayabilir
+    const projectTask = taskService.createTask(
+      authManagerA,
+      projectA.id,
+      'Yetkili Tarafından Açılan Proje Adımı',
+      '2026-11-04',
+      '2026-11-06',
+      assigneeA.id
+    );
+    assert.equal(projectTask.project_id, projectA.id);
+    assert.equal(projectTask.assignee_id, assigneeA.id);
+
+    // 4. Proje yetkilisi de dilerse şirket projesini seçmeyip kendi takibi için bireysel görev açabilir
+    const managerPersonalTask = taskService.createTask(
+      authManagerA,
+      null,
+      'Yönetici Özel Hatırlatıcısı (Projesiz)',
+      '2026-11-04',
+      '2026-11-06'
+    );
+    assert.equal(managerPersonalTask.project_id, null);
+    assert.equal(managerPersonalTask.assignee_id, authManagerA.user_id);
+  });
 });

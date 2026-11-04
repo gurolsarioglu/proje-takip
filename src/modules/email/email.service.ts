@@ -499,7 +499,7 @@ export class EmailAndAutomationService {
     htmlBody: string;
     adaptiveCardJson?: any;
     linked_task_id?: UUID;
-    linked_project_id?: UUID;
+    linked_project_id?: UUID | null;
     linked_request_id?: UUID;
   }): Promise<EmailOutboxItem> {
     const config = this.getSmtpConfig(params.tenant_id);
@@ -852,7 +852,7 @@ export class EmailAndAutomationService {
     if (!config.enable_actionable_cards) return null;
 
     const task = this.db.getTaskById(tenant_id, task_id);
-    if (!task || !task.assignee_id) return null;
+    if (!task || !task.assignee_id || !task.project_id) return null;
 
     const assignee = this.db.getUserById(tenant_id, task.assignee_id);
     if (!assignee) return null;
@@ -1028,7 +1028,7 @@ export class EmailAndAutomationService {
     assigned_by_name = 'Proje Yönetimi'
   ): Promise<EmailOutboxItem | null> {
     const task = this.db.getTaskById(tenant_id, task_id);
-    if (!task || !task.assignee_id) return null;
+    if (!task || !task.assignee_id || !task.project_id) return null;
 
     const assignee = this.db.getUserById(tenant_id, task.assignee_id);
     if (!assignee) return null;
@@ -1361,7 +1361,7 @@ export class EmailAndAutomationService {
     newlyReadyTaskIds: UUID[] = []
   ): Promise<EmailOutboxItem | null> {
     const task = this.db.getTaskById(tenant_id, task_id);
-    if (!task) return null;
+    if (!task || !task.project_id) return null;
 
     const project = this.db.getProjectById(tenant_id, task.project_id);
     const completedBy = this.db.getUserById(tenant_id, completed_by_user_id)
@@ -1494,7 +1494,7 @@ export class EmailAndAutomationService {
     note_text: string
   ): Promise<EmailOutboxItem | null> {
     const task = this.db.getTaskById(tenant_id, task_id);
-    if (!task) return null;
+    if (!task || !task.project_id) return null;
 
     const project = this.db.getProjectById(tenant_id, task.project_id);
     const user = this.db.getUserById(tenant_id, updated_by_user_id)
@@ -1606,7 +1606,7 @@ export class EmailAndAutomationService {
     if (!config.enable_actionable_cards) return null;
 
     const task = this.db.getTaskById(tenant_id, task_id);
-    if (!task || !task.assignee_id) return null;
+    if (!task || !task.assignee_id || !task.project_id) return null;
 
     const assignee = this.db.getUserById(tenant_id, task.assignee_id);
     if (!assignee) return null;
@@ -1758,7 +1758,7 @@ export class EmailAndAutomationService {
    */
   public async sendOverdueAlertToManagersCard(tenant_id: UUID, task_id: UUID): Promise<EmailOutboxItem | null> {
     const task = this.db.getTaskById(tenant_id, task_id);
-    if (!task) return null;
+    if (!task || !task.project_id) return null;
 
     const existingAlert = this.db.getEmailOutbox(tenant_id, 50).find(
       item => item.category === 'OVERDUE_MANAGER_ALERT' && item.linked_task_id === task_id
@@ -2203,7 +2203,7 @@ export class EmailAndAutomationService {
       }
       const rec = this.delayService.submitExplanation(auth, payload.task_id, cleanNote);
       const task = this.db.getTaskById(tenant_id, payload.task_id);
-      if (task) {
+      if (task && task.project_id) {
         this.notificationService.notifyExplanationSubmitted(tenant_id, task.project_id, task.id, auth.name, task.title, cleanNote);
         await this.sendTaskProgressUpdateToManagersCard(tenant_id, task.id, auth.user_id, task.progress || 0, cleanNote);
       }

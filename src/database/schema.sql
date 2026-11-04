@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS visibility_requests (
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
   assignee_id TEXT,
   title TEXT NOT NULL,
   description TEXT,

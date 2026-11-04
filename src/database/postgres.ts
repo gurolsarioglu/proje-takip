@@ -116,6 +116,7 @@ export class PostgresEngine {
         await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
         await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivated_at TEXT;`);
         await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivation_reason TEXT;`);
+        await this.execSql(`ALTER TABLE tasks ALTER COLUMN project_id DROP NOT NULL;`).catch(() => {});
       } catch (e) {}
     }
 
@@ -260,7 +261,7 @@ export class PostgresEngine {
            current_due_date = EXCLUDED.current_due_date, actual_start_date = EXCLUDED.actual_start_date,
            actual_completion_date = EXCLUDED.actual_completion_date, completed_by_user_id = EXCLUDED.completed_by_user_id`,
         [
-          t.id, t.tenant_id, t.project_id, t.assignee_id || null, t.title, t.description || null,
+          t.id, t.tenant_id, t.project_id || null, t.assignee_id || null, t.title, t.description || null,
           t.type || 'TASK', t.priority || 'NORMAL', t.progress ?? 0, t.work_status,
           t.initial_start_date, t.initial_due_date, t.current_start_date, t.current_due_date,
           t.actual_start_date || null, t.actual_completion_date || null, t.completed_by_user_id || null,

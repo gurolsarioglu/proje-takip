@@ -149,7 +149,7 @@ export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH';
 export interface Task {
   id: UUID;
   tenant_id: UUID;
-  project_id: UUID;
+  project_id: UUID | null;
   assignee_id?: UUID;
   title: string;
   description?: string;
@@ -392,7 +392,7 @@ export interface EmailOutboxItem {
   adaptive_card_json?: any;
   html_preview: string;
   linked_task_id?: UUID;
-  linked_project_id?: UUID;
+  linked_project_id?: UUID | null;
   linked_request_id?: UUID;
   action_taken?: string;
   sent_at: string;

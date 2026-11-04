@@ -24,7 +24,7 @@ export class TaskService {
    */
   public createTask(
     auth: AuthContext,
-    project_id: UUID,
+    project_id: UUID | null | undefined,
     title: string,
     initial_start_date: string,
     initial_due_date: string,
@@ -35,17 +35,39 @@ export class TaskService {
     const taskId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    if (assignee_id) {
-      const targetUser = this.db.getUserById(auth.tenant_id, assignee_id);
-      if (targetUser && targetUser.is_active === false) {
-        throw new Error(`Seçilen personel (${targetUser.name}) devre dışı bırakıldığı için kendisine görev atanamaz.`);
+    const normalizedProjectId = (project_id && project_id.trim() !== '') ? project_id : null;
+
+    if (normalizedProjectId) {
+      // Proje varlığı ve yetki kontrolü
+      const proj = this.db.getProjectById(auth.tenant_id, normalizedProjectId);
+      if (!proj) throw new Error('Belirtilen proje bulunamadı.');
+
+      const currentUser = this.db.getUserById(auth.tenant_id, auth.user_id);
+      const isFullAdmin = currentUser?.system_role === 'ADMIN';
+      const isCreator = proj.created_by_user_id === auth.user_id;
+      const canCreateProj = !!currentUser?.can_create_project;
+      const member = this.db.getProjectMembers(auth.tenant_id, normalizedProjectId).find(m => m.user_id === auth.user_id);
+      const isEditorOrManager = member && (member.role === 'PROJECT_MANAGER' || member.role === 'EDITOR');
+
+      if (!isFullAdmin && !isCreator && !canCreateProj && !isEditorOrManager) {
+        throw new Error('Bu projede görev oluşturma yetkiniz bulunmamaktadır. Standart kullanıcılar yalnızca bireysel görev / kişisel to-do açabilir.');
       }
+
+      if (assignee_id) {
+        const targetUser = this.db.getUserById(auth.tenant_id, assignee_id);
+        if (targetUser && targetUser.is_active === false) {
+          throw new Error(`Seçilen personel (${targetUser.name}) devre dışı bırakıldığı için kendisine görev atanamaz.`);
+        }
+      }
+    } else {
+      // Bireysel Görev / Kişisel To-Do: Sorumlu kişi daima görevi oluşturan personelin kendisidir
+      assignee_id = auth.user_id;
     }
 
     const task: Task = {
       id: taskId,
       tenant_id: auth.tenant_id,
-      project_id,
+      project_id: normalizedProjectId,
       assignee_id,
       title,
       description,

@@ -211,7 +211,8 @@ export class Database {
   public getProjects(tenant_id: UUID): Project[] {
     return this.state.projects.filter(p => p.tenant_id === tenant_id);
   }
-  public getProjectById(tenant_id: UUID, id: UUID): Project | undefined {
+  public getProjectById(tenant_id: UUID, id?: UUID | null): Project | undefined {
+    if (!id) return undefined;
     return this.state.projects.find(p => p.tenant_id === tenant_id && p.id === id);
   }
   public insertProject(project: Project): Project {
@@ -238,10 +239,12 @@ export class Database {
   }
 
   // --- Project Members ---
-  public getProjectMembers(tenant_id: UUID, project_id: UUID): ProjectMember[] {
+  public getProjectMembers(tenant_id: UUID, project_id?: UUID | null): ProjectMember[] {
+    if (!project_id) return [];
     return this.state.project_members.filter(m => m.tenant_id === tenant_id && m.project_id === project_id);
   }
-  public getProjectMember(tenant_id: UUID, project_id: UUID, user_id: UUID): ProjectMember | undefined {
+  public getProjectMember(tenant_id: UUID, project_id?: UUID | null, user_id?: UUID | null): ProjectMember | undefined {
+    if (!project_id || !user_id) return undefined;
     return this.state.project_members.find(m => m.tenant_id === tenant_id && m.project_id === project_id && m.user_id === user_id);
   }
   public insertProjectMember(member: ProjectMember): ProjectMember {
