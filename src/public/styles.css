@@ -2238,24 +2238,30 @@ html, body {
 }
 
 #taskModal .modal-content {
-  max-width: 680px !important;
   width: 95%;
+  max-width: 720px !important;
+  box-sizing: border-box;
 }
 
-#tWorkflowAndDefRow {
+#taskModal .form-row {
   display: grid;
-  grid-template-columns: 1fr 1.35fr;
+  grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
 
-#tWorkflowAndDefRow .form-group {
+#taskModal .form-group {
   min-width: 0;
 }
 
-#tWorkflowStep, #tTaskDefinition {
+#taskModal select,
+#taskModal input,
+#taskModal textarea {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+#tWorkflowStep, #tTaskDefinition {
   text-overflow: ellipsis;
   overflow: hidden;
 }

@@ -1318,27 +1318,27 @@
         </div>
 
         <!-- 🏷️ İŞ ADIMI (Süreç Katmanı) & 📝 GÖREV TANIMI (Yapılacak İş) -->
-        <div class="form-row" id="tWorkflowAndDefRow" style="margin-bottom:12px; display:grid; grid-template-columns:1fr 1.35fr; gap:14px;">
-          <div class="form-group" style="min-width:0;">
+        <div class="form-row" id="tWorkflowAndDefRow" style="margin-bottom:12px;">
+          <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:6px;">
               <label for="tWorkflowStep" style="font-weight:600; margin:0; font-size:0.83rem; white-space:nowrap;">🏷️ İş Adımı *</label>
               <button type="button" id="tAddStepBtn" class="action-btn outline-btn sm-btn"
                 style="font-size:0.72rem; padding:2px 8px; white-space:nowrap;"
                 title="Yalnızca Proje Yöneticisi ve Admin ekleyebilir">+ Yeni Adım Ekle</button>
             </div>
-            <select id="tWorkflowStep" class="styled-select" style="font-weight:500; width:100%; max-width:100%; text-overflow:ellipsis;" required>
+            <select id="tWorkflowStep" class="styled-select" style="font-weight:500;" required>
               <option value="">İş Adımı Seçiniz...</option>
             </select>
           </div>
 
-          <div class="form-group" style="min-width:0;">
+          <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:6px;">
               <label for="tTaskDefinition" style="font-weight:600; margin:0; font-size:0.83rem; white-space:nowrap;">📝 Görev Tanımı *</label>
               <button type="button" id="tAddDefBtn" class="action-btn outline-btn sm-btn"
                 style="font-size:0.72rem; padding:2px 8px; white-space:nowrap;"
                 title="Proje Yöneticisi yeni görev tanımı ekleyebilir">+ Yeni Tanım Ekle</button>
             </div>
-            <select id="tTaskDefinition" class="styled-select" style="font-weight:500; width:100%; max-width:100%; text-overflow:ellipsis;" required>
+            <select id="tTaskDefinition" class="styled-select" style="font-weight:500;" required>
               <option value="">Önce İş Adımı seçiniz...</option>
             </select>
             <input type="text" id="tCustomDefInput" class="styled-input" placeholder="Özel / Sezonluk görev tanımını yazınız (Örn: AW27, SS27 vb.)..."

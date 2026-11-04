@@ -4055,6 +4055,7 @@ function populateTaskDefinitionDropdown(stepName = '', selectedTitle = '') {
   options += '<option value="__custom__">✍️ Farklı / Özel Tanım Yaz (Sezon Kodu vb.)...</option>';
   defSelect.innerHTML = options;
   if (selectedTitle) defSelect.value = selectedTitle;
+  defSelect.title = defSelect.selectedOptions?.[0]?.text || '';
   if (customInput) customInput.style.display = (defSelect.value === '__custom__') ? 'block' : 'none';
 }
 
@@ -4079,6 +4080,7 @@ function setupWorkflowModalStepListeners() {
   if (stepSelect && !stepSelect.dataset.listenerAttached) {
     stepSelect.dataset.listenerAttached = 'true';
     stepSelect.addEventListener('change', () => {
+      stepSelect.title = stepSelect.selectedOptions?.[0]?.text || '';
       const stepVal = stepSelect.value;
       populateTaskDefinitionDropdown(stepVal);
       syncTitle();
@@ -4096,6 +4098,7 @@ function setupWorkflowModalStepListeners() {
   if (defSelect && !defSelect.dataset.listenerAttached) {
     defSelect.dataset.listenerAttached = 'true';
     defSelect.addEventListener('change', () => {
+      defSelect.title = defSelect.selectedOptions?.[0]?.text || '';
       const defVal = defSelect.value;
       if (defVal === '__custom__') {
         if (customInput) {
@@ -4138,6 +4141,7 @@ function setupWorkflowModalStepListeners() {
   if (customInput && !customInput.dataset.listenerAttached) {
     customInput.dataset.listenerAttached = 'true';
     customInput.addEventListener('input', () => {
+      customInput.title = customInput.value;
       syncTitle();
     });
   }
