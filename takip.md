@@ -247,3 +247,22 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
   - Web uygulaması açılışında (`loadInitialData`) URL parametresindeki `task_id` otomatik okunarak ilgili görevin OpenProject bölmeli ekran çekmecesi (`#workPackageDrawer`) doğrudan açılır.
 * **Tüm Testler ve Doğrulama:**
   - `OUTLOOK ADAPTIVE CARD EMAIL FRAME & ONE-CLICK QUICK ACTIONS` testi dahil olmak üzere **26/26 Birim & Kabul Testi (`npm test`)** eksiksiz geçti.
+
+### 22. Personeli Devre Dışı Bırakma & Erişim Engelleme (İşten Ayrılan / Pasif Personel Yönetimi)
+* **İşten Ayrılan Personel İçin Devre Dışı Bırakma Desteği (`User.is_active: false`):**
+  - Personel kartlarına `is_active?: boolean` (varsayılan `true`), `deactivated_at?: string` (ISO 8601 tarih damgası) ve `deactivation_reason?: string` (ayrılma/devre dışı bırakma gerekçesi) alanları eklendi.
+  - PostgreSQL şeması (`src/database/schema.sql`) ve otomatik senkronizasyon (`src/database/postgres.ts`) güncellendi (`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`, `deactivated_at`, `deactivation_reason`).
+* **Sistem Erişimi & Giriş Engeli (`AuthService` & `server/index.ts` Middleware):**
+  - [`AuthService.login`](file:///y:/gorevler1/src/modules/auth/auth.service.ts) ve `authenticateEntraUser` metotları devre dışı bırakılmış personelin sisteme giriş yapmasını doğrudan engeller (`Bu personel hesabı devre dışı bırakılmıştır. Sisteme giriş yapamazsınız`).
+  - [`getAuthContext`](file:///y:/gorevler1/src/server/index.ts) kimlik doğrulama ara yazılımı (middleware) her istekte kullanıcının `is_active !== false` olduğunu kontrol eder. Önceden oturum açmış olsa bile devre dışı bırakıldığı anda mevcut oturumu geçersiz kılınır ve `403 Forbidden` döner.
+* **Görev Atama & Proje Üyeliği Koruması (`TaskService` & `ProjectService`):**
+  - Devre dışı bırakılmış personele yeni görev oluşturulamaz veya mevcut görev devredilemez (`createTask`, `assignTask`).
+  - Devre dışı bırakılmış personel yeni projelere üye/sorumlu olarak eklenemez (`ProjectService.addOrUpdateMember`).
+  - Görev atama ve proje üyesi seçim açılır kutularında (`#wpAssigneeSelect`, `#tAssignee`, `#newProjectMembersChecklist`, `#pmUserSelect`) devre dışı bırakılmış personel filtrelenir; geçmişten kalan atamalar varsa listede `[Devre Dışı / Ayrıldı]` etiketiyle açıkça gösterilir.
+* **Yönetici Kendini Kilitleme Koruması (Admin Self-Lockout Guard):**
+  - Yönetici (`admin`) kullanıcılar yanlışlıkla kendi hesaplarını devre dışı bırakamaz; sistem `Yöneticiler kendi hesaplarını devre dışı bırakamaz` uyarısıyla işlemi engeller.
+* **Personel Düzenleme Modalı (`#personnelModal`) & Ekip Tablosu Görünümü:**
+  - **Personel Bilgilerini Düzenle** modalına renkli durum rozeti (`🟢 Aktif` / `⛔ Devre Dışı`), *"Bu personeli devre dışı bırak (Sisteme erişimi engellenir)"* onay kutusu (`#persIsDeactivated`) ve isteğe bağlı devre dışı bırakma nedeni alanı (`#persDeactivationReason`) eklendi.
+  - **Personel Tablosu (`#personnelTable`)**: Tabloya `Hesap Durumu` sütunu eklendi; pasif personel satırları hafif soluklaştırılıp kırmızı `⛔ Devre Dışı` rozetiyle işaretlenir.
+* **Tüm Testler ve Doğrulama:**
+  - `PERSONNEL DEACTIVATION & ACCESS BLOCKING` kabul testi dahil olmak üzere **27/27 Birim & Kabul Testi (`npm test`)** başarıyla geçti.

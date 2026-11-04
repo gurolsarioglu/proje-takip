@@ -35,6 +35,13 @@ export class TaskService {
     const taskId = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    if (assignee_id) {
+      const targetUser = this.db.getUserById(auth.tenant_id, assignee_id);
+      if (targetUser && targetUser.is_active === false) {
+        throw new Error(`Seçilen personel (${targetUser.name}) devre dışı bırakıldığı için kendisine görev atanamaz.`);
+      }
+    }
+
     const task: Task = {
       id: taskId,
       tenant_id: auth.tenant_id,
@@ -79,6 +86,13 @@ export class TaskService {
   ): Task {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
+
+    if (new_assignee_id) {
+      const targetUser = this.db.getUserById(auth.tenant_id, new_assignee_id);
+      if (targetUser && targetUser.is_active === false) {
+        throw new Error(`Seçilen personel (${targetUser.name}) devre dışı bırakıldığı için kendisine görev atanamaz.`);
+      }
+    }
 
     const now = new Date().toISOString();
 

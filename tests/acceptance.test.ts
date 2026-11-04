@@ -987,4 +987,72 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.equal(db.getTaskById(tenantA.id, qTask.id)?.work_status, 'COMPLETED');
     assert.equal(db.getTaskById(tenantA.id, qTask.id)?.progress, 100);
   });
+
+  await t.test('PERSONELİ DEVRE DIŞI BIRAKMA (İŞTEN AYRILMA / ERİŞİM ENGELLEME): Giriş engeli, görev ve proje atama koruması', async () => {
+    // 1. Yeni personel oluştur
+    const testStaff = authService.createUser(tenantA.id, 'Mert Ayrilan', 'mert@acme.com', undefined, {
+      department: 'Üretim',
+      password: 'MertPass!2026'
+    });
+    assert.equal(testStaff.is_active, true);
+
+    // Başlangıçta giriş yapabilmeli
+    const staffLogin = authService.login('mert@acme.com', 'MertPass!2026');
+    assert.equal(staffLogin.user.id, testStaff.id);
+
+    // 2. Yönetici kendi hesabını devre dışı bırakamaz
+    assert.throws(() => {
+      authService.updateUser(authManagerA, authManagerA.user_id, {
+        is_active: false,
+        deactivation_reason: 'Kendi hesabımı kapatıyorum'
+      });
+    }, /Sistem Yöneticisi kendi hesabını devre dışı bırakamaz/);
+
+    // 3. Yönetici personeli devre dışı bırakır (İşten ayrılma / erişim engelleme)
+    const deactUser = authService.updateUser(authManagerA, testStaff.id, {
+      is_active: false,
+      deactivation_reason: '31.10.2026 tarihinde iş akdi sonlandırıldı'
+    });
+    assert.equal(deactUser.is_active, false);
+    assert.equal(db.getUserById(tenantA.id, testStaff.id)?.is_active, false);
+
+    // 4. Devre dışı bırakılan personelin sisteme girişi engellenmelidir
+    assert.throws(() => {
+      authService.login('mert@acme.com', 'MertPass!2026');
+    }, /Hesabınız dondurulmuş \/ devre dışı bırakılmıştır/);
+
+    // 5. Devre dışı bırakılan personele yeni görev atanamaz
+    assert.throws(() => {
+      taskService.createTask(
+        authManagerA,
+        projectA.id,
+        'Ayrılan personele iş',
+        '2026-11-04',
+        '2026-11-06',
+        testStaff.id
+      );
+    }, /devre dışı bırakıldığı için kendisine görev atanamaz/);
+
+    // Var olan görevin sorumlusu olarak da seçilemez
+    const existingTask = taskService.createTask(authManagerA, projectA.id, 'Örnek Görev', '2026-11-04', '2026-11-06', assigneeA.id);
+    assert.throws(() => {
+      taskService.assignTask(authManagerA, existingTask.id, testStaff.id);
+    }, /devre dışı bırakıldığı için kendisine görev atanamaz/);
+
+    // 6. Devre dışı bırakılan personel projeye eklenemez
+    assert.throws(() => {
+      projectService.addOrUpdateMember(authManagerA, projectA.id, testStaff.id, 'EDITOR');
+    }, /devre dışı bırakıldığı için projeye eklenemez/);
+
+    // 7. Yönetici personeli tekrar aktif edebilir
+    const reactivatedUser = authService.updateUser(authManagerA, testStaff.id, {
+      is_active: true
+    });
+    assert.equal(reactivatedUser.is_active, true);
+    assert.equal(db.getUserById(tenantA.id, testStaff.id)?.is_active, true);
+
+    // Tekrar aktif edildiğinde giriş yapabilmelidir
+    const reactivatedLogin = authService.login('mert@acme.com', 'MertPass!2026');
+    assert.equal(reactivatedLogin.user.id, testStaff.id);
+  });
 });

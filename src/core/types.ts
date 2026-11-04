@@ -54,6 +54,9 @@ export interface User {
   department?: string;
   theme?: 'light' | 'dark';
   avatar_url?: string;
+  is_active?: boolean;
+  deactivated_at?: string;
+  deactivation_reason?: string;
   created_at: string;
 }
 
@@ -80,6 +83,8 @@ export interface PersonnelCardDTO {
   department?: string;
   theme?: 'light' | 'dark';
   avatar_url?: string;
+  is_active?: boolean;
+  deactivation_reason?: string;
 }
 
 export interface CustomReportLayout {

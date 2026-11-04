@@ -474,6 +474,7 @@
                 <th>İletişim</th>
                 <th>Ülke / Dil</th>
                 <th>Departman</th>
+                <th>Hesap Durumu</th>
                 <th>Proje Yetkisi</th>
                 <th>Rapor Yetkisi</th>
                 <th>İşlem</th>
@@ -1188,6 +1189,28 @@
             <span><strong>Raporlama & Özel Rapor Yetkisi:</strong> Bu personel sürükle-bırak ile kendi isteğine göre
               dinamik raporlar ve paneller oluşturabilir.</span>
           </label>
+        </div>
+
+        <!-- ⛔ Personel Hesap Durumu (Aktif / Devre Dışı Bırak) -->
+        <div id="persStatusBox" class="form-group" style="margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.28);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label style="font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-primary);">
+              <span>🛡️ Personel Hesap Durumu & Erişim Kontrolü</span>
+            </label>
+            <span id="persStatusBadge" class="nav-badge success" style="font-size: 0.75rem; padding: 3px 8px; font-weight: 700;">🟢 Aktif Personel</span>
+          </div>
+          <label class="checkbox-label" style="cursor: pointer; margin-bottom: 0;">
+            <input type="checkbox" id="persIsDeactivated">
+            <span style="color: #dc2626; font-weight: 700; font-size: 0.83rem;">⛔ Bu personeli devre dışı bırak (İşten Ayrıldı / Erişimi Engelle)</span>
+          </label>
+          <div id="persDeactivateReasonRow" style="display: none; margin-top: 10px;">
+            <label for="persDeactivationReason" style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; display: block;">Devre Dışı Bırakma Gerekçesi / Notu:</label>
+            <input type="text" id="persDeactivationReason" class="styled-input sm-input"
+              placeholder="Örn: 04.11.2026 tarihi itibarıyla işten ayrıldı...">
+            <div style="font-size: 0.74rem; color: #b91c1c; margin-top: 6px; line-height: 1.45; font-weight: 500;">
+              ⚠️ <strong>Güvenlik Koruması:</strong> Devre dışı bırakılan personelin sisteme girişi engellenir, açık oturumları anında sonlandırılır ve yeni görev atamalarında listelenmez. Tamamladığı geçmiş işler ve performans raporu arşivde güvenle korunur.
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">

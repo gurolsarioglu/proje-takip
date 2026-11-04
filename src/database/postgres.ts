@@ -113,6 +113,9 @@ export class PostgresEngine {
       await this.execSql(ddl);
       try {
         await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`);
+        await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;`);
+        await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivated_at TEXT;`);
+        await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivation_reason TEXT;`);
       } catch (e) {}
     }
 
@@ -198,19 +201,23 @@ export class PostgresEngine {
     for (const u of state.users) {
       const encUserPass = u.password ? CryptoVault.encrypt(u.password) : null;
       await this.querySql(
-        `INSERT INTO users (id, tenant_id, entra_oid, name, email, phone, country, language, password, system_role, can_create_project, can_build_reports, department, theme, avatar_url, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        `INSERT INTO users (id, tenant_id, entra_oid, name, email, phone, country, language, password, system_role, can_create_project, can_build_reports, department, theme, avatar_url, is_active, deactivated_at, deactivation_reason, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name, email = EXCLUDED.email, phone = EXCLUDED.phone,
            country = EXCLUDED.country, language = EXCLUDED.language, password = EXCLUDED.password,
            system_role = EXCLUDED.system_role, can_create_project = EXCLUDED.can_create_project,
            can_build_reports = EXCLUDED.can_build_reports, department = EXCLUDED.department,
-           theme = EXCLUDED.theme, avatar_url = EXCLUDED.avatar_url`,
+           theme = EXCLUDED.theme, avatar_url = EXCLUDED.avatar_url,
+           is_active = EXCLUDED.is_active, deactivated_at = EXCLUDED.deactivated_at, deactivation_reason = EXCLUDED.deactivation_reason`,
         [
           u.id, u.tenant_id, u.entra_oid, u.name, u.email, u.phone || null,
           u.country, u.language, encUserPass, u.system_role,
           !!u.can_create_project, !!u.can_build_reports, u.department || null,
-          u.theme || 'light', u.avatar_url || null, u.created_at
+          u.theme || 'light', u.avatar_url || null,
+          u.is_active !== undefined ? !!u.is_active : true,
+          u.deactivated_at || null, u.deactivation_reason || null,
+          u.created_at
         ]
       );
     }

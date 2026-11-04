@@ -115,6 +115,11 @@ export class ProjectService {
       throw new Error('Yetersiz Yetki: Üyelik ve rol yönetimi Proje Yöneticisi yetkisindedir.');
     }
 
+    const targetUser = this.db.getUserById(auth.tenant_id, target_user_id);
+    if (targetUser && targetUser.is_active === false) {
+      throw new Error(`Seçilen personel (${targetUser.name}) devre dışı bırakıldığı için projeye eklenemez.`);
+    }
+
     const existing = this.db.getProjectMember(auth.tenant_id, project_id, target_user_id);
     if (existing) {
       return this.db.updateProjectMember(auth.tenant_id, project_id, target_user_id, role)!;

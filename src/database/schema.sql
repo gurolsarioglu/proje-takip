@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS users (
   department TEXT,
   theme TEXT DEFAULT 'light',
   avatar_url TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  deactivated_at TEXT,
+  deactivation_reason TEXT,
   created_at TEXT NOT NULL
 );
 

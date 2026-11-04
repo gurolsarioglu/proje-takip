@@ -51,6 +51,9 @@ function getAuthContext(req: Request): AuthContext {
   const user_id = (req.headers['x-user-id'] as string) || db.getUsers(tenant_id)[0]?.id;
 
   const user = db.getUserById(tenant_id, user_id);
+  if (user && user.is_active === false) {
+    throw new Error('Hesabınız dondurulmuş / devre dışı bırakılmıştır. Sistem erişim yetkiniz kapatılmıştır.');
+  }
   return {
     tenant_id,
     user_id,
@@ -162,7 +165,7 @@ app.post('/api/admin/personnel', async (req, res) => {
       return res.status(403).json({ error: 'Yetkisiz İşlem: Yeni personel kartı yalnızca Sistem Yöneticisi tarafından oluşturulabilir.' });
     }
 
-    const { name, email, phone, country, password, can_create_project, can_build_reports, department, system_role, avatar_url } = req.body;
+    const { name, email, phone, country, password, can_create_project, can_build_reports, department, system_role, avatar_url, is_active, deactivation_reason } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: 'Ad Soyad ve E-posta alanları zorunludur.' });
     }
@@ -181,7 +184,9 @@ app.post('/api/admin/personnel', async (req, res) => {
       can_build_reports: !!can_build_reports,
       department: department || 'Genel',
       system_role: system_role || 'USER',
-      avatar_url: avatar_url || undefined
+      avatar_url: avatar_url || undefined,
+      is_active: is_active !== undefined ? !!is_active : true,
+      deactivation_reason: deactivation_reason || undefined
     });
 
     // Yeni eklenen kullanıcıya otomatik Karşılama & Sistem Erişim Bilgisi E-postası (Adaptive Card v1.4) gönder

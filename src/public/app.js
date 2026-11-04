@@ -1855,7 +1855,7 @@ async function openTaskDrawer(taskId) {
     const assigneeSelect = document.getElementById('wpAssigneeSelect');
     if (assigneeSelect) {
       assigneeSelect.innerHTML = '<option value="">(Atanmamış)</option>' +
-        state.personnelList.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(u.department || 'Genel')})</option>`).join('');
+        state.personnelList.filter(u => u.is_active !== false || u.id === task.assignee_id).map(u => `<option value="${u.id}">${escapeHtml(u.name)}${u.is_active === false ? ' [Devre Dışı / Ayrıldı]' : ''} (${escapeHtml(u.department || 'Genel')})</option>`).join('');
       assigneeSelect.value = task.assignee_id || '';
       assigneeSelect.disabled = !can_manage_plan;
     }
@@ -2063,15 +2063,28 @@ function renderPersonnelTable() {
 
   state.personnelList.forEach(u => {
     const isSelf = u.id === state.currentUser?.id;
+    const isDeactivated = u.is_active === false;
     const tr = document.createElement('tr');
+    if (isDeactivated) {
+      tr.style.opacity = '0.75';
+      tr.style.backgroundColor = 'rgba(239, 68, 68, 0.04)';
+    }
     const avatarContent = u.avatar_url
       ? `<img src="${u.avatar_url}" alt="${escapeHtml(u.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;">`
       : u.name.slice(0, 1).toUpperCase();
+
+    const statusBadge = isDeactivated
+      ? `<span class="nav-badge danger" style="padding:2px 8px; font-weight:700; font-size:0.75rem;" title="${escapeHtml(u.deactivation_reason || 'Devre dışı bırakıldı')}">⛔ Devre Dışı</span>`
+      : `<span class="nav-badge success" style="padding:2px 8px; font-weight:700; font-size:0.75rem;">🟢 Aktif</span>`;
+
     tr.innerHTML = `
       <td>
         <div style="display:flex; align-items:center; gap:8px;">
-          <div class="profile-avatar" style="width:30px; height:30px; font-size:0.75rem; overflow:hidden; padding:0;">${avatarContent}</div>
-          <strong>${u.name}</strong> ${isSelf ? '<span class="nav-badge neutral">Siz</span>' : ''}
+          <div class="profile-avatar" style="width:30px; height:30px; font-size:0.75rem; overflow:hidden; padding:0; ${isDeactivated ? 'filter:grayscale(1); opacity:0.6;' : ''}">${avatarContent}</div>
+          <div>
+            <strong>${u.name}</strong> ${isSelf ? '<span class="nav-badge neutral">Siz</span>' : ''}
+            ${isDeactivated ? '<div style="font-size:0.7rem; color:#dc2626; font-weight:600;">(Erişim Kapalı)</div>' : ''}
+          </div>
         </div>
       </td>
       <td>
@@ -2082,15 +2095,16 @@ function renderPersonnelTable() {
         <span>${getCountryDisplay(u.country)} (${getLangDisplay(u)})</span>
       </td>
       <td>${u.department || 'Genel'}</td>
+      <td>${statusBadge}</td>
       <td>
         <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; cursor:pointer;">
-          <input type="checkbox" class="perm-toggle" data-id="${u.id}" ${u.can_create_project ? 'checked' : ''} ${isSelf ? 'disabled' : ''}>
+          <input type="checkbox" class="perm-toggle" data-id="${u.id}" ${u.can_create_project ? 'checked' : ''} ${isSelf || isDeactivated ? 'disabled' : ''}>
           <span>${u.can_create_project ? 'Yetkili' : 'Standart'}</span>
         </label>
       </td>
       <td>
         <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; cursor:pointer;">
-          <input type="checkbox" class="report-perm-toggle" data-id="${u.id}" ${u.can_build_reports ? 'checked' : ''} ${isSelf ? 'disabled' : ''}>
+          <input type="checkbox" class="report-perm-toggle" data-id="${u.id}" ${u.can_build_reports ? 'checked' : ''} ${isSelf || isDeactivated ? 'disabled' : ''}>
           <span style="color:${u.can_build_reports ? '#34d399' : '#94a3b8'}; font-weight:600;">${u.can_build_reports ? 'Yetkili' : 'Yetkisiz'}</span>
         </label>
       </td>
@@ -2713,7 +2727,7 @@ function setupEventListeners() {
   document.getElementById('newProjectBtn').addEventListener('click', () => {
     const checklistEl = document.getElementById('newProjectMembersChecklist');
     if (checklistEl) {
-      const otherUsers = (state.personnelList || []).filter(u => u.id !== state.currentUser?.id);
+      const otherUsers = (state.personnelList || []).filter(u => u.id !== state.currentUser?.id && u.is_active !== false);
       if (otherUsers.length === 0) {
         checklistEl.innerHTML = '<div style="font-size:0.78rem; color:var(--text-tertiary);">Eklenebilecek başka personel bulunmuyor.</div>';
       } else {
@@ -2782,9 +2796,35 @@ function setupEventListeners() {
   document.getElementById('newPersonnelBtn')?.addEventListener('click', () => {
     editingPersonnelId = null;
     document.getElementById('personnelForm').reset();
+    const deactCheck = document.getElementById('persIsDeactivated');
+    if (deactCheck) {
+      deactCheck.checked = false;
+      deactCheck.disabled = false;
+    }
+    const reasonRow = document.getElementById('persDeactivateReasonRow');
+    if (reasonRow) reasonRow.style.display = 'none';
+    const reasonInput = document.getElementById('persDeactivationReason');
+    if (reasonInput) reasonInput.value = '';
+    const statusBadge = document.getElementById('persStatusBadge');
+    if (statusBadge) {
+      statusBadge.className = 'nav-badge success';
+      statusBadge.textContent = '🟢 Aktif Personel';
+    }
     const modalTitle = document.querySelector('#personnelModal .modal-header h3');
     if (modalTitle) modalTitle.textContent = 'Yeni Personel Kartı Ekle';
     document.getElementById('personnelModal').classList.add('open');
+  });
+
+  // Personel Devre Dışı Bırakma Checkbox Değişim Dinleyicisi
+  document.getElementById('persIsDeactivated')?.addEventListener('change', (e) => {
+    const isDeact = e.target.checked;
+    const reasonRow = document.getElementById('persDeactivateReasonRow');
+    const statusBadge = document.getElementById('persStatusBadge');
+    if (reasonRow) reasonRow.style.display = isDeact ? 'block' : 'none';
+    if (statusBadge) {
+      statusBadge.className = isDeact ? 'nav-badge danger' : 'nav-badge success';
+      statusBadge.textContent = isDeact ? '⛔ Devre Dışı (Erişim Engellendi)' : '🟢 Aktif Personel';
+    }
   });
 
   // Personel Düzenle Butonu Tıklaması
@@ -2805,6 +2845,27 @@ function setupEventListeners() {
       document.getElementById('persCanCreateProj').checked = !!u.can_create_project;
       const repToggle = document.getElementById('persCanBuildReports');
       if (repToggle) repToggle.checked = !!u.can_build_reports;
+
+      // Devre Dışı Durumu ve Gerekçesi
+      const isDeact = u.is_active === false;
+      const isSelf = u.id === state.currentUser?.id;
+      const deactCheck = document.getElementById('persIsDeactivated');
+      const reasonRow = document.getElementById('persDeactivateReasonRow');
+      const reasonInput = document.getElementById('persDeactivationReason');
+      const statusBadge = document.getElementById('persStatusBadge');
+
+      if (deactCheck) {
+        deactCheck.checked = isDeact;
+        deactCheck.disabled = isSelf;
+        deactCheck.title = isSelf ? 'Sistem Yöneticisi kendi hesabını devre dışı bırakamaz.' : '';
+      }
+      if (reasonRow) reasonRow.style.display = isDeact ? 'block' : 'none';
+      if (reasonInput) reasonInput.value = u.deactivation_reason || '';
+      if (statusBadge) {
+        statusBadge.className = isDeact ? 'nav-badge danger' : 'nav-badge success';
+        statusBadge.textContent = isDeact ? '⛔ Devre Dışı (Erişim Engellendi)' : '🟢 Aktif Personel';
+      }
+
       const modalTitle = document.querySelector('#personnelModal .modal-header h3');
       if (modalTitle) modalTitle.textContent = 'Personel Bilgilerini Düzenle';
       document.getElementById('personnelModal').classList.add('open');
@@ -2813,6 +2874,9 @@ function setupEventListeners() {
 
   document.getElementById('personnelForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const isDeact = document.getElementById('persIsDeactivated')?.checked || false;
+    const deactReason = document.getElementById('persDeactivationReason')?.value.trim() || '';
+
     const body = {
       name: document.getElementById('persName').value.trim(),
       email: document.getElementById('persEmail').value.trim(),
@@ -2821,12 +2885,14 @@ function setupEventListeners() {
       country: document.getElementById('persCountry').value,
       department: document.getElementById('persDept').value.trim() || 'Genel',
       can_create_project: document.getElementById('persCanCreateProj').checked,
-      can_build_reports: document.getElementById('persCanBuildReports')?.checked || false
+      can_build_reports: document.getElementById('persCanBuildReports')?.checked || false,
+      is_active: !isDeact,
+      deactivation_reason: isDeact ? (deactReason || 'İşten ayrılma / Erişim engellendi') : ''
     };
 
     if (editingPersonnelId) {
       await apiCall(`/api/admin/personnel/${editingPersonnelId}`, 'PUT', body);
-      showToast('Personel bilgileri güncellendi.', 'success');
+      showToast(isDeact ? '⛔ Personel devre dışı bırakıldı ve erişimi engellendi.' : 'Personel bilgileri güncellendi.', isDeact ? 'info' : 'success');
       editingPersonnelId = null;
     } else {
       const created = await apiCall('/api/admin/personnel', 'POST', body);
@@ -3271,7 +3337,7 @@ function openExplanationModal(taskId, title) {
 function populateTaskModalSelects() {
   const assigneeEl = document.getElementById('tAssignee');
   assigneeEl.innerHTML = '<option value="">(Atanmamış)</option>' +
-    state.personnelList.map(p => `<option value="${p.id}">${p.name} (${p.department || 'Genel'})</option>`).join('');
+    state.personnelList.filter(p => p.is_active !== false).map(p => `<option value="${p.id}">${p.name} (${p.department || 'Genel'})</option>`).join('');
 
   const predEl = document.getElementById('tPredecessor');
   predEl.innerHTML = '<option value="">(Hiçbir görevi beklemiyor - Hemen başlayabilir)</option>' +
@@ -3391,7 +3457,7 @@ async function openProjectManageModal(projectId) {
     // Üye ekleme personel listesi
     const userSelect = document.getElementById('pmUserSelect');
     if (userSelect) {
-      userSelect.innerHTML = state.personnelList.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(u.department || 'Genel')})</option>`).join('');
+      userSelect.innerHTML = state.personnelList.filter(u => u.is_active !== false).map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${escapeHtml(u.department || 'Genel')})</option>`).join('');
     }
 
     // Mevcut üyeler

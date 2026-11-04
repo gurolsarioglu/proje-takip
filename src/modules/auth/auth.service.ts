@@ -88,6 +88,9 @@ export class AuthService {
       can_build_reports: options?.can_build_reports ?? (options?.system_role === 'ADMIN'),
       department: options?.department || 'Genel',
       avatar_url: options?.avatar_url || undefined,
+      is_active: options?.is_active !== undefined ? !!options.is_active : true,
+      deactivated_at: options?.is_active === false ? new Date().toISOString() : undefined,
+      deactivation_reason: options?.is_active === false ? (options?.deactivation_reason || 'İşten ayrıldı / Erişim engellendi') : undefined,
       created_at: new Date().toISOString()
     };
     return this.db.insertUser(user);
@@ -97,6 +100,10 @@ export class AuthService {
     const user = this.db.getUserByEmail(email);
     if (!user) {
       throw new Error('Geçersiz kullanıcı adı veya e-posta.');
+    }
+
+    if (user.is_active === false) {
+      throw new Error('Hesabınız dondurulmuş / devre dışı bırakılmıştır. Sistem erişim yetkiniz kapalıdır. Lütfen Sistem Yöneticisi ile iletişime geçiniz.');
     }
 
     if (password && user.password && user.password !== password) {
@@ -137,6 +144,19 @@ export class AuthService {
     if (updates.country) {
       patch.country = AuthService.normalizeCountry(updates.country);
       patch.language = AuthService.resolveLanguageByCountry(patch.country);
+    }
+    if (updates.is_active !== undefined) {
+      if (auth.user_id === user_id && updates.is_active === false) {
+        throw new Error('Güvenlik Kuralı: Sistem Yöneticisi kendi hesabını devre dışı bırakamaz.');
+      }
+      patch.is_active = !!updates.is_active;
+      if (!updates.is_active) {
+        patch.deactivated_at = new Date().toISOString();
+        patch.deactivation_reason = (updates.deactivation_reason || '').trim() || 'İşten ayrıldı / Erişim engellendi';
+      } else {
+        patch.deactivated_at = undefined;
+        patch.deactivation_reason = undefined;
+      }
     }
 
     const updated = this.db.updateUser(auth.tenant_id, user_id, patch);
@@ -185,6 +205,9 @@ export class AuthService {
     }
 
     let user = this.db.getUserByEntraOid(tenant.id, entra_oid);
+    if (user && user.is_active === false) {
+      throw new Error('Hesabınız dondurulmuş / devre dışı bırakılmıştır. Sistem erişim yetkiniz kapalıdır. Lütfen Sistem Yöneticisi ile iletişime geçiniz.');
+    }
     if (!user) {
       user = this.createUser(tenant.id, name, email, entra_oid);
     }
