@@ -748,7 +748,7 @@ app.post('/api/workflow-steps', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const user = db.getUserById(auth.tenant_id, auth.user_id);
-    const isAuthority = user?.system_role === 'ADMIN' || user?.can_create_project || user?.department?.includes('Yönetim');
+    const isAuthority = user?.system_role === 'ADMIN' || user?.can_create_project || user?.department?.includes('Yönetim') || projectService.listProjects(auth).some(p => p.created_by_user_id === auth.user_id || db.getProjectMember(auth.tenant_id, p.id, auth.user_id)?.role === 'PROJECT_MANAGER');
     if (!isAuthority) {
       return res.status(403).json({ error: 'Yetkisiz İşlem: İş Adımları kataloğuna yeni adım ekleme yetkisi yalnızca Proje Yöneticisi ve Sistem Yöneticisine aittir.' });
     }
@@ -817,7 +817,7 @@ app.post('/api/task-definitions', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const user = db.getUserById(auth.tenant_id, auth.user_id);
-    const isAuthority = user?.system_role === 'ADMIN' || user?.can_create_project || user?.department?.includes('Yönetim');
+    const isAuthority = user?.system_role === 'ADMIN' || user?.can_create_project || user?.department?.includes('Yönetim') || projectService.listProjects(auth).some(p => p.created_by_user_id === auth.user_id || db.getProjectMember(auth.tenant_id, p.id, auth.user_id)?.role === 'PROJECT_MANAGER');
     if (!isAuthority) {
       return res.status(403).json({ error: 'Yetkisiz İşlem: Görev Tanımları kataloğuna yeni tanım ekleme yetkisi yalnızca Proje Yöneticisi ve Sistem Yöneticisine aittir.' });
     }

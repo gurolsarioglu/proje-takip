@@ -2237,6 +2237,29 @@ html, body {
   overflow: hidden;
 }
 
+#taskModal .modal-content {
+  max-width: 680px !important;
+  width: 95%;
+}
+
+#tWorkflowAndDefRow {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 14px;
+}
+
+#tWorkflowAndDefRow .form-group {
+  min-width: 0;
+}
+
+#tWorkflowStep, #tTaskDefinition {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
 .modal-header {
   padding: 16px 22px;
   border-bottom: 1px solid var(--border-subtle);

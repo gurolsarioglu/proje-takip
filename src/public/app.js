@@ -3999,18 +3999,60 @@ function populateTaskDefinitionDropdown(stepName = '', selectedTitle = '') {
   const defSelect = document.getElementById('tTaskDefinition');
   const customInput = document.getElementById('tCustomDefInput');
   if (!defSelect) return;
-  if (!stepName) {
-    defSelect.innerHTML = '<option value="">Önce İş Adımı seçiniz...</option><option value="__custom__">✍️ Farklı / Özel Tanım Yaz...</option>';
-    if (customInput) customInput.style.display = 'none';
-    return;
-  }
-  const matching = (state.taskDefinitions || []).filter(d => (d.step_name || d.workflow_step || '').toUpperCase() === stepName.toUpperCase());
-  let options = '<option value="">Görev Tanımı Seçiniz...</option>';
-  matching.forEach(d => {
-    const isSel = d.title === selectedTitle ? 'selected' : '';
-    options += `<option value="${escapeHtml(d.title)}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.suggested_department || d.department || '')}" ${isSel}>${escapeHtml(d.title)}</option>`;
+
+  const defaultTemplates = [
+    { step_name: 'KOLEKSİYON OLUŞTURMA', title: 'AW27 koleksiyonun eksiklerini oluşturma', default_duration_days: 21, suggested_department: 'Moda Tasarım & Koleksiyon' },
+    { step_name: 'KUMAŞ', title: 'Tasarım ve satış departmanının beklentisi doğrultusunda kumaşların organize edilmesi', default_duration_days: 9, suggested_department: 'Kumaş & Tedarik' },
+    { step_name: 'TEKNİK ÇİZİM', title: 'Koleksiyonun teknik çizimlerinin hazırlanması', default_duration_days: 7, suggested_department: 'Moda Tasarım & Koleksiyon' },
+    { step_name: 'YIKAMA', title: 'Koleksiyon model hazırlığı yıkamaların belirlenmesi', default_duration_days: 7, suggested_department: 'Yıkama & AR-GE' },
+    { step_name: 'KALIP MODELHANE', title: 'Modellerin kalıp departmanına aktarılması', default_duration_days: 7, suggested_department: 'Kalıp & Modelhane' },
+    { step_name: 'DİKİM', title: 'Modellerin dikim departmanına aktarılması', default_duration_days: 12, suggested_department: 'Dikim Atölyesi' },
+    { step_name: 'YIKAMA', title: 'Modellerin yıkama bölümüne aktarılması', default_duration_days: 14, suggested_department: 'Yıkama & AR-GE' },
+    { step_name: 'FINISHING', title: 'Modellerin finish bölümüne aktarılması', default_duration_days: 12, suggested_department: 'Finishing & Paket' }
+  ];
+
+  // state.taskDefinitions ile defaultTemplates birleştir (tekilleştir)
+  const combined = [...(state.taskDefinitions || [])];
+  defaultTemplates.forEach(dt => {
+    if (!combined.some(c => c.title?.toLowerCase() === dt.title.toLowerCase())) {
+      combined.push(dt);
+    }
   });
-  options += '<option value="__custom__">✍️ Farklı / Özel Tanım Yaz...</option>';
+
+  let options = '<option value="">Görev Tanımı Seçiniz...</option>';
+
+  if (stepName) {
+    const matching = combined.filter(d => (d.step_name || d.workflow_step || '').toUpperCase() === stepName.toUpperCase());
+    const others = combined.filter(d => (d.step_name || d.workflow_step || '').toUpperCase() !== stepName.toUpperCase());
+
+    if (matching.length > 0) {
+      options += `<optgroup label="⭐ ${escapeHtml(stepName)} Adımına Özel Tanımlar">`;
+      matching.forEach(d => {
+        const isSel = d.title === selectedTitle ? 'selected' : '';
+        options += `<option value="${escapeHtml(d.title)}" data-step="${escapeHtml(d.step_name || d.workflow_step || '')}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.suggested_department || d.department || '')}" ${isSel}>${escapeHtml(d.title)}</option>`;
+      });
+      options += '</optgroup>';
+    }
+
+    if (others.length > 0) {
+      options += '<optgroup label="📋 Diğer Standart Tekstil Görev Tanımları">';
+      others.forEach(d => {
+        const isSel = d.title === selectedTitle ? 'selected' : '';
+        options += `<option value="${escapeHtml(d.title)}" data-step="${escapeHtml(d.step_name || d.workflow_step || '')}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.suggested_department || d.department || '')}" ${isSel}>[${escapeHtml(d.step_name || d.workflow_step || '')}] ${escapeHtml(d.title)}</option>`;
+      });
+      options += '</optgroup>';
+    }
+  } else {
+    // İş adımı henüz seçilmemişse tüm standart tanımları listele
+    options += '<optgroup label="📋 Standart Tekstil Görev Tanımları (8 Adım)">';
+    combined.forEach(d => {
+      const isSel = d.title === selectedTitle ? 'selected' : '';
+      options += `<option value="${escapeHtml(d.title)}" data-step="${escapeHtml(d.step_name || d.workflow_step || '')}" data-duration="${d.default_duration_days || 7}" data-dept="${escapeHtml(d.suggested_department || d.department || '')}" ${isSel}>[${escapeHtml(d.step_name || d.workflow_step || '')}] ${escapeHtml(d.title)}</option>`;
+    });
+    options += '</optgroup>';
+  }
+
+  options += '<option value="__custom__">✍️ Farklı / Özel Tanım Yaz (Sezon Kodu vb.)...</option>';
   defSelect.innerHTML = options;
   if (selectedTitle) defSelect.value = selectedTitle;
   if (customInput) customInput.style.display = (defSelect.value === '__custom__') ? 'block' : 'none';
@@ -4058,15 +4100,25 @@ function setupWorkflowModalStepListeners() {
       if (defVal === '__custom__') {
         if (customInput) {
           customInput.style.display = 'block';
+          customInput.placeholder = 'Örn: AW27 / SS27 model eksikleri veya özel iş tanımı...';
           customInput.focus();
         }
       } else {
         if (customInput) customInput.style.display = 'none';
+        const selOption = defSelect.selectedOptions ? defSelect.selectedOptions[0] : null;
+        if (selOption && selOption.dataset.step && stepSelect) {
+          const stepVal = selOption.dataset.step;
+          if (stepSelect.value !== stepVal) {
+            stepSelect.value = stepVal;
+            const stepObj = (state.workflowSteps || []).find(s => s.name === stepVal);
+            populateTaskModalAssignees(stepObj?.department || selOption.dataset.dept || null);
+          }
+        }
       }
       syncTitle();
 
       if (defVal && defVal !== '__custom__') {
-        const selOption = defSelect.selectedOptions[0];
+        const selOption = defSelect.selectedOptions ? defSelect.selectedOptions[0] : null;
         const durationDays = selOption?.dataset?.duration ? parseInt(selOption.dataset.duration, 10) : 7;
         const now = new Date();
         const due = new Date();
@@ -4122,7 +4174,7 @@ function populateTaskModalSelects() {
   const updateCatalogBtnVisibility = (selectedProjId) => {
     const currProj = state.projects.find(p => p.id === selectedProjId);
     const isManager = currProj?.created_by_user_id === u?.id || (currProj?.members || []).some(m => m.user_id === u?.id && m.role === 'PROJECT_MANAGER');
-    const canManageCatalog = isAdmin || canCreate || isManager;
+    const canManageCatalog = isAdmin || canCreate || isManager || (selectedProjId != null && authorizedProjects.length > 0);
     if (addStepBtn) addStepBtn.style.display = canManageCatalog ? 'inline-block' : 'none';
     if (addDefBtn) addDefBtn.style.display = canManageCatalog ? 'inline-block' : 'none';
   };

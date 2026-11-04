@@ -501,7 +501,40 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 
 ---
 
-## 33. GANTT ÇUBUĞUNUN BİTİŞ TARİHİNİ TAM VE DAHİLİ KAPSAMASI (INCLUSIVE DUE DATE) (04.11.2026)
+## 34. YENİ GÖREV EKLE MODAL TAŞMA SORUNU DÜZELTMESİ VE STANDART TEKSTİL GÖREV TANIMLARI ENTEGRASYONU (04.11.2026)
+
+### 34.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** "Yeni Görev Ekle" modalında "Görev Tanımı" açılır menüsündeki metinler uzun olduğunda menü modal penceresinin sağ tarafından dışarıya taşıyordu.
+- **Kullanıcı Talebi:**
+  1. Görev Tanımı açılır kutusundaki sağa taşma sorununun giderilmesi.
+  2. Standart tekstil iş akışı görev tanımlarının sisteme eklenmesi:
+     - `AW27 koleksiyonun eksiklerini oluşturma`
+     - `Tasarım ve satış departmanının beklentisi doğrultusunda kumaşların organize edilmesi`
+     - `Koleksiyonun teknik çizimlerinin hazırlanması`
+     - `Koleksiyon model hazırlığı yıkamaların belirlenmesi`
+     - `Modellerin kalıp departmanına aktarılması`
+     - `Modellerin dikim departmanına aktarılması`
+     - `Modellerin yıkama bölümüne aktarılması`
+     - `Modellerin finish bölümüne aktarılması`
+  3. AW27 kodunun sezon bazlı (SS27, AW28 vb.) değişebilmesi sebebiyle Proje Yöneticisinin hem standart tanımları seçebilmesi hem de özel sezon tanımları girebilmesi ve yeni tanımları kataloğa ekleyebilmesi.
+
+### 34.2. Gerçekleştirilen Mimari & Arayüz Geliştirmeleri
+1. **Modal Genişliği ve CSS Grid Taşma Koruması (`src/public/index.html`, `src/public/styles.css`):**
+   - `#taskModal .modal-content` azami genişliği `520px`'ten `680px`'e çıkarıldı (`width: 95%`).
+   - `#tWorkflowAndDefRow` düzeni `grid-template-columns: 1fr 1.35fr` olarak kurgulandı ve CSS Grid taşmasını önlemek için her iki sütuna `min-width: 0;` uygulandı.
+   - Açılır kutulara (`#tWorkflowStep`, `#tTaskDefinition`) `width: 100%; max-width: 100%; text-overflow: ellipsis; overflow: hidden; box-sizing: border-box;` özellikleri tanımlanarak menünün modal dışına taşması kesin olarak engellendi.
+2. **Standart Tekstil Tanımları ve Sezonluk Özel Tanım Desteği (`src/public/app.js`):**
+   - 8 adet standart tekstil üretim tanımı sisteme entegre edildi.
+   - Açılır listede seçili iş adımına özel tanımlar (`⭐ [Adım] Adımına Özel Tanımlar`) en başta gösterilirken, diğer adımlara ait tanımlar da (`📋 Diğer Standart Tekstil Görev Tanımları`) listelendi.
+   - Farklı bir adımın tanımı seçildiğinde, sistem iş adımını otomatik olarak o adıma geçirip ilgili departman personelini önerir hale getirildi.
+   - `✍️ Farklı / Özel Tanım Yaz (Sezon Kodu vb.)...` seçeneği ile proje yöneticisinin AW27, SS27 gibi sezonluk kodları ve özel tanımları serbestçe girebileceği giriş alanı hazırlandı.
+3. **Proje Yöneticisi Yetkilendirme Güvencesi (`src/server/index.ts`, `src/public/app.js`):**
+   - Backend `POST /api/task-definitions` ve `POST /api/workflow-steps` endpoint'lerinde, kullanıcının proje yöneticisi veya proje oluşturucusu olması durumunda kataloğa yeni tanım eklemesine tam yetki tanındı.
+   - Ön yüzde `+ Yeni Tanım Ekle` butonu proje yöneticileri için görünür ve erişilebilir kılındı.
+4. **Test ve Doğrulama:**
+   - 33/33 kabul testi başarıyla geçti.
+   - `npm run build` ile TypeScript derlemesi 0 hata ile tamamlandı.
+
 
 ### 33.1. Kullanıcı Talebi & Problem Tespiti
 - **Problem:** Görevin bitiş tarihi `10.11.2026` olmasına rağmen, Gantt çizelgesindeki çubuk gece yarısı (`00:00:00`) baz alınarak hesaplandığı için yalnızca 9 Kasım'ın sonuna (9 PZT ile 10 SAL arasındaki çizgiye) kadar uzanıyor, 10 Kasım Salı gününün sütununu içine almıyordu.
