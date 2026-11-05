@@ -1588,8 +1588,7 @@ function showGanttTaskHoverPopup(task, targetElement) {
       </div>
     ` : ''}
 
-    <div class="gh-footer-hint">
-      <span>💡 Çekmeceyi açmak için tıklayın</span>
+    <div class="gh-footer-hint" style="justify-content: flex-end;">
       <span>${task.priority === 'HIGH' ? '🔥 Yüksek Öncelik' : 'Normal'}</span>
     </div>
   `;
