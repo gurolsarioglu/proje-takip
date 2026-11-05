@@ -554,20 +554,35 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - `npm run build` ile TypeScript derlemesi 0 hata ile tamamlandı.
 
 
-### 33.1. Kullanıcı Talebi & Problem Tespiti
-- **Problem:** Görevin bitiş tarihi `10.11.2026` olmasına rağmen, Gantt çizelgesindeki çubuk gece yarısı (`00:00:00`) baz alınarak hesaplandığı için yalnızca 9 Kasım'ın sonuna (9 PZT ile 10 SAL arasındaki çizgiye) kadar uzanıyor, 10 Kasım Salı gününün sütununu içine almıyordu.
-- **Kullanıcı Talebi:** Resimde kırmızı okla işaretlenen yere kadar, görevin bitiş tarihi olan 10 Kasım Salı gününün tamamını takvim üzerinde otomatik olarak kapsaması.
+---
 
-### 33.2. Gerçekleştirilen Geliştirmeler
-1. **Dahili Bitiş Günü (Inclusive Day Span) Hesaplaması (`src/public/app.js`):**
-   - Görev başlangıç tarihi ilgili günün `00:00:00` anı, bitiş tarihi ise günün tamamını kapsayacak şekilde `23:59:59.999` (ertesi günün `00:00:00` anı) olarak hesaplandı (`tDueEnd`).
-   - `04.11.2026 - 10.11.2026` aralığındaki bir görev 4, 5, 6, 7, 8, 9 ve 10 Kasım dahil olmak üzere tam 7 tam günü (`7 * 44px = 308px`) kapsayacak şekilde sağa doğru uzatıldı.
-   - Çubuğun sağ sınırı tam olarak 10 SAL ile 11 ÇAR arasındaki dikey çizgiye (kullanıcının kırmızı okla işaretlediği noktaya) oturtuldu.
-2. **Çubuk Genişliği ve CSS Uyumu (`src/public/styles.css`):**
-   - `.gantt-pill-bar` min-width değeri 44px olarak revize edildi; çubuk genişliği takvimdeki gerçek tarih süresini birebir yansıtacak şekilde ayarlandı.
-3. **Doğrulama:**
+## 36. SABİT SOL KENAR ÇUBUĞU (SIDEBAR), ALT PROFİL KARTI VE ÇOKLU CİHAZ (DESKTOP/LAPTOP/TABLET/MOBİL) DÜZENLEMESİ (05.11.2026)
+
+### 36.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** "Görevlerim" sayfasında çok sayıda görev listelendiğinde ve kullanıcı mouse tekerleğiyle sayfayı aşağı kaydırdığında, tüm sayfa gövdesi (`body`) kaydığı için sol kenar çubuğunun (Sidebar) üst kısmı yukarı doğru kayboluyor, sol altta yer alan profil ("Sistem Yöneticisi"), dil seçici ve tema düğmesi ise ekranın ortasında havada asılı kalıp altı boşluk oluyordu.
+- **Kullanıcı Talebi:**
+  1. Mouse tekerleğiyle görevler kaydırıldığında, sol sidebar ve "Sistem Yöneticisi" kartının ekranın altında sabit (çakılı) kalması.
+  2. Farklı ekran boyutlarına sahip cihazlardan (küçük ekranlı laptoplar, geniş masaüstü monitörler, tabletler ve telefonlar) erişildiğinde simetrinin ve yerleşimin bozulmaması, her cihaza tam uyum sağlaması.
+
+### 36.2. Gerçekleştirilen Mimari & Arayüz Çözümleri
+1. **Pencereli SPA Shell Mimarisi (`src/public/styles.css`):**
+   - `html, body` öğelerine `height: 100%; height: 100dvh; overflow: hidden;` tanımlanarak tarayıcının tüm sayfayı kaydırması engellendi.
+   - `.app-layout` ve `.app-main-area` katmanları `height: 100%; height: 100dvh; overflow: hidden;` şeklinde kurgulandı.
+2. **Sabit ve Bağımsız Sol Kenar Çubuğu (`.app-sidebar`):**
+   - Sol kenar çubuğu `height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden;` yapısına kavuşturuldu.
+   - Üst logo alanı (`.sidebar-brand`) `flex-shrink: 0;` ile en üste sabitlendi.
+   - Menü listesi (`.sidebar-nav`) `flex: 1; min-height: 0; overflow-y: auto;` yapılarak, küçük ekranlı laptoplarda dahi menü öğelerinin kendi içinde kayabilmesi sağlandı.
+   - Alt profil ve ayar alanı (`.sidebar-footer`), `flex-shrink: 0; margin-top: auto;` ile sol alt köşeye kalıcı olarak kilitlendi. Böylece görevler ne kadar uzun olursa olsun "Sistem Yöneticisi" kartı ekranın en altında sabit kalır, asla yukarı kaymaz.
+3. **Bağımsız İçerik Kaydırma Alanı (`.view-section`):**
+   - `.view-section` alanına `flex: 1; min-height: 0; height: 100%; overflow-y: auto;` eklendi.
+   - Mouse tekeri ile kaydırma yapıldığında yalnızca sağdaki görevler/içerikler akar; sol menü ve üst araç çubuğu (`.main-topbar`) tamamen sabit kalır.
+4. **Mobil & Tablet Desteği (`src/public/index.html`, `src/public/app.js`):**
+   - 850px altındaki cihazlar (tablet & telefonlar) için üst araç çubuğuna açılır-kapanır mobil hamburger menü butonu (`#mobileMenuToggleBtn`) ve arka plan karartması (`#sidebarMobileBackdrop`) entegre edildi.
+   - Menü öğelerine tıklandığında çekmece menü otomatik kapanır.
+5. **Doğrulama:**
    - 33/33 kabul testi başarıyla geçti.
-   - TypeScript derlemesi ve statik dosya senkronizasyonu hatasız tamamlandı.
+   - `npm run build` ile derleme hatasız tamamlandı.
+
 
 
 

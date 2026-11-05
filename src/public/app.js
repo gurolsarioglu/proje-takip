@@ -2672,6 +2672,33 @@ function setupEventListeners() {
     toggleTheme();
   });
 
+  // Mobil Menü Hamburger Butonu & Karartma
+  const mobileToggle = document.getElementById('mobileMenuToggleBtn');
+  const sidebar = document.querySelector('.app-sidebar');
+  const mobileBackdrop = document.getElementById('sidebarMobileBackdrop');
+
+  if (mobileToggle && sidebar) {
+    mobileToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('mobile-open');
+      mobileBackdrop?.classList.toggle('active');
+    });
+  }
+
+  mobileBackdrop?.addEventListener('click', () => {
+    sidebar?.classList.remove('mobile-open');
+    mobileBackdrop?.classList.remove('active');
+  });
+
+  // Mobil cihazlarda menü öğesine tıklandığında menüyü otomatik kapat
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      if (window.innerWidth <= 850) {
+        sidebar?.classList.remove('mobile-open');
+        mobileBackdrop?.classList.remove('active');
+      }
+    });
+  });
+
   // Profil & Tema Ayarları Modalı
   document.getElementById('userProfileBtn')?.addEventListener('click', openUserProfileModal);
 
