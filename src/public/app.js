@@ -80,7 +80,11 @@ const I18N = {
     label_team_and_plan: 'Ekip & Plan',
     label_active_project: 'Aktif Proje',
     label_unassigned: 'Atanmamış',
-    label_due: 'Vade'
+    label_due: 'Vade',
+    label_company_projects: 'Şirket Projeleri',
+    label_personal_scope: 'Bireysel Alan',
+    label_personal_todos: 'Kişisel To-Do\'larım',
+    label_no_projects: 'Proje Yok'
   },
   en: {
     nav_my_tasks: 'My Tasks',
@@ -120,7 +124,11 @@ const I18N = {
     label_team_and_plan: 'Team & Plan',
     label_active_project: 'Active Project',
     label_unassigned: 'Unassigned',
-    label_due: 'Due'
+    label_due: 'Due',
+    label_company_projects: 'Company Projects',
+    label_personal_scope: 'Personal Workspace',
+    label_personal_todos: 'My Personal To-Dos',
+    label_no_projects: 'No Projects'
   },
   de: {
     nav_my_tasks: 'Meine Aufgaben',
@@ -160,7 +168,11 @@ const I18N = {
     label_team_and_plan: 'Team & Plan',
     label_active_project: 'Aktives Projekt',
     label_unassigned: 'Nicht zugewiesen',
-    label_due: 'Fällig'
+    label_due: 'Fällig',
+    label_company_projects: 'Unternehmensprojekte',
+    label_personal_scope: 'Persönlicher Bereich',
+    label_personal_todos: 'Meine persönlichen To-Dos',
+    label_no_projects: 'Keine Projekte'
   }
 };
 
@@ -191,6 +203,7 @@ function setLanguage(lang) {
 
   // Seçilen dile göre arayüzdeki tarihleri, etiketleri ve görünümleri anında yeniden çiz
   if (state.currentUser) {
+    if (typeof renderProjectSelector === 'function') renderProjectSelector();
     if (typeof renderProjectsGrid === 'function' && state.projects) renderProjectsGrid();
     if (typeof renderMyTasks === 'function' && state.myTasks) renderMyTasks();
     if (state.currentView === 'view-timeline' && typeof renderTimeline === 'function') renderTimeline();
@@ -752,10 +765,10 @@ async function loadProjects() {
   document.getElementById('projectsCount').textContent = state.projects.length;
 
   const hasCurrent = state.projects.some(p => p.id === state.currentProjectId);
-  if (state.projects.length > 0 && (!state.currentProjectId || !hasCurrent)) {
+  if (state.projects.length > 0 && (!state.currentProjectId || (!hasCurrent && state.currentProjectId !== 'personal'))) {
     state.currentProjectId = state.projects[0].id;
-  } else if (state.projects.length === 0) {
-    state.currentProjectId = null;
+  } else if (state.projects.length === 0 && state.currentProjectId !== 'personal') {
+    state.currentProjectId = 'personal';
   }
 
   renderProjectSelector();
@@ -775,7 +788,7 @@ async function loadProjectTasks(projectId) {
 
   let projTasks = [];
   let dependencies = [];
-  if (projectId) {
+  if (projectId && projectId !== 'personal') {
     try {
       projTasks = await apiCall(`/api/projects/${projectId}/tasks`);
       dependencies = await apiCall(`/api/projects/${projectId}/dependencies`);
@@ -804,7 +817,7 @@ async function loadProjectTasks(projectId) {
     const isAdmin = u?.system_role === 'ADMIN';
     const canCreate = !!u?.can_create_project;
     const isManager = currProj?.created_by_user_id === u?.id || (currProj?.members || []).some(m => m.user_id === u?.id && m.role === 'PROJECT_MANAGER');
-    textileBtn.style.display = (projectId && (isAdmin || canCreate || isManager)) ? 'inline-block' : 'none';
+    textileBtn.style.display = (projectId && projectId !== 'personal' && (isAdmin || canCreate || isManager)) ? 'inline-block' : 'none';
   }
 
   updateGlobalSearchUI();
@@ -828,12 +841,23 @@ async function loadPersonnel() {
 
 function renderProjectSelector() {
   const el = document.getElementById('projectSelect');
-  if (state.projects.length === 0) {
-    el.innerHTML = '<option value="">(Proje Yok)</option>';
-    return;
+  if (!el) return;
+
+  let html = '';
+  if (state.projects.length > 0) {
+    html += `<optgroup label="📁 ${t('label_company_projects', 'Şirket Projeleri')}">` +
+      state.projects.map(p => `<option value="${p.id}">📁 ${escapeHtml(p.title)}</option>`).join('') +
+      `</optgroup>`;
+  } else {
+    html += `<option value="">(${t('label_no_projects', 'Proje Yok')})</option>`;
   }
-  el.innerHTML = state.projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
-  el.value = state.currentProjectId;
+
+  html += `<optgroup label="👤 ${t('label_personal_scope', 'Bireysel Alan')}">` +
+    `<option value="personal">👤 ${t('label_personal_todos', 'Kişisel To-Do\'larım')}</option>` +
+    `</optgroup>`;
+
+  el.innerHTML = html;
+  el.value = state.currentProjectId || (state.projects[0]?.id || 'personal');
 }
 
 // 1. GÖREVLERİM & İŞ PAKETLERİ LİSTESİ (MY TASKS & WORK PACKAGES)
@@ -1650,7 +1674,11 @@ function renderTimeline() {
   const activeProj = state.projects.find(p => p.id === state.currentProjectId);
   const titleEl = document.getElementById('timelineProjectName');
   if (titleEl) {
-    titleEl.textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
+    if (state.currentProjectId === 'personal') {
+      titleEl.textContent = `👤 ${t('label_personal_todos', 'Kişisel To-Do\'larım')}`;
+    } else {
+      titleEl.textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
+    }
   }
 
   // Arama / Filtreleme (Başlık, Açıklama veya Sorumlu Personel)
@@ -1664,8 +1692,12 @@ function renderTimeline() {
   }
   const activeGanttQuery = state.searchQuery || ganttFilterQuery;
   const tasksToRender = state.tasks.filter(t => {
-    // Kişisel görevler şirket gantt takvimine karışmaz, yalnızca seçili projeye ait görevler çizilir
-    if (t.project_id !== state.currentProjectId) return false;
+    // Kişisel görevler seçildiğinde yalnızca kişisel to-do'lar; şirket projesi seçildiğinde o projeye ait görevler çizilir
+    if (state.currentProjectId === 'personal') {
+      if (t.project_id) return false;
+    } else if (t.project_id !== state.currentProjectId) {
+      return false;
+    }
     if (!activeGanttQuery) return true;
     return matchesTaskQuery(t, activeGanttQuery);
   });
@@ -1681,8 +1713,8 @@ function renderTimeline() {
   let maxTime = -Infinity;
 
   tasksToRender.forEach(t => {
-    const s = new Date(t.current_start_date);
-    const d = new Date(t.current_due_date);
+    const s = t.current_start_date ? new Date(t.current_start_date) : new Date(t.created_at || Date.now());
+    const d = t.current_due_date ? new Date(t.current_due_date) : new Date(s.getTime() + 24 * 60 * 60 * 1000);
     const sDay = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
     const dDayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
     if (sDay < minTime) minTime = sDay;
@@ -1841,8 +1873,8 @@ function renderTimeline() {
     track.dataset.id = t.id;
     track.style.width = `${scale.timelineWidth}px`;
 
-    const s = new Date(t.current_start_date);
-    const d = new Date(t.current_due_date);
+    const s = t.current_start_date ? new Date(t.current_start_date) : new Date(t.created_at || Date.now());
+    const d = t.current_due_date ? new Date(t.current_due_date) : new Date(s.getTime() + 24 * 60 * 60 * 1000);
     const tStart = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
     // Bitiş tarihi günün tamamını kapsayacak şekilde (bir sonraki günün 00:00:00'ına kadar) hesaplanır
     const tDueEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
@@ -2058,7 +2090,11 @@ function renderBoard() {
   }
   const activeBoardQuery = state.searchQuery || state.kanbanSearchQuery || '';
   const filteredTasks = state.tasks.filter(t => {
-    if (state.currentProjectId && t.project_id !== state.currentProjectId) return false;
+    if (state.currentProjectId === 'personal') {
+      if (t.project_id) return false;
+    } else if (state.currentProjectId && t.project_id !== state.currentProjectId) {
+      return false;
+    }
     if (!activeBoardQuery) return true;
     return matchesTaskQuery(t, activeBoardQuery);
   });
@@ -2066,7 +2102,7 @@ function renderBoard() {
   filteredTasks.forEach(t => {
     const card = document.createElement('div');
     const isBlocked = t.work_status === 'BLOCKED';
-    const assignee = state.personnelList.find(p => p.id === t.assignee_id);
+    const assignee = state.personnelList.find(p => p.id === t.assignee_id) || state.currentUser;
     const isMyTask = !t.assignee_id || t.assignee_id === state.currentUser?.id;
 
     card.className = `board-card ${isBlocked ? 'is-blocked' : ''} ${!isMyTask ? 'not-my-task' : ''}`;
@@ -2077,10 +2113,11 @@ function renderBoard() {
       card.setAttribute('title', `Bu görev ${assignee ? assignee.name : 'başka bir personel'} için atanmıştır. Başkasının görevini taşıyamaz veya müdahale edemezsiniz.`);
     }
 
-    const isOverdue = t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
-    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : '📌');
-    const typeLabel = t.type === 'MILESTONE' ? 'Kilometre Taşı' : (t.type === 'BUG' ? 'Hata' : 'Görev');
-    const typeClass = t.type === 'MILESTONE' ? 'milestone' : (t.type === 'BUG' ? 'bug' : '');
+    const isOverdue = t.current_due_date && t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
+    const isPersonal = !t.project_id;
+    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : (isPersonal ? '👤' : '📌'));
+    const typeLabel = t.type === 'MILESTONE' ? 'Kilometre Taşı' : (t.type === 'BUG' ? 'Hata' : (isPersonal ? 'Kişisel To-Do' : 'Görev'));
+    const typeClass = t.type === 'MILESTONE' ? 'milestone' : (t.type === 'BUG' ? 'bug' : (isPersonal ? 'personal' : ''));
 
     const priorityLabel = t.priority === 'HIGH' ? '🔥 Yüksek' : (t.priority === 'LOW' ? 'Düşük' : 'Normal');
     const priorityClass = t.priority === 'HIGH' ? 'high' : '';

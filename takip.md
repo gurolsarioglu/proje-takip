@@ -609,6 +609,34 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - 33/33 kabul testi başarıyla geçti.
    - `npm run build` ile derleme hatasız tamamlandı.
 
+---
+
+## 38. ÜST MENÜ PROJE SEÇİCİSİNDE KİŞİSEL TO-DO DESTEĞİ VE KANBAN ENTEGRASYONU (05.11.2026)
+
+### 38.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** Üst araç çubuğundaki Proje seçici açılır menüsünde (`#projectSelect`) yalnızca şirket projeleri listelenmekteydi. Kullanıcı Kanban İş Panosundayken bireysel / kişisel to-do görevlerini seçip görüntüleyemiyordu.
+- **Kullanıcı Talebi:** Kişisel to-do'ların proje seçicisinden seçilebilmesi ve seçildiğinde Kanban İş Panosunda (Yapılacak/Bekliyor, Devam Ediyor, Tamamlandı) sütunlarında canlı gösterilmesi.
+
+### 38.2. Gerçekleştirilen Mimari & Arayüz Geliştirmeleri
+1. **Üst Seçicide Optgroup Mimarisi (`src/public/app.js`):**
+   - `#projectSelect` açılır kutusu iki mantıksal gruba ayrıldı:
+     - `📁 Şirket Projeleri`: Proje listesi (`2027 İlkbahar/Yaz Tekstil...`, `DENEME -2`, `TEST PROJE`).
+     - `👤 Bireysel Alan`: `👤 Kişisel To-Do'larım` seçeneği (`value="personal"`).
+   - Dil değişiminde (`setLanguage`) bu optgroup başlıklarının ve seçeneklerin de anında seçilen dile (`TR`, `EN`, `DE`) çevrilmesi sağlandı.
+2. **Kişisel Görevlerin Kanban İş Panosu ile Entegrasyonu (`renderBoard`):**
+   - Proje seçiciden `👤 Kişisel To-Do'larım` seçildiğinde:
+     - Yalnızca kullanıcının kişisel / projesiz görevleri filtrelenir.
+     - Kartlarda `👤 Kişisel To-Do` rozeti (`.board-card-type.personal`, mor renkli rozet) gösterilir.
+     - Görevler mevcut durumlarına göre `Yapılacak / Bekliyor`, `Devam Ediyor` ve `Tamamlandı` sütunlarında listelenir.
+     - Kullanıcı kişisel görev kartlarını sütunlar arasında fareyle sürükleyip bırakarak (`drag-and-drop`) durumlarını anında güncelleyebilir.
+     - Kartlara tıklandığında görev detay çekmecesi açılır, "+ Hızlı Görev Ekle" tıklandığında ise doğrudan kişisel to-do şablonu varsayılan olarak gelir.
+3. **Zaman Çizelgesi (Gantt) Uyumu (`renderTimeline`):**
+   - `👤 Kişisel To-Do'larım` seçildiğinde Gantt başlığı `👤 Kişisel To-Do'larım` olarak güncellenir ve kullanıcının kişisel işleri zaman çizelgesinde de incelenebilir.
+4. **Doğrulama ve Test:**
+   - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
+   - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
+
+
 
 
 

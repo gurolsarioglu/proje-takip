@@ -2093,6 +2093,11 @@ html, body {
   color: #b91c1c;
 }
 
+.board-card-type.personal {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
 .board-card-priority {
   font-size: 0.7rem;
   font-weight: 600;
