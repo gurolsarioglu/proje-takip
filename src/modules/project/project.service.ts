@@ -53,16 +53,65 @@ export class ProjectService {
     return project;
   }
 
-  public getProject(auth: AuthContext, project_id: UUID): Project | undefined {
+  public getProject(auth: AuthContext, project_id: UUID, allowDeleted = false): Project | undefined {
     const project = this.db.getProjectById(auth.tenant_id, project_id);
     if (!project) return undefined;
+    if (project.is_deleted && !allowDeleted && !this.isTenantAdmin(auth)) {
+      return undefined;
+    }
     return project;
   }
 
-  public listProjects(auth: AuthContext): Project[] {
-    // Kullanıcının yetkili olduğu projeler
+  public listProjects(auth: AuthContext, includeDeleted = false): Project[] {
+    // Kullanıcının yetkili olduğu projeler (varsayılan olarak silinmemiş olanlar)
     const all = this.db.getProjects(auth.tenant_id);
-    return all.filter(p => this.canViewProject(auth, p.id));
+    const filtered = all.filter(p => includeDeleted ? true : !p.is_deleted);
+    return filtered.filter(p => this.canViewProject(auth, p.id));
+  }
+
+  public listDeletedProjects(auth: AuthContext): Project[] {
+    if (!this.isTenantAdmin(auth)) {
+      throw new Error('Yetersiz Yetki: Silinen projeleri yalnızca Sistem Yöneticisi (Admin) görüntüleyebilir.');
+    }
+    const all = this.db.getProjects(auth.tenant_id);
+    return all.filter(p => p.is_deleted === true);
+  }
+
+  public deleteProject(auth: AuthContext, project_id: UUID): Project {
+    const project = this.db.getProjectById(auth.tenant_id, project_id);
+    if (!project) {
+      throw new Error(`Proje bulunamadı: ${project_id}`);
+    }
+    if (!this.canManageProject(auth, project_id)) {
+      throw new Error('Yetersiz Yetki: Projeyi yalnızca Proje Yöneticisi veya Sistem Yöneticisi silebilir.');
+    }
+    if (project.is_deleted) {
+      return project;
+    }
+
+    const updated = this.db.updateProject(auth.tenant_id, project_id, {
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      deleted_by_user_id: auth.user_id
+    });
+    return updated!;
+  }
+
+  public restoreProject(auth: AuthContext, project_id: UUID): Project {
+    if (!this.isTenantAdmin(auth)) {
+      throw new Error('Yetersiz Yetki: Silinen bir projeyi yalnızca Sistem Yöneticisi (Admin) geri getirebilir.');
+    }
+    const project = this.db.getProjectById(auth.tenant_id, project_id);
+    if (!project) {
+      throw new Error(`Proje bulunamadı: ${project_id}`);
+    }
+
+    const updated = this.db.updateProject(auth.tenant_id, project_id, {
+      is_deleted: false,
+      deleted_at: undefined,
+      deleted_by_user_id: undefined
+    });
+    return updated!;
   }
 
   public updateProjectPlan(

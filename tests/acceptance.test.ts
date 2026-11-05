@@ -1529,4 +1529,78 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const yikamaAfterKalipDone = db.getTaskById(tenantA.id, createdTasks[6].id);
     assert.equal(yikamaAfterKalipDone?.work_status, 'BLOCKED', 'Dikim henüz bitmediği için Yıkama 2 hala BLOCKED kalmalıdır');
   });
+
+  await t.test('PROJE SİLME (SOFT DELETE) & ADMIN GERİ GETİRME (RESTORE): Projeyi yalnızca Proje Yöneticisi silebilir, silinen proje veritabanında korunur, listeden gizlenir, yalnızca Admin görebilir ve geri getirebilir', () => {
+    // 1. Proje Yöneticisi (Admin olmayan) ve yeni bir test projesi oluştur
+    const pmUser = authService.createUser(tenantA.id, 'Selin Proje Yöneticisi', 'selin.pm@acme.com', undefined, { can_create_project: true });
+    const authPm = { tenant_id: tenantA.id, user_id: pmUser.id, email: pmUser.email, name: pmUser.name };
+
+    const pTestDelete = projectService.createProject(
+      authPm,
+      'Yanlış Açılan Koleksiyon Projesi',
+      'Test amaçlı silinecek proje',
+      '2026-11-01T09:00:00Z',
+      '2026-11-30T18:00:00Z'
+    );
+
+    // Bir görev ekle
+    const pTask = taskService.createTask(
+      authPm,
+      pTestDelete.id,
+      'Proje Ön Hazırlık',
+      'Silinmeden önceki görev',
+      '2026-11-01T09:00:00Z',
+      '2026-11-10T18:00:00Z',
+      'NORMAL',
+      authAssigneeA.user_id
+    );
+
+    // 2. Yetkisiz kullanıcı (Standart çalışan / sorumlu) projeyi silemez
+    assert.throws(
+      () => projectService.deleteProject(authAssigneeA, pTestDelete.id),
+      /Yetersiz Yetki/i,
+      'Standart sorumlu projeyi silememeli'
+    );
+
+    // 3. Proje Yöneticisi projeyi siler (Soft Delete)
+    const deletedProj = projectService.deleteProject(authPm, pTestDelete.id);
+    assert.equal(deletedProj.is_deleted, true, 'is_deleted bayrağı true olmalıdır');
+    assert.ok(deletedProj.deleted_at, 'deleted_at zaman damgası kaydedilmelidir');
+    assert.equal(deletedProj.deleted_by_user_id, authPm.user_id, 'Silme işlemi yapan kullanıcı kaydedilmelidir');
+
+    // 4. Veritabanından fiziksel olarak silinmediği doğrulanır
+    const rawInDb = db.getProjectById(tenantA.id, pTestDelete.id);
+    assert.ok(rawInDb, 'Proje veritabanında fiziksel olarak korunmalıdır');
+    assert.equal(rawInDb.is_deleted, true, 'Veritabanında is_deleted true olarak saklanmalıdır');
+
+    // 5. Normal proje listesinde (listProjects) silinen proje görünmemelidir
+    const userProjects = projectService.listProjects(authPm);
+    assert.ok(!userProjects.some(p => p.id === pTestDelete.id), 'Silinen proje normal proje listesinde yer almamalıdır');
+
+    // 6. Proje yöneticisi olsa dahi Admin olmayan kullanıcı silinen projeleri listeleyemez
+    assert.throws(
+      () => projectService.listDeletedProjects(authPm),
+      /Yetersiz Yetki/i,
+      'Admin olmayan proje yöneticisi silinen projeler listesine erişemez'
+    );
+
+    // 7. Sadece Admin (authManagerA) silinen projeleri listeleyebilir
+    const deletedList = projectService.listDeletedProjects(authManagerA);
+    assert.ok(deletedList.some(p => p.id === pTestDelete.id), 'Admin silinen projeleri çöp kutusunda görmelidir');
+
+    // 8. Proje Yöneticisi silinen projeyi geri getiremez (yalnızca Admin getirebilir)
+    assert.throws(
+      () => projectService.restoreProject(authPm, pTestDelete.id),
+      /Yetersiz Yetki/i,
+      'Proje yöneticisi dahi silinen projeyi geri getiremez, yalnızca Admin getirebilir'
+    );
+
+    // 9. Admin (authManagerA) projeyi geri getirir (restore)
+    const restoredProj = projectService.restoreProject(authManagerA, pTestDelete.id);
+    assert.equal(restoredProj.is_deleted, false, 'is_deleted false olmalıdır');
+
+    // 10. Proje tekrar normal proje listesinde görünmelidir
+    const userProjectsAfterRestore = projectService.listProjects(authPm);
+    assert.ok(userProjectsAfterRestore.some(p => p.id === pTestDelete.id), 'Geri getirilen proje tekrar proje listesinde görünmelidir');
+  });
 });

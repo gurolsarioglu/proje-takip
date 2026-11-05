@@ -107,6 +107,9 @@ export interface Project {
   current_due_date: string;
   created_by_user_id: UUID;
   created_at: string;
+  is_deleted?: boolean;
+  deleted_at?: string;
+  deleted_by_user_id?: UUID;
 }
 
 export interface ProjectPlanChange {

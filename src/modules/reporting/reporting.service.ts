@@ -101,7 +101,7 @@ export class ReportingService {
   ): UserPerformanceReport {
     // RAP07: Yönetici yalnız yönettiği projelerdeki kullanıcıları, kullanıcı kendisini görür
     if (auth.user_id !== target_user_id) {
-      const managedProjects = this.db.getProjects(auth.tenant_id).filter(p => this.projectService.canManageProject(auth, p.id));
+      const managedProjects = this.db.getProjects(auth.tenant_id).filter(p => !p.is_deleted && this.projectService.canManageProject(auth, p.id));
       const hasSharedManagement = managedProjects.some(p => {
         const members = this.db.getProjectMembers(auth.tenant_id, p.id);
         const tasks = this.db.getTasks(auth.tenant_id, p.id);

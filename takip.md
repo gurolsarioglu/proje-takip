@@ -693,3 +693,45 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 
 
 
+
+
+---
+
+## 41. PROJE SİLME (SOFT DELETE) VE YÖNETİCİ/ADMİN İZİN VE GERİ GETİRME (RESTORE) MEKANİZMASI (05.11.2026)
+
+### 41.1. Kullanıcı Talebi & Gereksinimler
+- **Kullanıcı Talebi:** Proje yöneticilerinin sehven veya gereksiz açılan projeleri silebilmesi için bir buton eklenmesi.
+- **Kritik Kurallar:**
+  1. **Yetki Kontrolü:** Projeyi yalnızca Proje Yöneticisi (`PROJECT_MANAGER` rolü veya projeyi oluşturan yetkili) ve Sistem Yöneticisi (`ADMIN`) silebilmelidir.
+  2. **Soft Delete (Yumuşak Silme):** Veritabanından fiziksel olarak silinmemeli (`is_deleted: true`, `deleted_at`, `deleted_by_user_id` flag'leri atanmalıdır). Proje ve altındaki tüm görev kayıtları veritabanında korunmalıdır.
+  3. **Uygulamadan Gizleme:** Normal proje listesinde, filtrelerde ve seçim alanlarında silinen projeler kullanıcılara görünmemelidir.
+  4. **Yalnızca Admin Görünürlüğü:** Silinen projeler yalnızca `ADMIN` rolüne sahip kullanıcılara gösterilmelidir.
+  5. **Geri Getirme (Restore):** `ADMIN` silinen projeleri inceleyebilmeli ve tek tıkla (`♻️ Projeyi Geri Getir`) tekrar aktif hale getirebilmelidir.
+
+### 41.2. Gerçekleştirilen Geliştirmeler
+1. **Veri Modeli & Veritabanı Şeması (`src/core/types.ts`, `src/database/schema.sql`, `src/database/postgres.ts`):**
+   - `Project` tipine `is_deleted?: boolean`, `deleted_at?: string`, `deleted_by_user_id?: UUID` alanları eklendi.
+   - PGlite PostgreSQL şemasına ve `syncStateToPostgres` sorgusuna `is_deleted BOOLEAN NOT NULL DEFAULT FALSE, deleted_at TEXT, deleted_by_user_id TEXT` sütunları eklendi; geriye dönük migration komutları entegre edildi.
+2. **Backend Servis Katmanı (`src/modules/project/project.service.ts`):**
+   - `listProjects`: Yalnızca silinmemiş (`!p.is_deleted`) projeleri döndürür.
+   - `getProject`: Silinmiş projeleri normal kullanıcılardan gizler; Admin için `allowDeleted` parametresiyle erişime izin verir.
+   - `deleteProject`: `canManageProject(auth, project_id)` doğrulaması yapar; `is_deleted: true`, `deleted_at` (ISO timestamp) ve `deleted_by_user_id` atayarak veritabanını günceller.
+   - `listDeletedProjects`: Yalnızca `isTenantAdmin(auth)` yetkisi olan yöneticilere silinmiş projeleri döner; silen kişi bilgisi ve görev sayısı ile zenginleştirir.
+   - `restoreProject`: Yalnızca `isTenantAdmin(auth)` yetkisi ile çalışır; `is_deleted: false` yaparak projeyi aktif listeye iade eder.
+3. **API Uç Noktaları (`src/server/index.ts`):**
+   - `GET /api/projects/deleted`: Admin rolü kontrolü ile silinen projeleri listeler.
+   - `DELETE /api/projects/:id` ve `POST /api/projects/:id/delete`: Proje yöneticisi doğrulamasıyla soft delete uygular.
+   - `POST /api/projects/:id/restore`: Admin doğrulamasıyla projeyi geri yükler.
+4. **Kullanıcı Arayüzü & Yönetim Paneli (`src/public/index.html`, `src/public/styles.css`, `src/public/app.js`):**
+   - **Proje Kartı & Modal Üzerinde Sil Butonu:** Proje yöneticisinin (`p.is_manager`) kartında `🗑️ Sil` butonu ve "Ekip & Plan" modalı içerisinde kırmızı "Tehlike Bölgesi - Projeyi Sil" butonu konumlandırıldı.
+   - **Sekmeli Filtre Yapısı:** Projeler görünümüne `📁 Aktif Projeler` ve Adminler için özel kırmızı rozetli `🗑️ Silinen Projeler (Admin)` sekmeleri eklendi.
+   - **Silinen Projeler Sekmesi:** Sadece `ADMIN` kullanıcılarına görünür; silinme tarihi, silen yönetici ve görev sayısını gösterir; yanında yeşil `♻️ Projeyi Geri Getir` butonu yer alır.
+   - Onay diyalogları ve anlık bildirim toast mesajları ile güvenli kullanıcı deneyimi sağlandı.
+5. **Kapsamlı Test & Doğrulama (`tests/acceptance.test.ts`):**
+   - Standart personelin projeyi silemediği (403 Forbidden),
+   - Proje yöneticisinin soft-delete yapabildiği,
+   - Projenin veritabanında fiziksel olarak kaldığı,
+   - Aktif proje listesinde görünmez olduğu,
+   - Standart personelin silinenleri listeleyemediği ve geri getiremediği,
+   - Admin kullanıcısının silinen projeleri listeleyip tek tıkla geri getirebildiği ve projenin tekrar aktifleştiği uçtan uca otomatik testle doğrulandı.
+   - **34/34 Test Başarılı (`npm test`).**

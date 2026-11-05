@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS projects (
   current_start_date TEXT NOT NULL,
   current_due_date TEXT NOT NULL,
   created_by_user_id TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  deleted_at TEXT,
+  deleted_by_user_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_tenant ON projects(tenant_id);

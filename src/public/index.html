@@ -329,9 +329,16 @@
 
       <!-- ================= GÖRÜNÜM 2: PROJELER (PROJECTS OVERVIEW) ================= -->
       <section id="view-projects" class="view-section">
-        <div class="section-intro">
-          <p class="intro-desc" data-i18n="projects_intro">Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve
-            takvimleri.</p>
+        <div class="section-intro" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+          <div>
+            <p class="intro-desc" data-i18n="projects_intro">Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve takvimleri.</p>
+          </div>
+          <div class="projects-tabs-bar" style="display:flex; align-items:center; gap:8px;">
+            <div class="filter-tabs" id="projectStatusTabs">
+              <button type="button" class="filter-tab active" data-tab="active">📁 Aktif Projeler (<span id="activeProjectsCount">0</span>)</button>
+              <button type="button" class="filter-tab admin-only" id="deletedProjectsTabBtn" data-tab="deleted" style="display:none; color:#dc2626;">🗑️ Silinen Projeler (<span id="deletedProjectsCount">0</span>)</button>
+            </div>
+          </div>
         </div>
 
         <div class="projects-grid" id="projectsCardsGrid">
@@ -1897,6 +1904,20 @@
             </div>
           </form>
           <div id="pmPlanHistoryList" style="margin-top:8px;"></div>
+        </div>
+
+        <!-- Bölüm 4: Projeyi Silme (Soft Delete - Yalnızca Proje Yöneticisi & Admin) -->
+        <div class="pm-section-box danger-zone-box" id="pmDeleteSection" style="border:1px solid #fecaca; background:#fff5f5; border-radius:8px; padding:12px;">
+          <div class="op-section-title" style="color:#b91c1c; margin-bottom:4px;">⚠️ Projeyi Sil (Listeden Kaldır)</div>
+          <p style="font-size:0.75rem; color:#7f1d1d; margin-bottom:8px;">
+            Bu projeyi sildiğinizde, proje genel listeden kaldırılır ancak veritabanı kayıtları korunur.
+            Silinen projeler yalnızca Sistem Yöneticisi (Admin) tarafından görüntülenebilir ve gerekirse tek tıkla geri getirilebilir.
+          </p>
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="button" class="action-btn danger-btn sm-btn" id="pmDeleteProjectBtn">
+              🗑️ Bu Projeyi Sil
+            </button>
+          </div>
         </div>
       </div>
       <div class="modal-footer">

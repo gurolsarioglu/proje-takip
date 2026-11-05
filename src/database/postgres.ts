@@ -117,6 +117,9 @@ export class PostgresEngine {
         await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivated_at TEXT;`);
         await this.execSql(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deactivation_reason TEXT;`);
         await this.execSql(`ALTER TABLE tasks ALTER COLUMN project_id DROP NOT NULL;`).catch(() => {});
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_by_user_id TEXT;`);
       } catch (e) {}
     }
 
@@ -226,15 +229,17 @@ export class PostgresEngine {
     // 3. Projects
     for (const p of state.projects) {
       await this.querySql(
-        `INSERT INTO projects (id, tenant_id, title, description, initial_start_date, initial_due_date, current_start_date, current_due_date, created_by_user_id, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO projects (id, tenant_id, title, description, initial_start_date, initial_due_date, current_start_date, current_due_date, created_by_user_id, created_at, is_deleted, deleted_at, deleted_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (id) DO UPDATE SET
            title = EXCLUDED.title, description = EXCLUDED.description,
-           current_start_date = EXCLUDED.current_start_date, current_due_date = EXCLUDED.current_due_date`,
+           current_start_date = EXCLUDED.current_start_date, current_due_date = EXCLUDED.current_due_date,
+           is_deleted = EXCLUDED.is_deleted, deleted_at = EXCLUDED.deleted_at, deleted_by_user_id = EXCLUDED.deleted_by_user_id`,
         [
           p.id, p.tenant_id, p.title, p.description, p.initial_start_date,
           p.initial_due_date, p.current_start_date, p.current_due_date,
-          p.created_by_user_id, p.created_at
+          p.created_by_user_id, p.created_at,
+          p.is_deleted === true, p.deleted_at || null, p.deleted_by_user_id || null
         ]
       );
     }

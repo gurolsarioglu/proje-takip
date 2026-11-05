@@ -236,6 +236,26 @@ app.put('/api/admin/personnel/:id', (req, res) => {
 });
 
 // 2. Projects
+app.get('/api/projects/deleted', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const deletedProjects = projectService.listDeletedProjects(auth);
+    const enriched = deletedProjects.map(p => {
+      const pTasks = db.getTasks(auth.tenant_id, p.id);
+      const deleter = p.deleted_by_user_id ? db.getUserById(auth.tenant_id, p.deleted_by_user_id) : null;
+      return {
+        ...p,
+        total_tasks: pTasks.length,
+        deleted_by_name: deleter ? deleter.name : 'Bilinmiyor',
+        deleted_by_email: deleter ? deleter.email : ''
+      };
+    });
+    res.json(enriched);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
 app.get('/api/projects', (req, res) => {
   try {
     const auth = getAuthContext(req);
@@ -392,6 +412,39 @@ app.post('/api/projects/:id/visibility-decide', (req, res) => {
       void emailService.sendProjectMemberAddedCard(auth.tenant_id, updated.project_id, updated.user_id, 'VIEWER', auth.name);
     }
     res.json(updated);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.delete('/api/projects/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const deleted = projectService.deleteProject(auth, req.params.id);
+    console.log(`🗑️ [PROJECT-MONITOR] Proje Silindi (Soft Delete): "${deleted.title}" (${deleted.id}) | Silen: ${auth.name} (${auth.email})`);
+    res.json({ success: true, project: deleted });
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/:id/delete', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const deleted = projectService.deleteProject(auth, req.params.id);
+    console.log(`🗑️ [PROJECT-MONITOR] Proje Silindi (Soft Delete): "${deleted.title}" (${deleted.id}) | Silen: ${auth.name} (${auth.email})`);
+    res.json({ success: true, project: deleted });
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/:id/restore', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const restored = projectService.restoreProject(auth, req.params.id);
+    console.log(`♻️ [PROJECT-MONITOR] Proje Geri Getirildi (Restored): "${restored.title}" (${restored.id}) | Geri Getiren (Admin): ${auth.name} (${auth.email})`);
+    res.json({ success: true, project: restored });
   } catch (err: any) {
     res.status(403).json({ error: err.message });
   }

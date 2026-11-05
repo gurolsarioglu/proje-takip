@@ -15,7 +15,9 @@ let state = {
   searchQuery: '',
   activeTaskId: null,
   workflowSteps: [],
-  taskDefinitions: []
+  taskDefinitions: [],
+  deletedProjects: [],
+  activeProjectsTab: 'active'
 };
 
 function getStepColor(stepName) {
@@ -764,6 +766,16 @@ async function loadProjects() {
   state.projects = await apiCall('/api/projects');
   document.getElementById('projectsCount').textContent = state.projects.length;
 
+  if (state.currentUser?.system_role === 'ADMIN') {
+    try {
+      state.deletedProjects = await apiCall('/api/projects/deleted');
+    } catch {
+      state.deletedProjects = [];
+    }
+  } else {
+    state.deletedProjects = [];
+  }
+
   const hasCurrent = state.projects.some(p => p.id === state.currentProjectId);
   if (state.projects.length > 0 && (!state.currentProjectId || (!hasCurrent && state.currentProjectId !== 'personal'))) {
     state.currentProjectId = state.projects[0].id;
@@ -991,12 +1003,140 @@ function renderMyTasks() {
 }
 
 // 2. PROJELER GRID GÖRÜNÜMÜ
+function setupProjectTabsListener() {
+  const tabsContainer = document.getElementById('projectStatusTabs');
+  if (!tabsContainer || tabsContainer.dataset.listenerSetup === 'true') return;
+  tabsContainer.dataset.listenerSetup = 'true';
+
+  tabsContainer.addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-tab');
+    if (!btn) return;
+    const targetTab = btn.dataset.tab;
+    if (targetTab && targetTab !== state.activeProjectsTab) {
+      state.activeProjectsTab = targetTab;
+      renderProjectsGrid();
+    }
+  });
+}
+
+async function confirmDeleteProject(projectId, projectTitle) {
+  if (!projectId) return;
+  const proj = state.projects.find(p => p.id === projectId);
+  const title = projectTitle || proj?.title || 'Seçilen proje';
+  
+  const ok = confirm(`"${title}" projesini silmek istediğinize emin misiniz?\n\nBu işlem projeyi genel listeden kaldırır ancak veritabanı kayıtlarını korur. Sadece Sistem Yöneticisi (Admin) tarafından görüntülenebilir ve gerekirse geri getirilebilir.`);
+  if (!ok) return;
+
+  try {
+    await apiCall(`/api/projects/${projectId}/delete`, 'POST');
+    showToast(`🗑️ "${title}" projesi başarıyla silindi ve listeden kaldırıldı.`, 'success');
+    
+    // Açık olan modal varsa kapat
+    document.getElementById('projectManageModal')?.classList.remove('open');
+    
+    // Projeleri yeniden yükle
+    await loadProjects();
+  } catch (err) {
+    showToast('Proje silinemedi: ' + err.message, 'error');
+  }
+}
+
+async function confirmRestoreProject(projectId, projectTitle) {
+  if (!projectId) return;
+  const title = projectTitle || 'Seçilen proje';
+  
+  const ok = confirm(`"${title}" projesini geri getirmek istediğinize emin misiniz?\n\nProje aktif projelere eklenecek ve tüm ekip üyeleri için tekrar görünür olacaktır.`);
+  if (!ok) return;
+
+  try {
+    await apiCall(`/api/projects/${projectId}/restore`, 'POST');
+    showToast(`♻️ "${title}" projesi başarıyla geri getirildi!`, 'success');
+    
+    // Projeleri yeniden yükle ve aktif sekmeye dön
+    state.activeProjectsTab = 'active';
+    await loadProjects();
+  } catch (err) {
+    showToast('Proje geri getirilemedi: ' + err.message, 'error');
+  }
+}
+
 function renderProjectsGrid() {
+  setupProjectTabsListener();
+
   const container = document.getElementById('projectsCardsGrid');
+  if (!container) return;
   container.innerHTML = '';
 
+  const activeCountEl = document.getElementById('activeProjectsCount');
+  if (activeCountEl) activeCountEl.textContent = state.projects.length;
+
+  const deletedTabBtn = document.getElementById('deletedProjectsTabBtn');
+  const deletedCountEl = document.getElementById('deletedProjectsCount');
+  const isAdmin = state.currentUser?.system_role === 'ADMIN';
+
+  if (deletedTabBtn) {
+    deletedTabBtn.style.display = isAdmin ? 'inline-block' : 'none';
+  }
+  if (deletedCountEl) {
+    deletedCountEl.textContent = state.deletedProjects.length;
+  }
+
+  // Tab butonlarının active durumunu güncelle
+  document.querySelectorAll('#projectStatusTabs .filter-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === state.activeProjectsTab);
+  });
+
+  // 1. SİLİNEN PROJELER TABI (SADECE ADMIN)
+  if (state.activeProjectsTab === 'deleted') {
+    if (!isAdmin) {
+      container.innerHTML = '<p style="color:#ef4444; padding:20px;">Silinen projeleri yalnızca Sistem Yöneticisi (Admin) görüntüleyebilir.</p>';
+      return;
+    }
+    if (state.deletedProjects.length === 0) {
+      container.innerHTML = '<div class="board-empty-placeholder" style="grid-column: 1 / -1; padding:36px; text-align:center;"><span>🗑️ Çöp kutusunda silinmiş proje bulunmuyor.</span></div>';
+      return;
+    }
+
+    state.deletedProjects.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'project-card project-card-deleted';
+      card.dataset.id = p.id;
+
+      card.innerHTML = `
+        <div class="proj-card-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <h4 class="proj-title" style="text-decoration:line-through; color:#64748b;">${escapeHtml(p.title)}</h4>
+          <span class="nav-badge" style="background:#fee2e2; color:#b91c1c; font-weight:700;">
+            🗑️ Silindi (Arşiv)
+          </span>
+        </div>
+        <p class="proj-desc" style="color:#64748b;">${escapeHtml(p.description || 'Açıklama belirtilmemiş.')}</p>
+
+        <div style="background:#fef2f2; border:1px dashed #fca5a5; border-radius:6px; padding:8px 10px; font-size:0.75rem; color:#991b1b; margin-top:10px; display:flex; flex-direction:column; gap:4px;">
+          <div>🕒 <strong>Silinme Zamanı:</strong> ${formatDate(p.deleted_at)}</div>
+          <div>👤 <strong>Silen Yetkili:</strong> ${escapeHtml(p.deleted_by_name || 'Bilinmiyor')}</div>
+          <div>📋 <strong>Kayıtlı Görev Sayısı:</strong> ${p.total_tasks || 0} adet</div>
+        </div>
+
+        <div class="proj-card-actions" style="display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid #fee2e2;">
+          <button type="button" class="action-btn success-btn sm-btn btn-restore-project" data-id="${p.id}">
+            ♻️ Projeyi Geri Getir (Restore)
+          </button>
+        </div>
+      `;
+
+      card.querySelector('.btn-restore-project')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await confirmRestoreProject(p.id, p.title);
+      });
+
+      container.appendChild(card);
+    });
+    return;
+  }
+
+  // 2. AKTİF PROJELER TABI
   if (state.projects.length === 0) {
-    container.innerHTML = '<p style="color:#64748b;">Henüz proje bulunmuyor.</p>';
+    container.innerHTML = '<div class="board-empty-placeholder" style="grid-column: 1 / -1; padding:36px; text-align:center;"><span>Henüz aktif proje bulunmuyor.</span></div>';
     return;
   }
 
@@ -1035,23 +1175,35 @@ function renderProjectsGrid() {
         ${isRevised ? `<span class="proj-revised-tag" title="${t('label_initial_plan', 'İlk Plan')}: ${formatDate(p.initial_start_date)} → ${formatDate(p.initial_due_date)}">🔄 ${t('label_revised', 'Revize Edildi')}</span>` : ''}
       </div>
 
-      <div class="proj-card-actions" style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border-subtle);">
-        <button type="button" class="action-btn secondary-btn sm-btn btn-open-project" data-id="${p.id}">
-          📋 ${t('label_open_tasks', 'Görevleri Aç')}
-        </button>
+      <div class="proj-card-actions" style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border-subtle); flex-wrap:wrap;">
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button type="button" class="action-btn secondary-btn sm-btn btn-open-project" data-id="${p.id}">
+            📋 ${t('label_open_tasks', 'Görevleri Aç')}
+          </button>
+          ${p.is_manager ? `
+            <button type="button" class="action-btn outline-btn sm-btn btn-manage-project" data-id="${p.id}">
+              ⚙️ ${t('label_team_and_plan', 'Ekip & Plan')} ${p.pending_visibility_requests > 0 ? `<span class="nav-badge" style="margin-left:4px;">${p.pending_visibility_requests}</span>` : ''}
+            </button>
+          ` : (!p.is_full_viewer ? `
+            <button type="button" class="action-btn outline-btn sm-btn btn-req-visibility" data-id="${p.id}">
+              👁️ Tüm Projeyi Gör Talebi
+            </button>
+          ` : '')}
+        </div>
         ${p.is_manager ? `
-          <button type="button" class="action-btn outline-btn sm-btn btn-manage-project" data-id="${p.id}">
-            ⚙️ ${t('label_team_and_plan', 'Ekip & Plan')} ${p.pending_visibility_requests > 0 ? `<span class="nav-badge" style="margin-left:4px;">${p.pending_visibility_requests}</span>` : ''}
+          <button type="button" class="action-btn danger-outline-btn sm-btn btn-delete-project" data-id="${p.id}" title="Projeyi Sil">
+            🗑️ Sil
           </button>
-        ` : (!p.is_full_viewer ? `
-          <button type="button" class="action-btn outline-btn sm-btn btn-req-visibility" data-id="${p.id}">
-            👁️ Tüm Projeyi Gör Talebi
-          </button>
-        ` : '')}
+        ` : ''}
       </div>
     `;
 
     card.addEventListener('click', async (e) => {
+      if (e.target.closest('.btn-delete-project')) {
+        e.stopPropagation();
+        await confirmDeleteProject(p.id, p.title);
+        return;
+      }
       if (e.target.closest('.btn-manage-project')) {
         e.stopPropagation();
         openProjectManageModal(p.id);
@@ -4735,6 +4887,11 @@ async function openProjectManageModal(projectId) {
       }
     }
 
+    const deleteSection = document.getElementById('pmDeleteSection');
+    if (deleteSection) {
+      deleteSection.style.display = (details.permissions?.isManager || state.currentUser?.system_role === 'ADMIN') ? 'block' : 'none';
+    }
+
     modal.classList.add('open');
   } catch (err) {
     showToast('Proje yönetim bilgileri alınamadı: ' + err.message, 'error');
@@ -4745,6 +4902,12 @@ let pmListenersAttached = false;
 function setupProjectManageModalListeners() {
   if (pmListenersAttached) return;
   pmListenersAttached = true;
+
+  document.getElementById('pmDeleteProjectBtn')?.addEventListener('click', async () => {
+    if (!managingProjectId) return;
+    const proj = state.projects.find(p => p.id === managingProjectId);
+    await confirmDeleteProject(managingProjectId, proj?.title);
+  });
 
   document.getElementById('pmAddMemberForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();

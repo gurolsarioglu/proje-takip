@@ -2242,6 +2242,49 @@ html, body {
   background: #ffffff;
 }
 
+.danger-btn {
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.3);
+}
+
+.danger-btn:hover {
+  background: #b91c1c;
+}
+
+.danger-outline-btn {
+  background: #fff5f5;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.danger-outline-btn:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.success-btn {
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.3);
+}
+
+.success-btn:hover {
+  background: #15803d;
+}
+
+.project-card-deleted {
+  background: #f8fafc !important;
+  border: 1px dashed #cbd5e1 !important;
+  opacity: 0.92;
+}
+
+.project-card-deleted:hover {
+  border-color: #fca5a5 !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1) !important;
+}
+
 .icon-button {
   background: #ffffff;
   border: 1px solid var(--border-subtle);
