@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { Database } from '../database/db.js';
@@ -2304,8 +2305,20 @@ app.use((req, res) => {
 
 // Listen on PORT
 app.listen(PORT, '0.0.0.0', () => {
+  const nets = os.networkInterfaces();
+  const netIps: string[] = [];
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        netIps.push(net.address);
+      }
+    }
+  }
   console.log(`=======================================================`);
   console.log(` Görev & Bağımlılık Yönetim Sistemi (v0.3) Aktif!`);
-  console.log(` URL: http://localhost:${PORT}`);
+  console.log(` Yerel (Local):    http://localhost:${PORT}`);
+  netIps.forEach(ip => {
+    console.log(` Ağ (Network):     http://${ip}:${PORT}`);
+  });
   console.log(`=======================================================`);
 });
