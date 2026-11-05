@@ -2152,51 +2152,51 @@ function renderBoard() {
     state.kanbanSearchQuery = '';
   }
   const activeBoardQuery = state.searchQuery || state.kanbanSearchQuery || '';
-  const filteredTasks = state.tasks.filter(t => {
+  const filteredTasks = state.tasks.filter(task => {
     if (state.currentProjectId === 'personal') {
-      if (t.project_id) return false;
-    } else if (state.currentProjectId && t.project_id !== state.currentProjectId) {
+      if (task.project_id) return false;
+    } else if (state.currentProjectId && task.project_id !== state.currentProjectId) {
       return false;
     }
     if (!activeBoardQuery) return true;
-    return matchesTaskQuery(t, activeBoardQuery);
+    return matchesTaskQuery(task, activeBoardQuery);
   });
 
-  filteredTasks.forEach(t => {
+  filteredTasks.forEach(task => {
     const card = document.createElement('div');
-    const isBlocked = t.work_status === 'BLOCKED';
-    const assignee = state.personnelList.find(p => p.id === t.assignee_id) || state.currentUser;
-    const isMyTask = !t.assignee_id || t.assignee_id === state.currentUser?.id;
+    const isBlocked = task.work_status === 'BLOCKED';
+    const assignee = task.assignee_id ? state.personnelList.find(p => p.id === task.assignee_id) : null;
+    const isMyTask = !task.assignee_id || task.assignee_id === state.currentUser?.id;
 
     card.className = `board-card ${isBlocked ? 'is-blocked' : ''} ${!isMyTask ? 'not-my-task' : ''}`;
     card.setAttribute('draggable', isMyTask ? 'true' : 'false');
-    card.setAttribute('data-task-id', t.id);
-    card.setAttribute('data-status', t.work_status);
+    card.setAttribute('data-task-id', task.id);
+    card.setAttribute('data-status', task.work_status);
     if (!isMyTask) {
       card.setAttribute('title', `Bu görev ${assignee ? assignee.name : 'başka bir personel'} için atanmıştır. Başkasının görevini taşıyamaz veya müdahale edemezsiniz.`);
     }
 
-    const isOverdue = t.current_due_date && t.work_status !== 'COMPLETED' && new Date(t.current_due_date) < new Date();
-    const isPersonal = !t.project_id;
-    const typeIcon = t.type === 'MILESTONE' ? '🏁' : (t.type === 'BUG' ? '🐞' : (isPersonal ? '👤' : '📌'));
-    const typeLabel = t.type === 'MILESTONE' ? 'Kilometre Taşı' : (t.type === 'BUG' ? 'Hata' : (isPersonal ? 'Kişisel To-Do' : 'Görev'));
-    const typeClass = t.type === 'MILESTONE' ? 'milestone' : (t.type === 'BUG' ? 'bug' : (isPersonal ? 'personal' : ''));
+    const isOverdue = task.current_due_date && task.work_status !== 'COMPLETED' && new Date(task.current_due_date) < new Date();
+    const isPersonal = !task.project_id;
+    const typeIcon = task.type === 'MILESTONE' ? '🏁' : (task.type === 'BUG' ? '🐞' : (isPersonal ? '👤' : '📌'));
+    const typeLabel = task.type === 'MILESTONE' ? 'Kilometre Taşı' : (task.type === 'BUG' ? 'Hata' : (isPersonal ? 'Kişisel To-Do' : 'Görev'));
+    const typeClass = task.type === 'MILESTONE' ? 'milestone' : (task.type === 'BUG' ? 'bug' : (isPersonal ? 'personal' : ''));
 
-    const priorityLabel = t.priority === 'HIGH' ? '🔥 Yüksek' : (t.priority === 'LOW' ? 'Düşük' : 'Normal');
-    const priorityClass = t.priority === 'HIGH' ? 'high' : '';
+    const priorityLabel = task.priority === 'HIGH' ? '🔥 Yüksek' : (task.priority === 'LOW' ? 'Düşük' : 'Normal');
+    const priorityClass = task.priority === 'HIGH' ? 'high' : '';
 
     const initials = assignee ? assignee.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
-    const dueDateText = t.current_due_date ? formatDate(t.current_due_date) : '';
-    const progressVal = typeof t.progress === 'number' ? t.progress : (t.work_status === 'COMPLETED' ? 100 : 0);
-    const blockingSucc = getBlockingSuccessorSummary(t);
+    const dueDateText = task.current_due_date ? formatDate(task.current_due_date) : '';
+    const progressVal = typeof task.progress === 'number' ? task.progress : (task.work_status === 'COMPLETED' ? 100 : 0);
+    const blockingSucc = getBlockingSuccessorSummary(task);
 
     card.innerHTML = `
       <div class="board-card-header">
-        ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; display:inline-block;">${escapeHtml(t.workflow_step)}</span>` : ''}
+        ${task.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(task.workflow_step)}; display:inline-block;">${escapeHtml(task.workflow_step)}</span>` : ''}
         <span class="board-card-type ${typeClass}">${typeIcon} ${typeLabel}</span>
         <span class="board-card-priority ${priorityClass}">${priorityLabel}</span>
       </div>
-      <div class="board-card-title">${escapeHtml(t.title)}</div>
+      <div class="board-card-title">${escapeHtml(task.title)}</div>
       ${isBlocked ? `
         <div class="board-card-blocked-pill" title="Öncül görevler bitmeden başlatılamaz">
           🔒 Öncül Bekliyor (BLOCKED)
@@ -2208,7 +2208,7 @@ function renderBoard() {
         </div>
       ` : ''}
       <div class="board-card-progress-bar">
-        <div class="board-card-progress-fill ${t.work_status === 'COMPLETED' ? 'fill-done' : ''}" style="width: ${progressVal}%;"></div>
+        <div class="board-card-progress-fill ${task.work_status === 'COMPLETED' ? 'fill-done' : ''}" style="width: ${progressVal}%;"></div>
       </div>
       <div class="board-card-footer">
         <div class="board-card-assignee" title="${assignee ? assignee.name : t('label_unassigned', 'Atanmamış')}">
@@ -2229,7 +2229,7 @@ function renderBoard() {
         showToast(`Bu görev ${assignee ? assignee.name : 'başka personele'} atanmıştır. Başkasının görevini taşıyamaz veya müdahale edemezsiniz.`, 'warning');
         return false;
       }
-      e.dataTransfer.setData('text/plain', t.id);
+      e.dataTransfer.setData('text/plain', task.id);
       e.dataTransfer.effectAllowed = 'move';
       card.classList.add('is-dragging');
     });
@@ -2243,14 +2243,14 @@ function renderBoard() {
     // Tıklanınca sağ çekmeceyi aç
     card.addEventListener('click', (e) => {
       if (!card.classList.contains('is-dragging')) {
-        openTaskDrawer(t.id);
+        openTaskDrawer(task.id);
       }
     });
 
-    if (t.work_status === 'COMPLETED') {
+    if (task.work_status === 'COMPLETED') {
       counts.DONE++;
       lists.DONE.appendChild(card);
-    } else if (t.work_status === 'IN_PROGRESS') {
+    } else if (task.work_status === 'IN_PROGRESS') {
       counts.DOING++;
       lists.DOING.appendChild(card);
     } else {

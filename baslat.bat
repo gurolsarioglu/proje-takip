@@ -48,3 +48,4 @@ if %errorlevel% neq 0 (
     echo [UYARI] Sunucu bir hata nedeniyle sonlandı.
     pause
 )
+
