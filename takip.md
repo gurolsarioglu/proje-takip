@@ -668,6 +668,25 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
    - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
 
+---
+
+## 40. İŞ PANOSU (KANBAN) GÖREV KARTLARI GÖRÜNÜRLÜK DÜZELTMESİ (05.11.2026)
+
+### 40.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** İş Panosunda (Kanban) üstteki proje filtresinden hangi şirket projesi veya `👤 Kişisel To-Do'larım` seçilirse seçilsin, görevler panodaki sütunlarda (`Yapılacak/Bekliyor`, `Devam Ediyor`, `Tamamlandı`) listelenmiyor, tüm sütunlar boş (`0`) olarak kalıyordu.
+- **Kök Neden Tespiti:** `src/public/app.js` dosyasındaki `renderBoard()` fonksiyonunda görev döngüsü `filteredTasks.forEach(t => { ... })` şeklinde tanımlanmıştı. Kartın alt bilgi alanında çeviri metinleri oluşturulurken `t('label_unassigned', 'Atanmamış')` fonksiyonu çağrılıyordu. Döngü değişkeni `t` (görev nesnesi), küresel `t(...)` çeviri fonksiyonunu gölgelediği (shadowing) için JavaScript `TypeError: t is not a function` hatası fırlatıyor ve ilk görevde döngü tamamen kırılarak panoya hiçbir kart eklenemiyordu.
+
+### 40.2. Gerçekleştirilen Düzeltmeler
+1. **Döngü Değişkeni İzolasyonu (`src/public/app.js`):**
+   - `renderBoard()` içerisindeki döngü parametresi `t` yerine `task` olarak yeniden adlandırıldı.
+   - Böylece küresel dil çeviri fonksiyonu `t('label_unassigned')` ve `t('label_due')` hatasız şekilde çalışır hale getirildi.
+2. **Atanan Personel ve İzin Kontrolü Düzeltmesi:**
+   - `assignee` ataması `task.assignee_id ? state.personnelList.find(...) : null` şeklinde düzeltilerek atanmamış görevlerin doğru şekilde "Atanmamış" etiketi alması sağlandı.
+3. **Doğrulama ve Test:**
+   - 33/33 kabul testi başarıyla tamamlandı.
+   - Proje seçiciden seçilen şirket projeleri ve `👤 Kişisel To-Do'larım` görevleri Kanban panosunda canlı olarak görüntülendi.
+
+
 
 
 
