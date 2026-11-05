@@ -556,7 +556,33 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
 
 ---
 
-## 36. SABİT SOL KENAR ÇUBUĞU (SIDEBAR), ALT PROFİL KARTI VE ÇOKLU CİHAZ (DESKTOP/LAPTOP/TABLET/MOBİL) DÜZENLEMESİ (05.11.2026)
+## 37. ÇOKLU DİL DESTEĞİNE (I18N) UYUMLU DİNAMİK TARİH VE ZAMAN BİÇİMLENDİRMESİ (05.11.2026)
+
+### 37.1. Kullanıcı Talebi & Problem Tespiti
+- **Problem:** Projeler kartlarında ("Projeler" görünümü), Gantt zaman çizelgesi çubuklarında, görev detay çekmecesinde ve raporlama ekranlarında tarihler sabit ISO formatında (`2026-11-09 ➔ 2026-11-13`) veya sabit Türkçe yerelinde gösterilmekteydi.
+- **Kullanıcı Talebi:** Tarih formatının seçilen dile (Türkçe, İngilizce, Almanca) göre tüm projede otomatik ve tutarlı olarak biçimlendirilmesi (Türkçe'de `GG.AA.YYYY`, İngilizce'de `GG/AA/YYYY`, Almanca'da `GG.AA.YYYY`).
+
+### 37.2. Gerçekleştirilen Mimari & Arayüz Geliştirmeleri
+1. **Dinamik Dil ve Tarih Biçimlendiricisi (`formatDate`, `formatDateTime`, `formatTime` - `src/public/app.js`):**
+   - UTC/Saat dilimi kaymalarını önleyen sağlam ISO ayrıştırma mantığı ile evrensel tarih biçimlendirici oluşturuldu:
+     - **Türkçe (`tr`):** `GG.AA.YYYY` (örn: `09.11.2026`), `GG.AA.YYYY SS:dd`
+     - **Almanca (`de`):** `GG.AA.YYYY` (örn: `09.11.2026`), `GG.AA.YYYY, SS:dd`
+     - **İngilizce (`en`):** `GG/AA/YYYY` (örn: `09/11/2026`), `GG/AA/YYYY SS:dd`
+   - `formatDateTR` ve `formatDateTimeTR` çağrıları dinamik `formatDate` ve `formatDateTime` rotasına bağlandı.
+2. **Proje Genelinde Tarihlerin Entegrasyonu:**
+   - **Projeler Sayfası (`renderProjectsGrid`):** Kartlardaki `🗓️ Güncel: 09.11.2026 ➔ 13.11.2026` ve ilk plan ipucu metinleri seçili dile uyarlandı.
+   - **Görevlerim Sayfası (`renderMyTasks`):** Vade ve gecikme tarihleri seçili dile uyarlandı.
+   - **Zaman Çizelgesi (Gantt) (`renderTimeline` & `calculateGanttScale`):** Çubuklar üzerindeki tarihler (`04.11.2026 - 10.11.2026`), sol tablodaki tarih aralıkları ve Gantt zaman çizelgesi üst başlığındaki ay/gün isimleri seçili dile uyarlandı.
+   - **Görev Detay Çekmecesi (`openTaskDrawer`):** Başlangıç/bitiş tarihleri, ilk plan karşılaştırması ve plan revizyon geçmişi dinamik tarihlerle güncellendi; form girdi alanları için ISO standardı korundu.
+   - **Proje Yönetim Modalı (`openProjectManageModal`):** İlk plan (baz) ve güncel plan tarih karşılaştırması ile plan revizyon logları biçimlendirildi.
+   - **Gantt Canlı Hover Kartı (`showGanttTaskHoverPopup`):** Görev zaman planı ve atama zamanı dinamik tarih/saat fonksiyonlarıyla bağlandı.
+   - **Bildirimler, Raporlar ve Yedekleme Logları:** Sabit `tr-TR` kodlamaları kaldırılarak `formatDateTime` ve `formatTime` ile standartlaştırıldı.
+3. **Anında Canlı Yenileme (`setLanguage`):**
+   - Dil seçiciden (`TR`, `EN`, `DE`) dil değiştirildiğinde, aktif sayfa (Projeler, Gantt, Kanban, Görevlerim vb.) anında yeniden çizilerek tüm tarihlerin ve etiketlerin anlık olarak yeni dilde güncellenmesi sağlandı.
+4. **Test ve Doğrulama:**
+   - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
+   - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
+
 
 ### 36.1. Kullanıcı Talebi & Problem Tespiti
 - **Problem:** "Görevlerim" sayfasında çok sayıda görev listelendiğinde ve kullanıcı mouse tekerleğiyle sayfayı aşağı kaydırdığında, tüm sayfa gövdesi (`body`) kaydığı için sol kenar çubuğunun (Sidebar) üst kısmı yukarı doğru kayboluyor, sol altta yer alan profil ("Sistem Yöneticisi"), dil seçici ve tema düğmesi ise ekranın ortasında havada asılı kalıp altı boşluk oluyordu.

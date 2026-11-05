@@ -67,7 +67,20 @@ const I18N = {
     zoom_week: 'Haftalık',
     zoom_month: 'Aylık',
     zoom_year: 'Yıllık',
-    global_search_placeholder: 'Görev, açıklama veya personel ara... (Ctrl+K)'
+    global_search_placeholder: 'Görev, açıklama veya personel ara... (Ctrl+K)',
+    label_current: 'Güncel',
+    label_initial_plan: 'İlk Plan',
+    label_revised: 'Revize Edildi',
+    label_original_plan: 'Orijinal Plan',
+    label_overdue: 'Gecikti',
+    label_on_track: 'Takvimde',
+    label_tasks: 'Görev',
+    label_completion: 'Tamamlanma',
+    label_open_tasks: 'Görevleri Aç',
+    label_team_and_plan: 'Ekip & Plan',
+    label_active_project: 'Aktif Proje',
+    label_unassigned: 'Atanmamış',
+    label_due: 'Vade'
   },
   en: {
     nav_my_tasks: 'My Tasks',
@@ -94,7 +107,20 @@ const I18N = {
     zoom_week: 'Weekly',
     zoom_month: 'Monthly',
     zoom_year: 'Yearly',
-    global_search_placeholder: 'Search tasks by title, description, or assignee... (Ctrl+K)'
+    global_search_placeholder: 'Search tasks by title, description, or assignee... (Ctrl+K)',
+    label_current: 'Current',
+    label_initial_plan: 'Initial Plan',
+    label_revised: 'Revised',
+    label_original_plan: 'Original Plan',
+    label_overdue: 'Overdue',
+    label_on_track: 'On Track',
+    label_tasks: 'Tasks',
+    label_completion: 'Completion',
+    label_open_tasks: 'Open Tasks',
+    label_team_and_plan: 'Team & Plan',
+    label_active_project: 'Active Project',
+    label_unassigned: 'Unassigned',
+    label_due: 'Due'
   },
   de: {
     nav_my_tasks: 'Meine Aufgaben',
@@ -121,7 +147,20 @@ const I18N = {
     zoom_week: 'Wöchentlich',
     zoom_month: 'Monatlich',
     zoom_year: 'Jährlich',
-    global_search_placeholder: 'Aufgaben, Beschreibung oder Personal suchen... (Ctrl+K)'
+    global_search_placeholder: 'Aufgaben, Beschreibung oder Personal suchen... (Ctrl+K)',
+    label_current: 'Aktuell',
+    label_initial_plan: 'Ursprünglicher Plan',
+    label_revised: 'Überarbeitet',
+    label_original_plan: 'Originalplan',
+    label_overdue: 'Überfällig',
+    label_on_track: 'Im Zeitplan',
+    label_tasks: 'Aufgaben',
+    label_completion: 'Fertigstellung',
+    label_open_tasks: 'Aufgaben öffnen',
+    label_team_and_plan: 'Team & Plan',
+    label_active_project: 'Aktives Projekt',
+    label_unassigned: 'Nicht zugewiesen',
+    label_due: 'Fällig'
   }
 };
 
@@ -130,7 +169,11 @@ let currentLang = 'tr';
 function setLanguage(lang) {
   if (!I18N[lang]) lang = 'tr';
   currentLang = lang;
-  document.getElementById('langSelect').value = lang;
+  state.currentLang = lang;
+  const langSelect = document.getElementById('langSelect');
+  if (langSelect) langSelect.value = lang;
+  const modalLangSelect = document.getElementById('modalLangSelect');
+  if (modalLangSelect) modalLangSelect.value = lang;
 
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.dataset.i18n;
@@ -145,6 +188,65 @@ function setLanguage(lang) {
       el.setAttribute('placeholder', I18N[lang][key]);
     }
   });
+
+  // Seçilen dile göre arayüzdeki tarihleri, etiketleri ve görünümleri anında yeniden çiz
+  if (state.currentUser) {
+    if (typeof renderProjectsGrid === 'function' && state.projects) renderProjectsGrid();
+    if (typeof renderMyTasks === 'function' && state.myTasks) renderMyTasks();
+    if (state.currentView === 'view-timeline' && typeof renderTimeline === 'function') renderTimeline();
+    if (state.currentView === 'view-board' && typeof renderBoard === 'function') renderBoard();
+  }
+}
+
+function t(key, fallback = '') {
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N['tr'] && I18N['tr'][key]) || fallback || key;
+}
+
+function formatDate(isoStr, lang = currentLang) {
+  if (!isoStr) return '';
+  const s = String(isoStr).trim();
+  const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const year = match[1];
+    const month = match[2];
+    const day = match[3];
+    if (lang === 'en') return `${day}/${month}/${year}`;
+    return `${day}.${month}.${year}`;
+  }
+  const d = (isoStr instanceof Date) ? isoStr : new Date(isoStr);
+  if (isNaN(d.getTime())) return String(isoStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  if (lang === 'en') return `${day}/${month}/${year}`;
+  return `${day}.${month}.${year}`;
+}
+
+function formatDateTime(isoStr, lang = currentLang) {
+  if (!isoStr) return '';
+  const d = (isoStr instanceof Date) ? isoStr : new Date(isoStr);
+  if (isNaN(d.getTime())) return String(isoStr);
+  const datePart = formatDate(d, lang);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${datePart} ${hours}:${minutes}`;
+}
+
+function formatTime(isoStr, lang = currentLang) {
+  if (!isoStr) return '';
+  const d = (isoStr instanceof Date) ? isoStr : new Date(isoStr);
+  if (isNaN(d.getTime())) return '';
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+function formatDateTR(isoStr) {
+  return formatDate(isoStr, currentLang);
+}
+
+function formatDateTimeTR(isoStr) {
+  return formatDateTime(isoStr, currentLang);
 }
 
 // Küresel Görev Arama Yardımcıları (Başlık, Açıklama ve Sorumlu Personel)
@@ -577,7 +679,7 @@ function renderNotifications() {
       ? '⚠️'
       : (n.type === 'DEPENDENCY_UNBLOCKED' || (n.title && n.title.includes('Hazır')) ? '🔓' : (n.type === 'DUE_REMINDER_24H' || (n.title && n.title.includes('Hatırlat')) ? '⏰' : '🔔'));
     const typeClass = (n.type === 'DELAY_EXPLANATION_REQUEST' || (n.title && n.title.includes('Gecik'))) ? 'notif-danger' : (n.type === 'DEPENDENCY_UNBLOCKED' || (n.title && n.title.includes('Hazır')) ? 'notif-success' : 'notif-info');
-    const timeStr = n.created_at ? new Date(n.created_at).toLocaleString('tr-TR') : '';
+    const timeStr = n.created_at ? formatDateTime(n.created_at) : '';
     return `
       <div class="notif-card-item ${typeClass} ${isUnread ? 'unread-item' : 'read-item'}" data-task-id="${n.link_task_id || ''}">
         <div class="notif-icon-col">${icon}</div>
@@ -843,10 +945,10 @@ function renderMyTasks() {
         ${depNote}
       </div>
       <div style="font-size:0.8rem; color:#94a3b8;">
-        👤 ${assignee ? assignee.name : 'Atanmamış'}
+        👤 ${assignee ? assignee.name : t('label_unassigned', 'Atanmamış')}
       </div>
       <div class="task-date-col ${isOverdue ? 'overdue' : ''}">
-        📅 ${task.current_due_date.slice(0, 10)} ${isOverdue ? '(Gecikti)' : ''}
+        📅 ${formatDate(task.current_due_date)} ${isOverdue ? `(${t('label_overdue', 'Gecikti')})` : ''}
       </div>
       <div>
         <span class="task-status-pill ${statusPillClass}">${statusText}</span>
@@ -889,15 +991,15 @@ function renderProjectsGrid() {
       <div class="proj-card-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
         <h4 class="proj-title">${escapeHtml(p.title)}</h4>
         <span class="nav-badge ${p.id === state.currentProjectId ? '' : 'neutral'}">
-          ${p.id === state.currentProjectId ? 'Aktif Proje' : `%${rate}`}
+          ${p.id === state.currentProjectId ? t('label_active_project', 'Aktif Proje') : `%${rate}`}
         </span>
       </div>
       <p class="proj-desc">${escapeHtml(p.description || 'Açıklama belirtilmemiş.')}</p>
       
       <div class="proj-progress-box">
         <div class="proj-progress-meta">
-          <span>Tamamlanma: <strong>%${rate}</strong> (${completedTasks}/${totalTasks} Görev)</span>
-          ${delayedTasks > 0 ? `<span class="proj-delayed-chip">⚠️ ${delayedTasks} Geciken</span>` : `<span style="color:#10b981; font-weight:600;">✓ Takvimde</span>`}
+          <span>${t('label_completion', 'Tamamlanma')}: <strong>%${rate}</strong> (${completedTasks}/${totalTasks} ${t('label_tasks', 'Görev')})</span>
+          ${delayedTasks > 0 ? `<span class="proj-delayed-chip">⚠️ ${delayedTasks} ${t('label_overdue', 'Geciken')}</span>` : `<span style="color:#10b981; font-weight:600;">✓ ${t('label_on_track', 'Takvimde')}</span>`}
         </div>
         <div class="proj-track">
           <div class="proj-fill" style="width: ${rate}%;"></div>
@@ -905,17 +1007,17 @@ function renderProjectsGrid() {
       </div>
 
       <div class="proj-dates-row">
-        <span>📅 Güncel: ${p.current_start_date.slice(0, 10)} → ${p.current_due_date.slice(0, 10)}</span>
-        ${isRevised ? `<span class="proj-revised-tag" title="İlk Plan: ${p.initial_start_date.slice(0, 10)} → ${p.initial_due_date.slice(0, 10)}">🔄 Revize Edildi</span>` : ''}
+        <span>📅 ${t('label_current', 'Güncel')}: ${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)}</span>
+        ${isRevised ? `<span class="proj-revised-tag" title="${t('label_initial_plan', 'İlk Plan')}: ${formatDate(p.initial_start_date)} → ${formatDate(p.initial_due_date)}">🔄 ${t('label_revised', 'Revize Edildi')}</span>` : ''}
       </div>
 
       <div class="proj-card-actions" style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border-subtle);">
         <button type="button" class="action-btn secondary-btn sm-btn btn-open-project" data-id="${p.id}">
-          📋 Görevleri Aç
+          📋 ${t('label_open_tasks', 'Görevleri Aç')}
         </button>
         ${p.is_manager ? `
           <button type="button" class="action-btn outline-btn sm-btn btn-manage-project" data-id="${p.id}">
-            ⚙️ Ekip & Plan ${p.pending_visibility_requests > 0 ? `<span class="nav-badge" style="margin-left:4px;">${p.pending_visibility_requests}</span>` : ''}
+            ⚙️ ${t('label_team_and_plan', 'Ekip & Plan')} ${p.pending_visibility_requests > 0 ? `<span class="nav-badge" style="margin-left:4px;">${p.pending_visibility_requests}</span>` : ''}
           </button>
         ` : (!p.is_full_viewer ? `
           <button type="button" class="action-btn outline-btn sm-btn btn-req-visibility" data-id="${p.id}">
@@ -947,27 +1049,6 @@ function renderProjectsGrid() {
 
     container.appendChild(card);
   });
-}
-
-function formatDateTR(isoStr) {
-  if (!isoStr) return '';
-  const d = new Date(isoStr);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${day}.${month}.${year}`;
-}
-
-function formatDateTimeTR(isoStr) {
-  if (!isoStr) return '';
-  const d = new Date(isoStr);
-  if (isNaN(d.getTime())) return String(isoStr);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${day}.${month}.${year} ${hours}:${minutes}`;
 }
 
 // 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE) - OPENPROJECT MODELİ BÖLÜNMÜŞ (SPLIT) EKRAN & ÇOKLU ZOOM (GÜNLÜK, HAFTALIK, AYLIK, YILLIK)
@@ -1088,9 +1169,24 @@ function setupGanttInteractions() {
 // Zaman Ölçeği Hesaplayıcı (Günlük, Haftalık, Aylık, Yıllık)
 function calculateGanttScale(minTime, maxTime, zoomLevel) {
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  const monthNamesTR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-  const monthShortNamesTR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-  const dayNamesShortTR = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+  const monthNamesByLang = {
+    tr: ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'],
+    en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+    de: ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+  };
+  const monthShortNamesByLang = {
+    tr: ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'],
+    en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    de: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+  };
+  const dayNamesShortByLang = {
+    tr: ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'],
+    en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    de: ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+  };
+  const monthNamesTR = monthNamesByLang[currentLang] || monthNamesByLang['tr'];
+  const monthShortNamesTR = monthShortNamesByLang[currentLang] || monthShortNamesByLang['tr'];
+  const dayNamesShortTR = dayNamesShortByLang[currentLang] || dayNamesShortByLang['tr'];
   const now = new Date();
   const todayTime = now.getTime();
 
@@ -1649,7 +1745,7 @@ function renderTimeline() {
         </div>
       </div>
       <div class="g-col g-col-dates">
-        ${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}
+        ${formatDate(t.current_start_date)} - ${formatDate(t.current_due_date)}
       </div>
     `;
 
@@ -1817,7 +1913,7 @@ function renderTimeline() {
           </div>
           <div class="pill-row-bottom">
             <span class="pill-progress">${prog}%</span>
-            <span class="pill-dates">📅 ${formatDateTR(t.current_start_date)} - ${formatDateTR(t.current_due_date)}</span>
+            <span class="pill-dates">📅 ${formatDate(t.current_start_date)} - ${formatDate(t.current_due_date)}</span>
           </div>
         </div>
       `;
@@ -1991,7 +2087,7 @@ function renderBoard() {
     const priorityClass = t.priority === 'HIGH' ? 'high' : '';
 
     const initials = assignee ? assignee.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
-    const dueDateText = t.current_due_date ? t.current_due_date.slice(0, 10).split('-').reverse().join('.') : '';
+    const dueDateText = t.current_due_date ? formatDate(t.current_due_date) : '';
     const progressVal = typeof t.progress === 'number' ? t.progress : (t.work_status === 'COMPLETED' ? 100 : 0);
     const blockingSucc = getBlockingSuccessorSummary(t);
 
@@ -2016,12 +2112,12 @@ function renderBoard() {
         <div class="board-card-progress-fill ${t.work_status === 'COMPLETED' ? 'fill-done' : ''}" style="width: ${progressVal}%;"></div>
       </div>
       <div class="board-card-footer">
-        <div class="board-card-assignee" title="${assignee ? assignee.name : 'Atanmamış'}">
+        <div class="board-card-assignee" title="${assignee ? assignee.name : t('label_unassigned', 'Atanmamış')}">
           <div class="assignee-avatar-sm">${initials}</div>
-          <span class="assignee-name-sm" style="font-size:0.75rem; font-weight:500; color:#334155;">${assignee ? assignee.name : 'Atanmamış'}</span>
+          <span class="assignee-name-sm" style="font-size:0.75rem; font-weight:500; color:#334155;">${assignee ? assignee.name : t('label_unassigned', 'Atanmamış')}</span>
         </div>
         <div class="board-card-due ${isOverdue ? 'overdue' : ''}">
-          <span title="Bitiş Tarihi">📅 ${dueDateText}</span>
+          <span title="${t('label_due', 'Bitiş Tarihi')}">📅 ${dueDateText}</span>
           <span class="board-card-pct">%${progressVal}</span>
         </div>
       </div>
@@ -2299,18 +2395,23 @@ async function openTaskDrawer(taskId) {
     }
 
     // Tarihler, İlk Plan & Plan Revizyonu
-    const curStart = task.current_start_date ? task.current_start_date.slice(0, 10) : '-';
-    const curDue = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
-    const initStart = task.initial_start_date ? task.initial_start_date.slice(0, 10) : curStart;
-    const initDue = task.initial_due_date ? task.initial_due_date.slice(0, 10) : curDue;
+    const rawCurStart = task.current_start_date ? task.current_start_date.slice(0, 10) : '';
+    const rawCurDue = task.current_due_date ? task.current_due_date.slice(0, 10) : '';
+    const rawInitStart = task.initial_start_date ? task.initial_start_date.slice(0, 10) : rawCurStart;
+    const rawInitDue = task.initial_due_date ? task.initial_due_date.slice(0, 10) : rawCurDue;
+
+    const curStart = task.current_start_date ? formatDate(task.current_start_date) : '-';
+    const curDue = task.current_due_date ? formatDate(task.current_due_date) : '-';
+    const initStart = task.initial_start_date ? formatDate(task.initial_start_date) : curStart;
+    const initDue = task.initial_due_date ? formatDate(task.initial_due_date) : curDue;
 
     document.getElementById('wpStartDate').textContent = curStart;
     document.getElementById('wpDueDate').textContent = curDue;
 
     const initDatesEl = document.getElementById('wpInitialDates');
     if (initDatesEl) {
-      const isRevised = initStart !== curStart || initDue !== curDue;
-      initDatesEl.innerHTML = `📌 <strong>İlk Plan (Baz):</strong> ${initStart} → ${initDue} ${isRevised ? '<span class="wp-rev-pill">Revize Edildi</span>' : '<span style="color:#10b981;">(Orijinal Plan)</span>'}`;
+      const isRevised = rawInitStart !== rawCurStart || rawInitDue !== rawCurDue;
+      initDatesEl.innerHTML = `📌 <strong>${t('label_initial_plan', 'İlk Plan (Baz)')}:</strong> ${initStart} → ${initDue} ${isRevised ? `<span class="wp-rev-pill">${t('label_revised', 'Revize Edildi')}</span>` : `<span style="color:#10b981;">(${t('label_original_plan', 'Orijinal Plan')})</span>`}`;
     }
 
     // Kişisel Takvim Butonları (.ics, Outlook Web, Google Calendar)
@@ -2338,8 +2439,8 @@ async function openTaskDrawer(taskId) {
     const newStartInput = document.getElementById('wpNewStart');
     const newDueInput = document.getElementById('wpNewDue');
     const planReasonInput = document.getElementById('wpPlanReason');
-    if (newStartInput) newStartInput.value = curStart !== '-' ? curStart : '';
-    if (newDueInput) newDueInput.value = curDue !== '-' ? curDue : '';
+    if (newStartInput) newStartInput.value = rawCurStart;
+    if (newDueInput) newDueInput.value = rawCurDue;
     if (planReasonInput) planReasonInput.value = '';
 
     const togglePlanBtn = document.getElementById('wpTogglePlanRevBtn');
@@ -2354,7 +2455,7 @@ async function openTaskDrawer(taskId) {
       if (plan_changes && plan_changes.length > 0) {
         planHistoryEl.innerHTML = plan_changes.map(pc => `
           <div class="wp-plan-history-item">
-            <div>🔄 <strong>Plan Revizyonu:</strong> ${pc.old_due_date.slice(0, 10)} → <strong>${pc.new_due_date.slice(0, 10)}</strong></div>
+            <div>🔄 <strong>${t('label_revised', 'Plan Revizyonu')}:</strong> ${formatDate(pc.old_due_date)} → <strong>${formatDate(pc.new_due_date)}</strong></div>
             <div style="color:var(--text-secondary); margin-top:2px;">Neden: ${escapeHtml(pc.reason || '-')}</div>
           </div>
         `).join('');
@@ -2426,7 +2527,7 @@ async function openTaskDrawer(taskId) {
         const isSystem = d.explanation_source === 'SYSTEM' || d.explanation_type === 'SYSTEM_DEPENDENCY_BLOCK';
         const text = d.explanation_text || d.reason || d.delay_reason || 'Gecikme kaydedildi.';
         const timestamp = d.reported_at || d.detected_at || d.logged_at;
-        const timeText = timestamp ? new Date(timestamp).toLocaleString('tr-TR') : '';
+        const timeText = timestamp ? formatDateTime(timestamp) : '';
         return `
           <div class="op-activity-item ${isSystem ? 'system' : ''}">
             <div><strong>${isSystem ? '⚙️ Sistem Tespiti' : '👤 Personel Açıklaması'}:</strong> ${escapeHtml(text)}</div>
@@ -3834,8 +3935,8 @@ function parseAndPreviewCsv(csvText) {
         <td><span class="op-type-badge ${type.toLowerCase()}">${type === 'MILESTONE' ? '🏁 Taş' : (type === 'BUG' ? '🐞 Hata' : '📌 Görev')}</span></td>
         <td><span class="op-priority-badge ${priority === 'HIGH' ? 'high' : ''}">${priority === 'HIGH' ? '🔥 Yüksek' : 'Normal'}</span></td>
         <td>${escapeHtml(assigneeStr || 'Atanmamış')}</td>
-        <td>${taskObj.initial_start_date.slice(0, 10)}</td>
-        <td>${taskObj.initial_due_date.slice(0, 10)}</td>
+        <td>${formatDate(taskObj.initial_start_date)}</td>
+        <td>${formatDate(taskObj.initial_due_date)}</td>
         <td><span class="badge-status-ready">✅ Hazır</span></td>
       `;
       tbody.appendChild(tr);
@@ -4402,7 +4503,7 @@ function renderSavedReportLayoutsMenu() {
   listEl.innerHTML = savedCustomReportLayouts.map(layout => `
     <button type="button" class="template-item saved-layout-item" data-layout-id="${layout.id}">
       <strong>📌 ${escapeHtml(layout.name)}</strong>
-      <span>${(layout.widgets || []).length} bileşen • ${new Date(layout.created_at).toLocaleDateString('tr-TR')}</span>
+      <span>${(layout.widgets || []).length} bileşen • ${formatDate(layout.created_at)}</span>
     </button>
   `).join('');
 
@@ -4502,21 +4603,23 @@ async function openProjectManageModal(projectId) {
     }
 
     // Plan Karşılaştırma ve Revizyon Formu
-    const initStart = project.initial_start_date.slice(0, 10);
-    const initDue = project.initial_due_date.slice(0, 10);
-    const curStart = project.current_start_date.slice(0, 10);
-    const curDue = project.current_due_date.slice(0, 10);
+    const rawCurStart = project.current_start_date ? project.current_start_date.slice(0, 10) : '';
+    const rawCurDue = project.current_due_date ? project.current_due_date.slice(0, 10) : '';
+    const initStart = formatDate(project.initial_start_date);
+    const initDue = formatDate(project.initial_due_date);
+    const curStart = formatDate(project.current_start_date);
+    const curDue = formatDate(project.current_due_date);
 
     const compareBar = document.getElementById('pmPlanCompareBar');
     if (compareBar) {
       compareBar.innerHTML = `
-        <div>📌 <strong>İlk Plan (Baz):</strong> ${initStart} → ${initDue}</div>
-        <div>📅 <strong>Güncel Plan:</strong> ${curStart} → ${curDue}</div>
+        <div>📌 <strong>${t('label_initial_plan', 'İlk Plan (Baz)')}:</strong> ${initStart} → ${initDue}</div>
+        <div>📅 <strong>${t('label_current', 'Güncel Plan')}:</strong> ${curStart} → ${curDue}</div>
       `;
     }
 
-    document.getElementById('pmNewStart').value = curStart;
-    document.getElementById('pmNewDue').value = curDue;
+    document.getElementById('pmNewStart').value = rawCurStart;
+    document.getElementById('pmNewDue').value = rawCurDue;
     document.getElementById('pmPlanReason').value = '';
 
     const histEl = document.getElementById('pmPlanHistoryList');
@@ -4524,7 +4627,7 @@ async function openProjectManageModal(projectId) {
       if (planChanges && planChanges.length > 0) {
         histEl.innerHTML = planChanges.map(pc => `
           <div class="wp-plan-history-item">
-            <div>🔄 <strong>${pc.old_due_date.slice(0, 10)} → ${pc.new_due_date.slice(0, 10)}</strong> (${new Date(pc.changed_at).toLocaleDateString('tr-TR')})</div>
+            <div>🔄 <strong>${formatDate(pc.old_due_date)} → ${formatDate(pc.new_due_date)}</strong> (${formatDate(pc.changed_at)})</div>
             <div style="color:var(--text-secondary);">Gerekçe: ${escapeHtml(pc.reason)}</div>
           </div>
         `).join('');
@@ -4983,7 +5086,7 @@ function renderWidgetContent(widget, data) {
                 <div class="critical-task-title">${t.title}</div>
                 <div class="critical-task-meta">
                   <span>👤 ${t.assignee_name}</span>
-                  <span>📅 Vade: ${t.current_due_date.slice(0, 10)}</span>
+                  <span>📅 Vade: ${formatDate(t.current_due_date)}</span>
                 </div>
               </div>
               <span class="op-priority-badge high">Gecikti</span>
@@ -5024,7 +5127,7 @@ function renderWidgetContent(widget, data) {
             <div class="explanation-entry">
               <div class="explanation-entry-header">
                 <strong>📌 ${e.task_title}</strong>
-                <span>${new Date(e.detected_at).toLocaleString('tr-TR')} (${e.reported_by})</span>
+                <span>${formatDateTime(e.detected_at)} (${e.reported_by})</span>
               </div>
               <div class="explanation-text">${e.explanation_text || e.reason || 'Durum gerekçesi girildi.'}</div>
             </div>
@@ -5045,7 +5148,7 @@ function renderWidgetContent(widget, data) {
               <div>
                 <div class="critical-task-title">🏁 ${m.title}</div>
                 <div class="critical-task-meta">
-                  <span>Hedef: ${m.current_due_date.slice(0, 10)}</span>
+                  <span>Hedef: ${formatDate(m.current_due_date)}</span>
                   <span>Sorumlu: ${m.assignee_name}</span>
                 </div>
               </div>
@@ -5146,8 +5249,7 @@ function renderSingleTodoCard(item) {
 
   let dateDisplay = '';
   if (item.due_date) {
-    const d = new Date(item.due_date);
-    const dateFormatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const dateFormatted = formatDate(item.due_date);
     dateDisplay = `<span class="ms-due-pill ${isOverdue ? 'overdue' : ''}">📅 ${isOverdue ? 'Süresi geçmiş, ' : ''}${dateFormatted}</span>`;
   }
 
@@ -5423,7 +5525,7 @@ function renderSmtpConfigForm(cfg, dbStatus) {
     const encText = cfg.is_encrypted_at_rest
       ? ' • 🔐 Şifre AES-256-GCM Kasasında Kalıcı Kayıtlı'
       : '';
-    hintEl.textContent = `Son güncelleme: ${new Date(cfg.updated_at).toLocaleString('tr-TR')}${encText}`;
+    hintEl.textContent = `Son güncelleme: ${formatDateTime(cfg.updated_at)}${encText}`;
   }
 
   const pgBadge = document.getElementById('pgVaultStatusBadge');
@@ -5506,7 +5608,7 @@ function renderScheduledReportsList() {
   container.innerHTML = jobs.map(job => {
     const proj = state.projects.find(p => p.id === job.project_id);
     const scopeName = proj ? proj.title : 'Tüm Projeler';
-    const lastSent = job.last_sent_at ? new Date(job.last_sent_at).toLocaleString('tr-TR') : 'Henüz gönderilmedi';
+    const lastSent = job.last_sent_at ? formatDateTime(job.last_sent_at) : 'Henüz gönderilmedi';
 
     return `
       <div class="sched-job-row">
@@ -5609,7 +5711,7 @@ function renderEmailOutboxList() {
     const modeLabel = item.delivery_mode === 'SMTP_LIVE'
       ? (item.status === 'SENT' ? '🟢 SMTP Gönderildi' : '🔴 SMTP Hatası')
       : '🟡 Yerel Outbox';
-    const timeStr = new Date(item.sent_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = formatTime(item.sent_at);
 
     return `
       <div class="outbox-mail-item ${isSelected ? 'active' : ''}" data-id="${item.id}">
@@ -6282,8 +6384,7 @@ async function loadBackupDashboard() {
     // KPI Kartları
     if (backups.length > 0) {
       const last = backups[0];
-      const d = new Date(last.created_at);
-      document.getElementById('kpiLastBackupTime').textContent = `${d.toLocaleDateString('tr-TR')} ${d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
+      document.getElementById('kpiLastBackupTime').textContent = formatDateTime(last.created_at);
 
       const typeLabels = {
         'SCHEDULED_DAILY': '📅 Günlük Otomatik',
@@ -6376,8 +6477,7 @@ function renderBackupTable(backups) {
   };
 
   tbody.innerHTML = backups.map(b => {
-    const d = new Date(b.created_at);
-    const dateFormatted = `${d.toLocaleDateString('tr-TR')} ${d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
+    const dateFormatted = formatDateTime(b.created_at);
     const tc = typeConfig[b.type] || { label: b.type, bg: '#f1f5f9', color: '#475569', border: '#cbd5e1', icon: '📦' };
 
     const shaShort = b.sha256 ? `${b.sha256.substring(0, 8)}...` : 'n/a';
@@ -6441,7 +6541,7 @@ window.openRestoreProjectModal = async function (backupId) {
     document.getElementById('restoreBackupId').value = backupId;
     document.getElementById('restoreModalBackupInfo').innerHTML = `
       <div>📦 <strong>Seçili Yedek:</strong> ${backup.filename}</div>
-      <div style="color:var(--text-secondary); margin-top:2px;">Tarih: ${new Date(backup.created_at).toLocaleString('tr-TR')} | Not: ${backup.description || '-'}</div>
+      <div style="color:var(--text-secondary); margin-top:2px;">Tarih: ${formatDateTime(backup.created_at)} | Not: ${backup.description || '-'}</div>
     `;
 
     const select = document.getElementById('restoreProjectSelect');
