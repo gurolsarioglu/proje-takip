@@ -2280,6 +2280,20 @@ html, body {
   outline: none;
 }
 
+.styled-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+#wpProgressNoteInput {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 58px;
+  resize: vertical;
+  display: block;
+}
+
 .styled-input:focus, .styled-textarea:focus, .styled-select:focus {
   border-color: var(--border-active);
 }
