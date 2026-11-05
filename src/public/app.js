@@ -1190,6 +1190,29 @@ function setupGanttInteractions() {
   }
 }
 
+// Görev Barı İçerik Genişliği Hesaplayıcı (Açıklama ve rozetlere göre dinamik genişleme)
+function getTaskContentWidth(task) {
+  let displayTitle = (task.title || '').trim();
+  if (task.workflow_step && displayTitle.startsWith(`[${task.workflow_step}]`)) {
+    displayTitle = displayTitle.substring(`[${task.workflow_step}]`.length).trim();
+  }
+  
+  // İkon: ~18px + 6px boşluk
+  let topRowWidth = 24;
+  if (task.workflow_step) {
+    // İş adımı rozeti: font-size 0.63rem, padding 1px 6px, border, ~7.2px karakter başı
+    topRowWidth += Math.ceil(task.workflow_step.length * 7.5) + 20;
+  }
+  // Görev Başlığı: font-size 0.74rem bold, ~7.6px karakter başı
+  topRowWidth += Math.ceil(displayTitle.length * 7.6) + 28; // sağ dolgu dahil
+
+  // Alt satır: İlerleme yüzdesi (%100 ~46px) + 📅 gg.aa.yyyy - gg.aa.yyyy (~195px) + boşluklar
+  const bottomRowWidth = 265;
+
+  const contentNeeded = Math.max(topRowWidth, bottomRowWidth);
+  return Math.max(260, Math.ceil(contentNeeded));
+}
+
 // Zaman Ölçeği Hesaplayıcı (Günlük, Haftalık, Aylık, Yıllık)
 function calculateGanttScale(minTime, maxTime, zoomLevel) {
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -1223,16 +1246,16 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
 
   if (zoomLevel === 'day') {
     // 1. GÜNLÜK GÖRÜNÜM
-    const COL_WIDTH = 44;
+    const COL_WIDTH = 48;
     const startDate = new Date(minTime);
     startDate.setDate(startDate.getDate() - 2);
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = new Date(maxTime);
-    endDate.setDate(endDate.getDate() + 6);
+    endDate.setDate(endDate.getDate() + 25);
     endDate.setHours(0, 0, 0, 0);
 
-    const totalDays = Math.max(16, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
+    const totalDays = Math.max(28, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
     timelineWidth = totalDays * COL_WIDTH;
 
     const days = [];
@@ -1289,7 +1312,7 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     };
   } else if (zoomLevel === 'week') {
     // 2. HAFTALIK GÖRÜNÜM
-    const COL_WIDTH = 68;
+    const COL_WIDTH = 90;
     const MS_PER_WEEK = 7 * MS_PER_DAY;
 
     const startDate = new Date(minTime);
@@ -1299,10 +1322,10 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
 
     const endDate = new Date(maxTime);
     const dayEnd = (endDate.getDay() + 6) % 7;
-    endDate.setDate(endDate.getDate() + (6 - dayEnd) + 14);
+    endDate.setDate(endDate.getDate() + (6 - dayEnd) + 42);
     endDate.setHours(23, 59, 59, 999);
 
-    const totalWeeks = Math.max(8, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_WEEK));
+    const totalWeeks = Math.max(12, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_WEEK));
     timelineWidth = totalWeeks * COL_WIDTH;
 
     const weeks = [];
@@ -1354,14 +1377,14 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     }
   } else if (zoomLevel === 'month') {
     // 3. AYLIK GÖRÜNÜM
-    const COL_WIDTH = 84;
+    const COL_WIDTH = 120;
     const startD = new Date(minTime);
     startD.setMonth(startD.getMonth() - 1);
     startD.setDate(1);
     startD.setHours(0, 0, 0, 0);
 
     const endD = new Date(maxTime);
-    endD.setMonth(endD.getMonth() + 3);
+    endD.setMonth(endD.getMonth() + 6);
     endD.setDate(0);
     endD.setHours(23, 59, 59, 999);
 
@@ -1371,7 +1394,7 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     const endMonth = endD.getMonth();
 
     const totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
-    timelineWidth = Math.max(totalMonths, 8) * COL_WIDTH;
+    timelineWidth = Math.max(totalMonths, 12) * COL_WIDTH;
 
     const months = [];
     const yearSpans = [];
@@ -1428,12 +1451,12 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     }
   } else if (zoomLevel === 'year') {
     // 4. YILLIK GÖRÜNÜM (Çeyrekler Q1..Q4)
-    const COL_WIDTH = 76;
+    const COL_WIDTH = 110;
     const minD = new Date(minTime);
     const maxD = new Date(maxTime);
 
     const startYear = minD.getFullYear() - 1;
-    const endYear = maxD.getFullYear() + 1;
+    const endYear = maxD.getFullYear() + 2;
     const totalYears = (endYear - startYear) + 1;
     const totalQuarters = totalYears * 4;
     timelineWidth = totalQuarters * COL_WIDTH;
@@ -1498,7 +1521,7 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     gridLinesHtml,
     todayOffsetPx,
     dateToPx,
-    colWidth: (zoomLevel === 'day' ? 44 : (zoomLevel === 'week' ? 68 : (zoomLevel === 'month' ? 84 : 76)))
+    colWidth: (zoomLevel === 'day' ? 48 : (zoomLevel === 'week' ? 90 : (zoomLevel === 'month' ? 120 : 110)))
   };
 }
 
@@ -1758,12 +1781,17 @@ function renderTimeline() {
     const assigneeInitials = assignee ? assignee.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : '?';
     const assigneeName = assignee ? assignee.name : 'Atanmadı';
 
+    let tableTitle = (t.title || '').trim();
+    if (t.workflow_step && tableTitle.startsWith(`[${t.workflow_step}]`)) {
+      tableTitle = tableTitle.substring(`[${t.workflow_step}]`.length).trim();
+    }
+
     row.innerHTML = `
       <div class="g-col g-col-id">#${shortId}</div>
       <div class="g-col g-col-title">
         <span class="g-type-icon">${typeIcon}</span>
         ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 5px; border-radius:3px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; margin-right:4px;">${escapeHtml(t.workflow_step)}</span>` : ''}
-        <span class="g-title-text">${t.title}</span>
+        <span class="g-title-text">${escapeHtml(tableTitle)}</span>
         <span class="g-progress-pill">${prog}%</span>
       </div>
       <div class="g-col g-col-status">
@@ -1805,14 +1833,64 @@ function renderTimeline() {
   });
 
   // 4. SAĞ PANELİ DOLDUR (Zaman Çizelgesi Izgarası ve Çubukları)
+  // Tüm görevlerin genişlik ve sağ sınırını hesaplayarak timeline genişliğini dinamik uyarla
+  const taskLayouts = new Map();
+  let maxBarRight = scale.timelineWidth;
+
+  tasksToRender.forEach((t) => {
+    const s = t.current_start_date ? new Date(t.current_start_date) : new Date(t.created_at || Date.now());
+    const d = t.current_due_date ? new Date(t.current_due_date) : new Date(s.getTime() + 24 * 60 * 60 * 1000);
+    const tStart = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
+    const tDueEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
+
+    const leftPx = Math.round(scale.dateToPx(tStart));
+    const rightPx = Math.round(scale.dateToPx(tDueEnd));
+    const dateSpanPx = Math.max(scale.colWidth || 48, rightPx - leftPx);
+
+    if (t.type === 'MILESTONE') {
+      const mLeftPx = Math.round(scale.dateToPx(tStart + 12 * 60 * 60 * 1000));
+      taskLayouts.set(t.id, { leftPx: mLeftPx, widthPx: 32, isMilestone: true });
+      if (mLeftPx + 220 > maxBarRight) {
+        maxBarRight = mLeftPx + 220;
+      }
+    } else {
+      const durationDays = Math.max(1, Math.round((tDueEnd - tStart) / (24 * 60 * 60 * 1000)));
+      const contentWidth = getTaskContentWidth(t);
+
+      // Çoklu görünümde (gün, hafta, ay, yıl) sürelere göre orantılı genişleme
+      let durationExtraPx = 0;
+      if (ganttZoomLevel === 'day') {
+        durationExtraPx = durationDays > 1 ? (durationDays - 1) * 22 : 0;
+      } else if (ganttZoomLevel === 'week') {
+        const durationWeeks = durationDays / 7;
+        durationExtraPx = durationWeeks > 1 ? Math.round((durationWeeks - 1) * 36) : 0;
+      } else if (ganttZoomLevel === 'month') {
+        const durationMonths = durationDays / 30;
+        durationExtraPx = durationMonths > 1 ? Math.round((durationMonths - 1) * 50) : 0;
+      } else if (ganttZoomLevel === 'year') {
+        const durationQuarters = durationDays / 90;
+        durationExtraPx = durationQuarters > 1 ? Math.round((durationQuarters - 1) * 60) : 0;
+      }
+
+      const widthPx = Math.max(contentWidth + durationExtraPx, dateSpanPx);
+      taskLayouts.set(t.id, { leftPx, widthPx, isMilestone: false });
+
+      if (leftPx + widthPx + 120 > maxBarRight) {
+        maxBarRight = leftPx + widthPx + 120;
+      }
+    }
+  });
+
+  const effectiveTimelineWidth = Math.max(scale.timelineWidth, maxBarRight);
+
   const scrollWrap = document.createElement('div');
   scrollWrap.className = 'timeline-scroll-wrap';
-  scrollWrap.style.width = `${scale.timelineWidth}px`;
+  scrollWrap.style.width = `${effectiveTimelineWidth}px`;
 
   // Üst Başlık (Aylar/Yıllar + Günler/Haftalar/Aylar/Çeyrekler)
   const header = document.createElement('div');
   header.className = 'gantt-grid-header';
-  header.style.width = `${scale.timelineWidth}px`;
+  header.style.width = `${effectiveTimelineWidth}px`;
 
   // Üst Takvim Şeridi
   const topRow = document.createElement('div');
@@ -1832,12 +1910,12 @@ function renderTimeline() {
   const rowsContainer = document.createElement('div');
   rowsContainer.className = 'gantt-rows-container';
   rowsContainer.id = 'ganttRowsContainer';
-  rowsContainer.style.width = `${scale.timelineWidth}px`;
+  rowsContainer.style.width = `${effectiveTimelineWidth}px`;
 
   // Arka Plan Dikey Izgara Çizgileri
   const gridLines = document.createElement('div');
   gridLines.className = 'gantt-grid-lines';
-  gridLines.style.width = `${scale.timelineWidth}px`;
+  gridLines.style.width = `${effectiveTimelineWidth}px`;
   gridLines.innerHTML = scale.gridLinesHtml;
   rowsContainer.appendChild(gridLines);
 
@@ -1854,7 +1932,7 @@ function renderTimeline() {
   const svgOverlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svgOverlay.setAttribute('class', 'gantt-svg-overlay');
   svgOverlay.setAttribute('id', 'ganttSvgOverlay');
-  svgOverlay.setAttribute('width', scale.timelineWidth);
+  svgOverlay.setAttribute('width', effectiveTimelineWidth);
   svgOverlay.setAttribute('height', '100%');
   svgOverlay.innerHTML = `
     <defs>
@@ -1871,20 +1949,11 @@ function renderTimeline() {
     track.className = 'gantt-row-track';
     track.id = `gantt-track-${t.id}`;
     track.dataset.id = t.id;
-    track.style.width = `${scale.timelineWidth}px`;
+    track.style.width = `${effectiveTimelineWidth}px`;
 
-    const s = t.current_start_date ? new Date(t.current_start_date) : new Date(t.created_at || Date.now());
-    const d = t.current_due_date ? new Date(t.current_due_date) : new Date(s.getTime() + 24 * 60 * 60 * 1000);
-    const tStart = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
-    // Bitiş tarihi günün tamamını kapsayacak şekilde (bir sonraki günün 00:00:00'ına kadar) hesaplanır
-    const tDueEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
-
-    const leftPx = Math.round(scale.dateToPx(tStart));
-    const rightPx = Math.round(scale.dateToPx(tDueEnd));
-
-    // Çubuğun genişliği takvimdeki tarih aralığını (bitiş gününün sonuna kadar tam) kapsar
-    const colWidth = scale.colWidth || 44;
-    const widthPx = Math.max(colWidth, rightPx - leftPx);
+    const layout = taskLayouts.get(t.id) || { leftPx: 0, widthPx: 260, isMilestone: false };
+    const leftPx = layout.leftPx;
+    const widthPx = layout.widthPx;
 
     const barClass = {
       BLOCKED: 'bar-blocked',
@@ -1897,12 +1966,10 @@ function renderTimeline() {
 
     // KİLOMETRE TAŞI MI YOKSA NORMAL GÖREV Mİ?
     if (t.type === 'MILESTONE') {
-      const mLeftPx = Math.round(scale.dateToPx(tStart + 12 * 60 * 60 * 1000));
-
       const marker = document.createElement('div');
       marker.className = `gantt-milestone-marker ${t.work_status === 'COMPLETED' ? 'done' : ''}`;
       marker.id = `gantt-bar-${t.id}`;
-      marker.style.left = `${mLeftPx}px`;
+      marker.style.left = `${leftPx}px`;
       marker.dataset.id = t.id;
 
       marker.innerHTML = `
@@ -1914,7 +1981,7 @@ function renderTimeline() {
       marker.addEventListener('mouseleave', () => hideGanttTaskHoverPopup());
       track.appendChild(marker);
     } else {
-      // Normal Görev Barı (2 Satırlı, İş Adımı Etiketli ve Dinamik Font Boyutlandırmalı)
+      // Normal Görev Barı (2 Satırlı, İş Adımı Etiketli ve Dinamik Otomatik Genişleyen)
       const pill = document.createElement('div');
       pill.className = `gantt-pill-bar ${barClass}`;
       pill.id = `gantt-bar-${t.id}`;
@@ -1925,13 +1992,9 @@ function renderTimeline() {
       const typeIcon = t.type === 'BUG' ? '🐞' : '📌';
       const stepColor = t.workflow_step ? getStepColor(t.workflow_step) : '#8b5cf6';
 
-      // Dinamik Font Boyutlandırma (Metin uzunluğuna göre küçültme)
-      const combinedLength = (t.workflow_step ? t.workflow_step.length + 3 : 0) + (t.title ? t.title.length : 0);
-      let fontClass = '';
-      if (combinedLength > 36) {
-        fontClass = 'font-compact-xs';
-      } else if (combinedLength > 22) {
-        fontClass = 'font-compact-sm';
+      let displayTitle = (t.title || '').trim();
+      if (t.workflow_step && displayTitle.startsWith(`[${t.workflow_step}]`)) {
+        displayTitle = displayTitle.substring(`[${t.workflow_step}]`.length).trim();
       }
 
       pill.innerHTML = `
@@ -1940,7 +2003,7 @@ function renderTimeline() {
           <div class="pill-row-top">
             <span class="pill-icon">${typeIcon}</span>
             ${t.workflow_step ? `<span class="pill-step-tag" style="background:${stepColor};">${escapeHtml(t.workflow_step)}</span>` : ''}
-            <span class="pill-title ${fontClass}" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</span>
+            <span class="pill-title" title="${escapeHtml(t.title)}">${escapeHtml(displayTitle)}</span>
           </div>
           <div class="pill-row-bottom">
             <span class="pill-progress">${prog}%</span>

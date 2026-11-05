@@ -1044,9 +1044,9 @@ html, body {
 
 /* Sol: Görev / İş Paketi Tablo Paneli */
 .op-gantt-table-pane {
-  width: 460px;
-  min-width: 280px;
-  max-width: 700px;
+  width: 580px;
+  min-width: 340px;
+  max-width: 900px;
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -1092,11 +1092,11 @@ html, body {
   text-overflow: ellipsis;
 }
 
-.g-col-id { width: 36px; min-width: 36px; text-align: center; color: #94a3b8; }
+.g-col-id { width: 34px; min-width: 34px; flex-shrink: 0; text-align: center; color: #94a3b8; }
 .g-col-title { flex: 1; min-width: 140px; }
-.g-col-status { width: 105px; min-width: 105px; text-align: center; }
-.g-col-assignee { width: 110px; min-width: 110px; }
-.g-col-dates { width: 110px; min-width: 110px; font-family: var(--font-mono); font-size: 0.72rem; color: #64748b; }
+.g-col-status { width: 100px; min-width: 100px; flex-shrink: 0; text-align: center; }
+.g-col-assignee { width: 110px; min-width: 110px; flex-shrink: 0; }
+.g-col-dates { width: 180px; min-width: 180px; flex-shrink: 0; font-family: var(--font-mono); font-size: 0.72rem; color: #64748b; white-space: nowrap; text-align: center; }
 
 /* Sol Tablo Gövdesi (Scroll Senkronizasyonu) */
 .op-gantt-table-body {
@@ -1388,7 +1388,7 @@ html, body {
   position: absolute;
   height: 42px;
   min-height: 42px;
-  min-width: 44px;
+  min-width: 240px;
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 8px;

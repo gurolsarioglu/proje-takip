@@ -636,6 +636,39 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
    - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
 
+---
+
+## 39. GANTT TABLOSU TAM TARİH GÖRÜNÜMÜ VE AÇIKLAMAYA GÖRE OTOMATİK GENİŞLEYEN ORANTILI ZAMAN ÇUBUKLARI (05.11.2026)
+
+### 39.1. Kullanıcı Talebi & Problem Tespiti
+- **Sol Tablo Tarih Sütunu:** Zaman Çizelgesi (Gantt) sol tablosunda "TARİH ARALIĞI" sütununda tarihler dar genişlik (110px) nedeniyle üç nokta ile kesilmekteydi (`09.11.2026 - ...`). Kullanıcı başlangıç ve bitiş tarihlerinin kesilmeden eksiksiz görünmesini istedi.
+- **Zaman Çubukları (Gantt Bars):** Kısa süreli (1-2 günlük) görevlerin zaman çubukları 44px - 88px gibi dar kutulara sıkışıyor ve içindeki görev tanımı/açıklaması ile tarihler (`KOLEK... 0% 📅 C...`) okunamaz hale geliyordu. Kullanıcı, bu nesnelerin uzunluklarının içindeki açıklamalara göre otomatik olarak genişlemesini, aynı zamanda gün, hafta, ay ve yıl görünümlerinde uzunlukların görev süreleriyle orantılı olarak genişlemesini talep etti.
+
+### 39.2. Gerçekleştirilen Geliştirmeler
+1. **Sol Tablo Panel Genişliği & Tam Tarih Gösterimi (`src/public/styles.css`):**
+   - Sol tablo paneli `.op-gantt-table-pane` varsayılan genişliği `460px`'ten `580px`'e (min-width `340px`, max-width `900px`) çıkarıldı.
+   - "TARİH ARALIĞI" sütunu `.g-col-dates` genişliği `180px` (min-width `180px`, `flex-shrink: 0`, `white-space: nowrap`) olarak ayarlandı.
+   - `09.11.2026 - 10.11.2026` gibi çift tarih aralıkları hiçbir kırpılma olmadan eksiksiz gösterildi.
+   - Sol tablodaki `#` (34px), `Durum` (100px), `Atanan` (110px) sütunları optimize edildi, görev başlığı için ferah alan sağlandı.
+   - Görev başlığında mükerrer yazılan `[İŞ ADIMI]` öneki temizlendi (`displayTitle`), sol tabloda ve bar üzerinde temiz metin sunuldu.
+2. **Görev Barı İçerik Genişliği Hesaplayıcı (`getTaskContentWidth`):**
+   - Görevin başlık uzunluğu, iş adımı rozetinin genişliği, ikon ve alt satırdaki `% ilerleme + 📅 başlangıç - bitiş` rozetinin gerektirdiği gerçek piksel genişliğini hesaplayan `getTaskContentWidth(task)` fonksiyonu eklendi.
+   - Bar nesneleri için minimum `260px` taban genişlik güvenceye alındı; uzun başlıklarda (örn. 50-70 karakterlik tekstil tanımlarında) çubuk otomatik olarak 350px-600px'e kadar genişleyecek şekilde dinamik kılındı.
+3. **Çoklu Zoom Seviyelerinde Orantılı Genişleme (`src/public/app.js`):**
+   - **Günlük (Day):** Sütun genişliği `48px`. Süreye göre ek genişleme çarpanı `(durationDays - 1) * 22px`.
+   - **Haftalık (Week):** Sütun genişliği `90px`. Süreye göre ek genişleme çarpanı `(durationWeeks - 1) * 36px`.
+   - **Aylık (Month):** Sütun genişliği `120px`. Süreye göre ek genişleme çarpanı `(durationMonths - 1) * 50px`.
+   - **Yıllık (Year):** Sütun genişliği `110px`. Süreye göre ek genişleme çarpanı `(durationQuarters - 1) * 60px`.
+   - Böylece hem içerik asla kesilmez/ezilmez, hem de daha uzun süren görevler kısa olanlara kıyasla görünür biçimde orantılı olarak daha uzun çubuklarla temsil edilir.
+4. **Dinamik Timeline Genişliği & Izgara Uyumlaması (`effectiveTimelineWidth`):**
+   - Otomatik genişleyen barların sağ tarafta takvim ızgarası dışına taşmaması için `effectiveTimelineWidth = Math.max(scale.timelineWidth, maxBarRight)` formülü uygulandı.
+   - `scrollWrap`, `header`, `rowsContainer`, `gridLines`, `svgOverlay` ve her satır izi (`track`) bu dinamik genişliğe uyarlandı.
+   - `calculateGanttScale` içinde bitiş tampon günleri (günlük için +25 gün, haftalık için +42 gün, aylık için +6 ay, yıllık için +2 yıl) genişletilerek sağ taraf ızgara çizgilerinin kesintisiz devam etmesi sağlandı.
+5. **Doğrulama ve Test:**
+   - **33/33 Kabul Testi (`npm test`)** başarıyla geçti.
+   - **TypeScript Derlemesi (`npm run build`)** 0 hata ile tamamlandı.
+
+
 
 
 
