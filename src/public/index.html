@@ -321,9 +321,23 @@
           </div>
         </div>
 
-        <div class="card clean-card">
-          <div class="task-list-table" id="myTasksTable">
-            <!-- JS ile satırlar gelecek -->
+        <div class="card clean-card task-table-card">
+          <div class="task-table-wrapper">
+            <div class="task-table-inner">
+              <div class="my-tasks-table-header">
+                <div class="th-col th-check"></div>
+                <div class="th-col th-info">İş Paketi / Görev</div>
+                <div class="th-col th-start-date">Başlangıç Tarihi</div>
+                <div class="th-col th-due-date">Bitiş Tarihi</div>
+                <div class="th-col th-assigner">Görevi Atayan</div>
+                <div class="th-col th-assignee">Görev Sahibi</div>
+                <div class="th-col th-status">Durum</div>
+                <div class="th-col th-action">İşlem</div>
+              </div>
+              <div class="task-list-table" id="myTasksTable">
+                <!-- JS ile satırlar gelecek -->
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -1338,6 +1352,10 @@
             <input type="date" id="tDue" required class="styled-input">
           </div>
         </div>
+        <div id="tProjectDateRangeNotice"
+          style="display:none; font-size:0.75rem; color:#1e40af; background:#eff6ff; border:1px solid #bfdbfe; padding:6px 10px; border-radius:6px; margin-bottom:12px; font-weight:600;">
+          📅 Proje Takvim Aralığı: <span id="tProjectDateRangeText"></span>
+        </div>
 
         <div class="form-group">
           <label for="tDesc">Kısa Açıklama</label>
@@ -2105,8 +2123,16 @@
           </div>
         </div>
 
+        <!-- Bekleyen Ek Süre Talebi Kutusu -->
+        <div id="wpPendingExtensionBox"
+          style="display:none; margin-top:10px; padding:10px 12px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px;">
+        </div>
+
         <!-- Satır İçi Plan Revizyon Formu -->
         <form id="wpPlanReviseForm" class="wp-plan-revise-box" style="display:none;">
+          <div id="wpPlanFormTitle"
+            style="font-size:0.75rem; font-weight:700; color:var(--text-primary); margin-bottom:6px;">📅 Planı Revize Et
+          </div>
           <div class="form-row">
             <div class="form-group" style="margin-bottom:6px;">
               <label for="wpNewStart" style="font-size:0.74rem;">Yeni Başlangıç *</label>
@@ -2119,13 +2145,13 @@
             </div>
           </div>
           <div class="form-group" style="margin-bottom:8px;">
-            <label for="wpPlanReason" style="font-size:0.74rem;">Revizyon Gerekçesi *</label>
+            <label for="wpPlanReason" style="font-size:0.74rem;">Gerekçe Açıklaması *</label>
             <input type="text" id="wpPlanReason" class="styled-input" style="padding:6px 8px; font-size:0.8rem;"
-              placeholder="Örn: Öncül test süreci uzadı" required>
+              placeholder="Örn: Öncül kumaş gecikmesi nedeniyle +5 gün ek süre" required>
           </div>
           <div style="display:flex; justify-content:flex-end; gap:6px;">
             <button type="button" id="wpCancelPlanRevBtn" class="action-btn secondary-btn sm-btn">Vazgeç</button>
-            <button type="submit" class="action-btn primary-btn sm-btn">Planı Güncelle</button>
+            <button type="submit" id="wpSubmitPlanRevBtn" class="action-btn primary-btn sm-btn">Kaydet</button>
           </div>
         </form>
         <div id="wpPlanHistoryList" class="wp-plan-history-list"></div>

@@ -10,6 +10,7 @@ import {
   Task,
   TaskAssignment,
   TaskPlanChange,
+  TaskExtensionRequest,
   TaskDependency,
   DelayRecord,
   Notification,
@@ -37,6 +38,7 @@ export interface DatabaseState {
   tasks: Task[];
   task_assignments: TaskAssignment[];
   task_plan_changes: TaskPlanChange[];
+  task_extension_requests?: TaskExtensionRequest[];
   task_dependencies: TaskDependency[];
   delay_records: DelayRecord[];
   notifications: Notification[];
@@ -149,6 +151,7 @@ export class Database {
       tasks: [],
       task_assignments: [],
       task_plan_changes: [],
+      task_extension_requests: [],
       task_dependencies: [],
       delay_records: [],
       notifications: [],
@@ -350,6 +353,31 @@ export class Database {
     this.state.task_plan_changes.push(change);
     this.save();
     return change;
+  }
+
+  // --- Task Extension Requests ---
+  public getTaskExtensionRequests(tenant_id: UUID, task_id?: UUID): TaskExtensionRequest[] {
+    if (!this.state.task_extension_requests) this.state.task_extension_requests = [];
+    return this.state.task_extension_requests.filter(
+      r => r.tenant_id === tenant_id && (!task_id || r.task_id === task_id)
+    );
+  }
+  public getTaskExtensionRequestById(tenant_id: UUID, id: UUID): TaskExtensionRequest | undefined {
+    if (!this.state.task_extension_requests) this.state.task_extension_requests = [];
+    return this.state.task_extension_requests.find(r => r.tenant_id === tenant_id && r.id === id);
+  }
+  public insertTaskExtensionRequest(req: TaskExtensionRequest): TaskExtensionRequest {
+    if (!this.state.task_extension_requests) this.state.task_extension_requests = [];
+    this.state.task_extension_requests.push(req);
+    this.save();
+    return req;
+  }
+  public updateTaskExtensionRequest(tenant_id: UUID, id: UUID, update: Partial<TaskExtensionRequest>): TaskExtensionRequest | undefined {
+    const req = this.getTaskExtensionRequestById(tenant_id, id);
+    if (!req) return undefined;
+    Object.assign(req, update);
+    this.save();
+    return req;
   }
 
   // --- Task Dependencies ---

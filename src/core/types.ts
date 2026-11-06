@@ -220,6 +220,25 @@ export interface TaskPlanChange {
   reason?: string;
 }
 
+// Görev Ek Süre ve Plan Revizyon Talebi (Task Extension Request)
+export type TaskExtensionRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface TaskExtensionRequest {
+  id: UUID;
+  tenant_id: UUID;
+  project_id: UUID;
+  task_id: UUID;
+  user_id: UUID;
+  requested_start_date?: string;
+  requested_due_date: string;
+  reason: string;
+  status: TaskExtensionRequestStatus;
+  created_at: string;
+  decided_by_user_id?: UUID;
+  decided_at?: string;
+  rejection_reason?: string;
+}
+
 // 4. Bağımlılık
 export interface TaskDependency {
   id: UUID;

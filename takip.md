@@ -735,3 +735,46 @@ Bu doküman, proje boyunca alınan kararları, geliştirilen özellikleri, mimar
    - Standart personelin silinenleri listeleyemediği ve geri getiremediği,
    - Admin kullanıcısının silinen projeleri listeleyip tek tıkla geri getirebildiği ve projenin tekrar aktifleştiği uçtan uca otomatik testle doğrulandı.
    - **34/34 Test Başarılı (`npm test`).**
+
+
+---
+
+## 42. GÖREVLERİN PROJE TARİH ARALIĞINA BAĞLANMASI, PROJE TAKVİMİ REVİZYONU VE EK SÜRE (EXTENSION REQUEST) MEKANİZMASI (05.11.2026)
+
+### 42.1. Kullanıcı Talebi & Problem Tespiti
+- **Kullanıcı Talebi:**
+  1. Atama yapılacak ve oluşturulacak olan görevlerin tümü **mutlaka proje başlangıç - bitiş tarihleri arasında** olmalıdır.
+  2. Eğer görev tarihleri proje tarihlerini aşıyorsa:
+     - **Çalışan Süreyi Aştığında / Ek Süre İstediğinde:** Proje yöneticisinin onayı olmalıdır; doğrudan planı değiştiremez, onay mekanizması işletilir.
+     - **Proje Yöneticisi Görev Atarken / Süre Belirlerken:** Süre proje süresini aştığında sistem bir uyarı ve onay almalı, onay verilirse proje başlangıç ve bitiş süresi otomatik olarak revize edilmelidir.
+
+### 42.2. Gerçekleştirilen Geliştirmeler
+1. **Veri Modeli ve Veritabanı Şeması (`src/core/types.ts`, `src/database/schema.sql`, `src/database/postgres.ts`, `src/database/db.ts`):**
+   - `TaskExtensionRequest` arayüzü ve `TaskExtensionRequestStatus` ('PENDING' | 'APPROVED' | 'REJECTED') tipi tanımlandı.
+   - PGlite PostgreSQL şemasına `task_extension_requests` tablosu eklendi; veritabanı senkronizasyonuna dahil edildi.
+   - `Database` sınıfına `getTaskExtensionRequests`, `getTaskExtensionRequestById`, `insertTaskExtensionRequest` ve `updateTaskExtensionRequest` metotları kazandırıldı.
+2. **Backend Görev ve Plan Servisi (`src/modules/task/task.service.ts`):**
+   - `createTask`: Görevin başlangıç ve bitiş tarihleri (`taskStart`, `taskDue`), ait olduğu projenin güncel takvimi (`projStart`, `projDue`) ile karşılaştırılır.
+     - Standart kullanıcılar veya editörler proje sınırlarını aşan görev ekleyemez (`Hata: Görev tarihleri proje takvimi dışında olamaz. Proje süresini aşan görevler için Proje Yöneticisi onayı gereklidir`).
+     - Proje Yöneticisi sınırları aşan görev eklerken onay (`auto_expand_project_dates`) vermemişse `PROMPT_PROJECT_REVISION` uyarısı verilir. Onay verildiğinde projenin `current_start_date` ve `current_due_date` değerleri görevi kapsayacak şekilde otomatik genişletilir ve `ProjectPlanChange` geçmişine işlenir.
+   - `updateTaskPlan`: Proje yöneticisi doğrudan güncellerken sınır aşımında onay ile projeyi genişletir. Proje yöneticisi olmayan sorumlu çalışanlar sınır aşımında doğrudan güncelleyemez.
+   - `createExtensionRequest`: Görev sorumlusu personel ek süre / plan revizyon talebi açar (`status: 'PENDING'`). Proje yöneticilerine anlık bildirim iletilir.
+   - `decideExtensionRequest`: Proje yöneticisi talebi onayladığında (`approve: true`) görev planı güncellenir; eğer talep edilen bitiş tarihi proje bitişini aşıyorsa proje takvimi de otomatik olarak uzatılır. Talep reddedilirse gerekçesiyle birlikte personele bildirilir.
+3. **API Uç Noktaları (`src/server/index.ts`):**
+   - `POST /api/tasks`: `auto_expand_project_dates` desteği ve 409 onay yanıtı eklendi.
+   - `POST /api/tasks/:id/plan`: `auto_expand_project_dates` desteği eklendi.
+   - `POST /api/tasks/:id/extension-request`: Çalışanlar için ek süre talebi endpoint'i.
+   - `POST /api/tasks/:id/extension-request/:reqId/decide`: Proje yöneticisi için ek süre karar endpoint'i.
+   - `GET /api/tasks/:id/details`: Projenin güncel tarihleri, `is_project_manager` yetki bayrağı ve `pending_extension_request` nesnesi çekmeceye aktarıldı.
+4. **Kullanıcı Arayüzü ve Akıllı Doğrulama (`src/public/index.html`, `src/public/app.js`):**
+   - **Görev Ekleme Modalı (`#taskModal`):** Proje seçildiğinde tarih alanlarının hemen altına `📅 Proje Takvim Aralığı: [Başlangıç] — [Bitiş]` göstergesi eklendi. Varsayılan tarihler proje sınırları içerisine çekildi.
+   - Proje sınırları aşılmaya çalışıldığında:
+     - Yetkili Proje Yöneticisine: *"Belirlediğiniz görev tarihleri proje takvimini aşmaktadır. Proje takviminin göreve göre otomatik revize edilmesini onaylıyor musunuz?"* onay penceresi açılır. Onaylandığında proje tarihleri ve görev aynı anda genişletilir.
+     - Standart Çalışana: *"Görev tarihleri proje takvimini aşamaz! Lütfen proje tarihleri arasında bir tarih seçiniz veya Proje Yöneticisi ile iletişime geçiniz."* uyarısı verilir.
+   - **Görev Çekmecesi (Task Drawer):**
+     - Proje yöneticisi `📅 Planı Revize Et` butonunu görür ve onay ile projeyi de revize edebilir.
+     - Atanan personel `⏳ Ek Süre / Plan Revizyonu İste` butonunu görür. Talep gönderildiğinde çekmecede sarı rozetli *"⏳ Ek Süre Talebiniz İnceleniyor"* kartı belirir.
+     - Proje yöneticisi çekmecede bekleyen talebi görür; tek tıkla *"✅ Onayla ve Uygula"* (gerekiyorsa proje süresini de uzatarak) veya *"❌ Reddet"* işlemi yapabilir.
+5. **Otomatik Test & Doğrulama (`tests/acceptance.test.ts`):**
+   - Tüm sınır aşımı, proje genişletme, çalışan yetki engeli, ek süre talebi oluşturma, mükerrer talep koruması ve yönetici onay akışlarını doğrulayan 35. kabul testi eklendi.
+   - **35/35 Kabul Testi Eksiksiz Başarılı (`npm test`).**

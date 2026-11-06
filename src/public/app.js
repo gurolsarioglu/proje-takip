@@ -526,11 +526,23 @@ async function apiCall(endpoint, method = 'GET', body = null) {
     const opts = { method, headers: getHeaders() };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(endpoint, opts);
+    const contentType = res.headers.get('content-type') || '';
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'İşlem başarısız' }));
-      throw new Error(err.error || `HTTP ${res.status}`);
+      if (contentType.includes('application/json')) {
+        const err = await res.json().catch(() => ({ error: 'İşlem başarısız' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      throw new Error(`İşlem gerçekleştirilemedi (HTTP ${res.status}). Sunucu güncel olmayabilir, lütfen sayfayı yenileyip tekrar deneyin.`);
     }
-    return await res.json();
+    if (contentType.includes('application/json')) {
+      return await res.json();
+    }
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('Sunucudan JSON yerine beklenmeyen bir yanıt alındı. Lütfen sayfayı yenileyin veya sunucuyu yeniden başlatın.');
+    }
   } catch (err) {
     showToast(err.message, 'error');
     throw err;
@@ -794,13 +806,25 @@ async function loadProjects() {
 }
 
 async function loadProjectTasks(projectId) {
-  state.currentProjectId = projectId || null;
+  state.currentProjectId = projectId || 'all';
   const projectSelect = document.getElementById('projectSelect');
   if (projectSelect && projectId) projectSelect.value = projectId;
 
   let projTasks = [];
   let dependencies = [];
-  if (projectId && projectId !== 'personal') {
+  if (projectId === 'all') {
+    try {
+      const allTasksPromises = (state.projects || []).map(p => apiCall(`/api/projects/${p.id}/tasks`).catch(() => []));
+      const allDepsPromises = (state.projects || []).map(p => apiCall(`/api/projects/${p.id}/dependencies`).catch(() => []));
+      const tasksArrays = await Promise.all(allTasksPromises);
+      const depsArrays = await Promise.all(allDepsPromises);
+      projTasks = tasksArrays.flat();
+      dependencies = depsArrays.flat();
+    } catch {
+      projTasks = [];
+      dependencies = [];
+    }
+  } else if (projectId && projectId !== 'personal') {
     try {
       projTasks = await apiCall(`/api/projects/${projectId}/tasks`);
       dependencies = await apiCall(`/api/projects/${projectId}/dependencies`);
@@ -818,8 +842,13 @@ async function loadProjectTasks(projectId) {
     personalTasks = [];
   }
 
-  state.tasks = [...projTasks, ...personalTasks];
-  state.dependencies = dependencies;
+  if (projectId === 'personal') {
+    state.tasks = personalTasks;
+    state.dependencies = [];
+  } else {
+    state.tasks = [...projTasks, ...personalTasks];
+    state.dependencies = dependencies;
+  }
 
   // Tekstil Şablonunu Uygula Butonu Görünürlüğü (Yalnızca Proje Yetkilisi / Admin için)
   const textileBtn = document.getElementById('applyTextileTemplateBtn');
@@ -856,6 +885,9 @@ function renderProjectSelector() {
   if (!el) return;
 
   let html = '';
+  // Konsolide / Tüm Görevler
+  html += `<option value="all">🌐 ${t('label_all_projects_consolidated', 'Tüm Projeler & Kişisel (Konsolide)')}</option>`;
+
   if (state.projects.length > 0) {
     html += `<optgroup label="📁 ${t('label_company_projects', 'Şirket Projeleri')}">` +
       state.projects.map(p => `<option value="${p.id}">📁 ${escapeHtml(p.title)}</option>`).join('') +
@@ -869,7 +901,12 @@ function renderProjectSelector() {
     `</optgroup>`;
 
   el.innerHTML = html;
-  el.value = state.currentProjectId || (state.projects[0]?.id || 'personal');
+  if (state.currentProjectId && (state.currentProjectId === 'all' || state.currentProjectId === 'personal' || (state.projects || []).some(p => p.id === state.currentProjectId))) {
+    el.value = state.currentProjectId;
+  } else {
+    state.currentProjectId = state.projects[0]?.id || 'all';
+    el.value = state.currentProjectId;
+  }
 }
 
 // 1. GÖREVLERİM & İŞ PAKETLERİ LİSTESİ (MY TASKS & WORK PACKAGES)
@@ -963,33 +1000,57 @@ function renderMyTasks() {
     const typeLabel = task.type === 'MILESTONE' ? '🏁' : (task.type === 'BUG' ? '🐞' : '📌');
     const priorityDot = task.priority === 'HIGH' ? '<span title="Yüksek Öncelik" style="color:#f59e0b; margin-right:4px;">●</span>' : '';
     const assignee = state.personnelList.find(p => p.id === task.assignee_id);
+    const assigneeName = assignee ? assignee.name : t('label_unassigned', 'Atanmamış');
+
+    const startDateText = task.current_start_date ? formatDate(task.current_start_date) : (task.initial_start_date ? formatDate(task.initial_start_date) : '—');
+    const dueDateText = task.current_due_date ? formatDate(task.current_due_date) : (task.initial_due_date ? formatDate(task.initial_due_date) : '—');
+
+    let assignerName = task.assigned_by_name;
+    if (!assignerName && task.assigned_by_user_id) {
+      const u = state.personnelList.find(p => p.id === task.assigned_by_user_id);
+      if (u) assignerName = u.name;
+    }
+    if (!assignerName) {
+      assignerName = task.project_id ? 'Proje Yetkilisi' : 'Sistem';
+    }
+
     const proj = task.project_id ? state.projects.find(p => p.id === task.project_id) : null;
     const projPill = proj
       ? `<span class="task-proj-pill" style="font-size:0.72rem; background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-weight:500;">📁 ${escapeHtml(proj.title)}</span>`
       : `<span class="task-personal-pill" style="font-size:0.72rem; background:#f3e8ff; color:#7e22ce; padding:2px 6px; border-radius:4px; font-weight:600;">📌 Kişisel To-Do</span>`;
 
     row.innerHTML = `
-      <button class="task-check-btn ${isDone ? 'checked' : ''}" data-id="${task.id}" title="${isDone ? 'Tamamlandı' : 'Tamamla'}"></button>
-      <div class="task-info-col">
+      <div class="tb-col tb-check">
+        <button class="task-check-btn ${isDone ? 'checked' : ''}" data-id="${task.id}" title="${isDone ? 'Tamamlandı' : 'Tamamla'}"></button>
+      </div>
+      <div class="tb-col tb-info task-info-col">
         <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
           <span>${typeLabel}</span>
           ${priorityDot}
           ${projPill}
           ${task.workflow_step ? `<span class="op-step-badge" style="font-size:0.7rem; padding:2px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(task.workflow_step)}; display:inline-block;">${escapeHtml(task.workflow_step)}</span>` : ''}
-          <span class="task-main-title ${isDone ? 'done-title' : ''}">${task.title}</span>
+          <span class="task-main-title ${isDone ? 'done-title' : ''}">${escapeHtml(task.title)}</span>
         </div>
         ${depNote}
       </div>
-      <div style="font-size:0.8rem; color:#94a3b8;">
-        👤 ${assignee ? assignee.name : t('label_unassigned', 'Atanmamış')}
+      <div class="tb-col tb-start-date" title="Başlangıç Tarihi: ${startDateText}">
+        <span>${startDateText}</span>
       </div>
-      <div class="task-date-col ${isOverdue ? 'overdue' : ''}">
-        📅 ${formatDate(task.current_due_date)} ${isOverdue ? `(${t('label_overdue', 'Gecikti')})` : ''}
+      <div class="tb-col tb-due-date ${isOverdue ? 'overdue' : ''}" title="Bitiş Tarihi: ${dueDateText}">
+        <span>${dueDateText} ${isOverdue ? `(${t('label_overdue', 'Gecikti')})` : ''}</span>
       </div>
-      <div>
+      <div class="tb-col tb-assigner" title="Görevi Atayan: ${escapeHtml(assignerName)}">
+        <span>👤 ${escapeHtml(assignerName)}</span>
+      </div>
+      <div class="tb-col tb-assignee" title="Görev Sahibi: ${escapeHtml(assigneeName)}">
+        <span>👤 ${escapeHtml(assigneeName)}</span>
+      </div>
+      <div class="tb-col tb-status">
         <span class="task-status-pill ${statusPillClass}">${statusText}</span>
       </div>
-      <div>${quickActionBtn}</div>
+      <div class="tb-col tb-action">
+        ${quickActionBtn}
+      </div>
     `;
 
     // Satıra tıklanınca OpenProject Detay Çekmecesi açılır
@@ -1349,20 +1410,20 @@ function getTaskContentWidth(task) {
     displayTitle = displayTitle.substring(`[${task.workflow_step}]`.length).trim();
   }
   
-  // İkon: ~18px + 6px boşluk
-  let topRowWidth = 24;
+  // İkon: ~20px + 8px boşluk
+  let topRowWidth = 28;
   if (task.workflow_step) {
-    // İş adımı rozeti: font-size 0.63rem, padding 1px 6px, border, ~7.2px karakter başı
-    topRowWidth += Math.ceil(task.workflow_step.length * 7.5) + 20;
+    // İş adımı rozeti: font-size 0.63rem, padding 1px 6px, border, ~8px karakter başı
+    topRowWidth += Math.ceil(task.workflow_step.length * 8.2) + 24;
   }
-  // Görev Başlığı: font-size 0.74rem bold, ~7.6px karakter başı
-  topRowWidth += Math.ceil(displayTitle.length * 7.6) + 28; // sağ dolgu dahil
+  // Görev Başlığı: font-size 0.74rem bold, ~8.6px karakter başı
+  topRowWidth += Math.ceil(displayTitle.length * 8.6) + 36; // sağ dolgu dahil
 
-  // Alt satır: İlerleme yüzdesi (%100 ~46px) + 📅 gg.aa.yyyy - gg.aa.yyyy (~195px) + boşluklar
-  const bottomRowWidth = 265;
+  // Alt satır: İlerleme yüzdesi (%100 ~46px) + 📅 gg.aa.yyyy - gg.aa.yyyy (~210px) + boşluklar
+  const bottomRowWidth = 285;
 
   const contentNeeded = Math.max(topRowWidth, bottomRowWidth);
-  return Math.max(260, Math.ceil(contentNeeded));
+  return Math.max(280, Math.ceil(contentNeeded));
 }
 
 // Zaman Ölçeği Hesaplayıcı (Günlük, Haftalık, Aylık, Yıllık)
@@ -1398,16 +1459,17 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
 
   if (zoomLevel === 'day') {
     // 1. GÜNLÜK GÖRÜNÜM
-    const COL_WIDTH = 48;
+    // Tarih sütunlarının genişliği, çubukların takvim günleriyle birebir örtüşmesi ve tarih aralıklarının (6,7,8,9...) rahat görünmesi için genişletildi
+    const COL_WIDTH = 140;
     const startDate = new Date(minTime);
-    startDate.setDate(startDate.getDate() - 2);
+    startDate.setDate(startDate.getDate() - 3);
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = new Date(maxTime);
-    endDate.setDate(endDate.getDate() + 25);
+    endDate.setDate(endDate.getDate() + 8);
     endDate.setHours(0, 0, 0, 0);
 
-    const totalDays = Math.max(28, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
+    const totalDays = Math.max(14, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1);
     timelineWidth = totalDays * COL_WIDTH;
 
     const days = [];
@@ -1449,8 +1511,8 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
 
     subHeaderHtml = days.map(d => `
       <div class="gantt-day-col ${d.isWeekend ? 'weekend' : ''} ${d.isToday ? 'today' : ''}" style="width:${COL_WIDTH}px; min-width:${COL_WIDTH}px;" title="${formatDateTR(d.date)}">
-        <span>${d.dayNum}</span>
-        <span class="day-dow">${d.dayName}</span>
+        <span style="font-size:0.92rem; font-weight:800; color:${d.isToday ? '#2563eb' : (d.isWeekend ? '#94a3b8' : '#334155')};">${d.dayNum}</span>
+        <span class="day-dow" style="font-size:0.74rem; font-weight:700; text-transform:uppercase; color:${d.isToday ? '#2563eb' : '#64748b'};">${d.dayName}</span>
       </div>
     `).join('');
 
@@ -1464,7 +1526,7 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     };
   } else if (zoomLevel === 'week') {
     // 2. HAFTALIK GÖRÜNÜM
-    const COL_WIDTH = 90;
+    const COL_WIDTH = 180;
     const MS_PER_WEEK = 7 * MS_PER_DAY;
 
     const startDate = new Date(minTime);
@@ -1474,7 +1536,7 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
 
     const endDate = new Date(maxTime);
     const dayEnd = (endDate.getDay() + 6) % 7;
-    endDate.setDate(endDate.getDate() + (6 - dayEnd) + 42);
+    endDate.setDate(endDate.getDate() + (6 - dayEnd) + 21);
     endDate.setHours(23, 59, 59, 999);
 
     const totalWeeks = Math.max(12, Math.ceil((endDate.getTime() - startDate.getTime()) / MS_PER_WEEK));
@@ -1529,14 +1591,14 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     }
   } else if (zoomLevel === 'month') {
     // 3. AYLIK GÖRÜNÜM
-    const COL_WIDTH = 120;
+    const COL_WIDTH = 200;
     const startD = new Date(minTime);
     startD.setMonth(startD.getMonth() - 1);
     startD.setDate(1);
     startD.setHours(0, 0, 0, 0);
 
     const endD = new Date(maxTime);
-    endD.setMonth(endD.getMonth() + 6);
+    endD.setMonth(endD.getMonth() + 4);
     endD.setDate(0);
     endD.setHours(23, 59, 59, 999);
 
@@ -1603,12 +1665,12 @@ function calculateGanttScale(minTime, maxTime, zoomLevel) {
     }
   } else if (zoomLevel === 'year') {
     // 4. YILLIK GÖRÜNÜM (Çeyrekler Q1..Q4)
-    const COL_WIDTH = 110;
+    const COL_WIDTH = 180;
     const minD = new Date(minTime);
     const maxD = new Date(maxTime);
 
     const startYear = minD.getFullYear() - 1;
-    const endYear = maxD.getFullYear() + 2;
+    const endYear = maxD.getFullYear() + 1;
     const totalYears = (endYear - startYear) + 1;
     const totalQuarters = totalYears * 4;
     timelineWidth = totalQuarters * COL_WIDTH;
@@ -1955,8 +2017,8 @@ function renderTimeline() {
           <span class="g-assignee-name">${assigneeName}</span>
         </div>
       </div>
-      <div class="g-col g-col-dates">
-        ${formatDate(t.current_start_date)} - ${formatDate(t.current_due_date)}
+      <div class="g-col g-col-dates" title="${formatDate(t.current_start_date)} – ${formatDate(t.current_due_date)}">
+        ${formatDate(t.current_start_date)} – ${formatDate(t.current_due_date)}
       </div>
     `;
 
@@ -2006,29 +2068,13 @@ function renderTimeline() {
         maxBarRight = mLeftPx + 220;
       }
     } else {
-      const durationDays = Math.max(1, Math.round((tDueEnd - tStart) / (24 * 60 * 60 * 1000)));
-      const contentWidth = getTaskContentWidth(t);
-
-      // Çoklu görünümde (gün, hafta, ay, yıl) sürelere göre orantılı genişleme
-      let durationExtraPx = 0;
-      if (ganttZoomLevel === 'day') {
-        durationExtraPx = durationDays > 1 ? (durationDays - 1) * 22 : 0;
-      } else if (ganttZoomLevel === 'week') {
-        const durationWeeks = durationDays / 7;
-        durationExtraPx = durationWeeks > 1 ? Math.round((durationWeeks - 1) * 36) : 0;
-      } else if (ganttZoomLevel === 'month') {
-        const durationMonths = durationDays / 30;
-        durationExtraPx = durationMonths > 1 ? Math.round((durationMonths - 1) * 50) : 0;
-      } else if (ganttZoomLevel === 'year') {
-        const durationQuarters = durationDays / 90;
-        durationExtraPx = durationQuarters > 1 ? Math.round((durationQuarters - 1) * 60) : 0;
-      }
-
-      const widthPx = Math.max(contentWidth + durationExtraPx, dateSpanPx);
+      // Görev çubuğunun genişliği takvimdeki tarih aralığıyla (dateSpanPx = rightPx - leftPx) birebir aynıdır
+      // Böylece 09.11-10.11 olan görev tam 9 Kasım başlangıcında başlar ve 10 Kasım sonunda biter; sonraki günlere taşmaz.
+      const widthPx = dateSpanPx;
       taskLayouts.set(t.id, { leftPx, widthPx, isMilestone: false });
 
-      if (leftPx + widthPx + 120 > maxBarRight) {
-        maxBarRight = leftPx + widthPx + 120;
+      if (leftPx + widthPx + 40 > maxBarRight) {
+        maxBarRight = leftPx + widthPx + 40;
       }
     }
   });
@@ -2498,7 +2544,8 @@ async function openTaskDrawer(taskId) {
 
   try {
     const details = await apiCall(`/api/tasks/${taskId}/details`);
-    const { task, project, assignee, predecessors, successors, delays, plan_changes, can_manage_plan, can_edit } = details;
+    state.activeTaskDetails = details;
+    const { task, project, assignee, predecessors, successors, delays, plan_changes, can_manage_plan, can_edit, is_project_manager, pending_extension_request } = details;
 
     document.getElementById('wpProjectTitle').textContent = project?.title || 'FG Group Projesi';
     document.getElementById('wpId').textContent = `#${task.id.slice(0, 6)}`;
@@ -2694,10 +2741,77 @@ async function openTaskDrawer(taskId) {
     if (newDueInput) newDueInput.value = rawCurDue;
     if (planReasonInput) planReasonInput.value = '';
 
+    const isPm = !!is_project_manager || state.currentUser?.system_role === 'ADMIN';
+
     const togglePlanBtn = document.getElementById('wpTogglePlanRevBtn');
+    const formTitle = document.getElementById('wpPlanFormTitle');
+    const submitBtn = document.getElementById('wpSubmitPlanRevBtn');
     if (togglePlanBtn) {
-      togglePlanBtn.style.display = can_manage_plan ? 'inline-flex' : 'none';
+      if (isPm) {
+        togglePlanBtn.style.display = 'inline-flex';
+        togglePlanBtn.textContent = '📅 Planı Revize Et';
+        if (formTitle) formTitle.textContent = '📅 Planı Revize Et';
+        if (submitBtn) submitBtn.textContent = 'Planı Güncelle';
+      } else if (isAssignee && task.project_id) {
+        togglePlanBtn.style.display = 'inline-flex';
+        togglePlanBtn.textContent = '⏳ Ek Süre / Plan Revizyonu İste';
+        if (formTitle) formTitle.textContent = '⏳ Ek Süre Talebi (Proje Yöneticisi Onayına Gönderilir)';
+        if (submitBtn) submitBtn.textContent = '📩 Ek Süre Talebini İlet';
+      } else {
+        togglePlanBtn.style.display = can_manage_plan ? 'inline-flex' : 'none';
+      }
     }
+
+    // Bekleyen Ek Süre Talebi Kutusu (Pending Extension Request)
+    const extBox = document.getElementById('wpPendingExtensionBox');
+    if (extBox) {
+      if (pending_extension_request) {
+        extBox.style.display = 'block';
+        const reqUser = (state.personnelList || []).find(u => u.id === pending_extension_request.user_id);
+        const reqUserName = reqUser ? reqUser.name : 'Görev Sorumlusu';
+        if (isPm) {
+          extBox.innerHTML = `
+            <div style="font-size:0.75rem; font-weight:700; color:#b45309; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+              <span>⏳ Bekleyen Ek Süre / Plan Revizyon Talebi</span>
+              <span class="badge" style="background:#fef3c7; color:#92400e; font-size:0.7rem; padding:2px 6px; border-radius:4px;">Onay Bekliyor</span>
+            </div>
+            <div style="font-size:0.78rem; color:#78350f; margin-bottom:3px;">
+              <strong>${escapeHtml(reqUserName)}</strong>, bitiş tarihinin <strong>${formatDate(pending_extension_request.requested_due_date)}</strong> olarak güncellenmesini talep etti.
+            </div>
+            <div style="font-size:0.74rem; color:#92400e; background:#fffdf5; border-left:3px solid #f59e0b; padding:4px 8px; margin-bottom:8px; border-radius:0 4px 4px 0;">
+              <strong>Gerekçe:</strong> ${escapeHtml(pending_extension_request.reason)}
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:6px;">
+              <button type="button" class="action-btn danger-outline-btn sm-btn" id="btnRejectExtReq">❌ Reddet</button>
+              <button type="button" class="action-btn success-btn sm-btn" id="btnApproveExtReq">✅ Onayla ve Uygula</button>
+            </div>
+          `;
+          document.getElementById('btnApproveExtReq')?.addEventListener('click', async () => {
+            await handleApproveExtensionRequest(task, project, pending_extension_request);
+          });
+          document.getElementById('btnRejectExtReq')?.addEventListener('click', async () => {
+            await handleRejectExtensionRequest(task, pending_extension_request);
+          });
+        } else {
+          extBox.innerHTML = `
+            <div style="font-size:0.75rem; font-weight:700; color:#b45309; margin-bottom:4px;">⏳ Ek Süre Talebiniz İnceleniyor</div>
+            <div style="font-size:0.76rem; color:#78350f;">
+              Talep Edilen Bitiş: <strong>${formatDate(pending_extension_request.requested_due_date)}</strong>
+            </div>
+            <div style="font-size:0.73rem; color:#92400e; margin-top:2px;">
+              Gerekçe: ${escapeHtml(pending_extension_request.reason)}
+            </div>
+            <div style="font-size:0.7rem; color:#b45309; margin-top:4px; font-style:italic;">
+              Proje Yöneticisi onayladığında görevinizin süresi otomatik olarak güncellenecektir.
+            </div>
+          `;
+        }
+      } else {
+        extBox.style.display = 'none';
+        extBox.innerHTML = '';
+      }
+    }
+
     const planForm = document.getElementById('wpPlanReviseForm');
     if (planForm) planForm.style.display = 'none';
 
@@ -2959,6 +3073,12 @@ function switchView(viewId) {
 
   if (viewId === 'view-timeline') {
     renderTimeline();
+  } else if (viewId === 'view-board') {
+    renderBoard();
+  } else if (viewId === 'view-my-tasks') {
+    renderMyTasks();
+  } else if (viewId === 'view-projects') {
+    renderProjectsGrid();
   }
 
   if (viewId === 'view-report-builder') {
@@ -3007,7 +3127,7 @@ function setupEventListeners() {
     btn.addEventListener('click', () => {
       document.getElementById('loginEmail').value = btn.dataset.email;
       document.getElementById('loginPassword').value = btn.dataset.pass;
-      document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+      document.getElementById('loginForm').dispatchEvent(new Event('submit', { cancelable: true }));
     });
   });
 
@@ -3448,19 +3568,109 @@ function setupEventListeners() {
     const new_start_date = new Date(document.getElementById('wpNewStart').value).toISOString();
     const new_due_date = new Date(document.getElementById('wpNewDue').value).toISOString();
     const reason = document.getElementById('wpPlanReason').value.trim();
+
+    const details = state.activeTaskDetails;
+    const isPm = details?.is_project_manager || state.currentUser?.system_role === 'ADMIN';
+    const isAssignee = details?.task?.assignee_id === state.currentUser?.id;
+
+    if (!isPm && isAssignee && details?.task?.project_id) {
+      // Standart çalışan ek süre talebi gönderiyor
+      try {
+        await apiCall(`/api/tasks/${state.activeTaskId}/extension-request`, 'POST', {
+          requested_start_date: new_start_date,
+          requested_due_date: new_due_date,
+          reason
+        });
+        showToast('📩 Ek süre / plan revizyon talebiniz Proje Yöneticisine iletildi.', 'success');
+        const form = document.getElementById('wpPlanReviseForm');
+        if (form) form.style.display = 'none';
+        await openTaskDrawer(state.activeTaskId);
+      } catch (err) {
+        showToast('Ek süre talebi iletilemedi: ' + err.message, 'error');
+      }
+      return;
+    }
+
+    // Proje Yöneticisi planı doğrudan revize ediyor
+    let auto_expand_project_dates = false;
+    const proj = details?.project;
+    if (proj && (proj.current_start_date || proj.initial_start_date)) {
+      const nStart = new_start_date.slice(0, 10);
+      const nDue = new_due_date.slice(0, 10);
+      const pStart = (proj.current_start_date || proj.initial_start_date).slice(0, 10);
+      const pDue = (proj.current_due_date || proj.initial_due_date).slice(0, 10);
+
+      const isEarlier = nStart < pStart;
+      const isLater = nDue > pDue;
+      if (isEarlier || isLater) {
+        const ok = confirm(`⚠️ DİKKAT: Yeni görev tarihleri (${formatDate(nStart)} — ${formatDate(nDue)}) proje takvimini (${formatDate(pStart)} — ${formatDate(pDue)}) aşmaktadır!\n\nProje takviminin otomatik olarak bu tarihlere göre revize edilmesini ve genişletilmesini onaylıyor musunuz?`);
+        if (!ok) return;
+        auto_expand_project_dates = true;
+      }
+    }
+
     try {
       await apiCall(`/api/tasks/${state.activeTaskId}/plan`, 'POST', {
         new_start_date,
         new_due_date,
-        reason
+        reason,
+        auto_expand_project_dates
       });
-      showToast('📅 Görev zaman planı revize edildi (İlk plan korundu).', 'success');
+      showToast(auto_expand_project_dates ? '✅ Proje takvimi genişletildi ve görev planı revize edildi.' : '📅 Görev zaman planı revize edildi (İlk plan korundu).', 'success');
+      const form = document.getElementById('wpPlanReviseForm');
+      if (form) form.style.display = 'none';
+      if (auto_expand_project_dates) {
+        await loadProjects();
+      }
       await loadProjectTasks(state.currentProjectId);
       await openTaskDrawer(state.activeTaskId);
     } catch (err) {
       showToast('Plan revize edilemedi: ' + err.message, 'error');
     }
   });
+
+async function handleApproveExtensionRequest(task, project, req) {
+  let auto_expand_project_dates = false;
+  if (project) {
+    const reqDue = req.requested_due_date.slice(0, 10);
+    const pDue = (project.current_due_date || project.initial_due_date).slice(0, 10);
+    if (reqDue > pDue) {
+      const ok = confirm(`⚠️ DİKKAT: Talep edilen ek süre tarihi (${formatDate(reqDue)}) proje bitiş tarihini (${formatDate(pDue)}) aşmaktadır!\n\nProje bitiş takvimini de otomatik olarak bu tarihe uzatıp görevi onaylamayı kabul ediyor musunuz?`);
+      if (!ok) return;
+      auto_expand_project_dates = true;
+    }
+  }
+
+  try {
+    await apiCall(`/api/tasks/${task.id}/extension-request/${req.id}/decide`, 'POST', {
+      approve: true,
+      auto_expand_project_dates
+    });
+    showToast('✅ Ek süre talebi onaylandı ve görev süresi güncellendi.', 'success');
+    if (auto_expand_project_dates) {
+      await loadProjects();
+    }
+    await loadProjectTasks(state.currentProjectId);
+    await openTaskDrawer(task.id);
+  } catch (err) {
+    showToast('İşlem başarısız: ' + err.message, 'error');
+  }
+}
+
+async function handleRejectExtensionRequest(task, req) {
+  const reason = prompt('Ek süre talebini reddetme gerekçenizi giriniz:', 'İş planı yoğunluğu nedeniyle uygun görülmedi.');
+  if (reason === null) return;
+  try {
+    await apiCall(`/api/tasks/${task.id}/extension-request/${req.id}/decide`, 'POST', {
+      approve: false,
+      rejection_reason: reason.trim() || 'Proje Yöneticisi tarafından uygun görülmedi.'
+    });
+    showToast('❌ Ek süre talebi reddedildi.', 'info');
+    await openTaskDrawer(task.id);
+  } catch (err) {
+    showToast('İşlem başarısız: ' + err.message, 'error');
+  }
+}
 
   // Çekmece İçi Bağımlılık Silme (Öncül veya Ardıl)
   document.getElementById('workPackageDrawer')?.addEventListener('click', async (e) => {
@@ -3608,27 +3818,60 @@ function setupEventListeners() {
     const description = document.getElementById('tDesc').value.trim();
     const predecessor_id = selectedProjectId ? document.getElementById('tPredecessor')?.value : undefined;
 
-    const newTask = await apiCall('/api/tasks', 'POST', {
-      project_id: selectedProjectId,
-      title,
-      type,
-      priority,
-      workflow_step,
-      task_definition,
-      assignee_id: finalAssigneeId,
-      initial_start_date,
-      initial_due_date,
-      description,
-      predecessor_id
-    });
+    let auto_expand_project_dates = false;
+    if (selectedProjectId) {
+      const proj = state.projects.find(p => p.id === selectedProjectId);
+      if (proj) {
+        const tStartStr = initial_start_date.slice(0, 10);
+        const tDueStr = initial_due_date.slice(0, 10);
+        const pStartStr = (proj.current_start_date || proj.initial_start_date).slice(0, 10);
+        const pDueStr = (proj.current_due_date || proj.initial_due_date).slice(0, 10);
 
-    const isPersonal = !selectedProjectId;
-    showToast(isPersonal ? '📌 Kişisel To-Do başarıyla oluşturuldu.' : '✅ Proje görevi başarıyla oluşturuldu.', 'success');
-    document.getElementById('taskModal').classList.remove('open');
-    e.target.reset();
-    const customInput = document.getElementById('tCustomDefInput');
-    if (customInput) customInput.style.display = 'none';
-    await loadProjectTasks(selectedProjectId || state.currentProjectId || '');
+        const isEarlier = tStartStr < pStartStr;
+        const isLater = tDueStr > pDueStr;
+
+        if (isEarlier || isLater) {
+          const isManager = proj.is_manager || state.currentUser?.system_role === 'ADMIN';
+          if (!isManager) {
+            showToast(`Görev tarihleri (${formatDate(tStartStr)} - ${formatDate(tDueStr)}) proje takvimini (${formatDate(pStartStr)} - ${formatDate(pDueStr)}) aşamaz! Proje süresini aşan görevler için Proje Yöneticisi onayı gereklidir.`, 'error');
+            return;
+          }
+          const ok = confirm(`⚠️ DİKKAT: Belirlediğiniz görev tarihleri (${formatDate(tStartStr)} — ${formatDate(tDueStr)}) proje takvimini (${formatDate(pStartStr)} — ${formatDate(pDueStr)}) aşmaktadır!\n\nProje başlangıç/bitiş takviminin göreve göre otomatik olarak revize edilmesini ve genişletilmesini onaylıyor musunuz?`);
+          if (!ok) return;
+          auto_expand_project_dates = true;
+        }
+      }
+    }
+
+    try {
+      const newTask = await apiCall('/api/tasks', 'POST', {
+        project_id: selectedProjectId,
+        title,
+        type,
+        priority,
+        workflow_step,
+        task_definition,
+        assignee_id: finalAssigneeId,
+        initial_start_date,
+        initial_due_date,
+        description,
+        predecessor_id,
+        auto_expand_project_dates
+      });
+
+      const isPersonal = !selectedProjectId;
+      showToast(isPersonal ? '📌 Kişisel To-Do başarıyla oluşturuldu.' : (auto_expand_project_dates ? '✅ Proje takvimi revize edildi ve görev oluşturuldu.' : '✅ Proje görevi başarıyla oluşturuldu.'), 'success');
+      document.getElementById('taskModal').classList.remove('open');
+      e.target.reset();
+      const customInput = document.getElementById('tCustomDefInput');
+      if (customInput) customInput.style.display = 'none';
+      if (auto_expand_project_dates) {
+        await loadProjects();
+      }
+      await loadProjectTasks(selectedProjectId || state.currentProjectId || '');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   });
 
   // Tekstil Şablonunu Uygula Butonu Dinleyicisi
@@ -4646,6 +4889,8 @@ function populateTaskModalSelects() {
           customInput.style.display = 'block';
           customInput.placeholder = 'Kişisel yapılacak işi yazınız...';
         }
+        const dateNotice = document.getElementById('tProjectDateRangeNotice');
+        if (dateNotice) dateNotice.style.display = 'none';
       } else {
         // Şirket projesi seçildi
         if (projBadge) {
@@ -4654,6 +4899,22 @@ function populateTaskModalSelects() {
           projBadge.style.color = '#15803d';
         }
         if (personalNotice) personalNotice.style.display = 'none';
+
+        const selProj = (state.projects || []).find(p => p.id === selectedId);
+        const dateNotice = document.getElementById('tProjectDateRangeNotice');
+        const dateText = document.getElementById('tProjectDateRangeText');
+        if (selProj && dateNotice && dateText) {
+          dateNotice.style.display = 'block';
+          dateText.textContent = `${formatDate(selProj.current_start_date)} — ${formatDate(selProj.current_due_date)}`;
+          const startInput = document.getElementById('tStart');
+          const dueInput = document.getElementById('tDue');
+          if (startInput && (!startInput.value || startInput.value < selProj.current_start_date.slice(0, 10))) {
+            startInput.value = selProj.current_start_date.slice(0, 10);
+          }
+          if (dueInput && (!dueInput.value || dueInput.value > selProj.current_due_date.slice(0, 10))) {
+            dueInput.value = selProj.current_due_date.slice(0, 10);
+          }
+        }
 
         if (assigneeEl) {
           assigneeEl.disabled = false;

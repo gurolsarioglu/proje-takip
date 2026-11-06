@@ -538,15 +538,22 @@ app.get('/api/projects/:id/tasks', (req, res) => {
 app.get('/api/tasks/personal', (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const personalTasks = db.getTasks(auth.tenant_id).filter(t => !t.project_id && t.assignee_id === auth.user_id);
-    const creatorUser = db.getUserById(auth.tenant_id, auth.user_id);
-    const enriched = personalTasks.map(t => ({
-      ...t,
-      assigned_by_user_id: auth.user_id,
-      assigned_by_name: creatorUser ? creatorUser.name : 'Siz',
-      assigned_at: t.created_at,
-      limited_dependencies: []
-    }));
+    const caller = db.getUserById(auth.tenant_id, auth.user_id);
+    const isAdmin = caller?.system_role === 'ADMIN';
+    // Sistem Yöneticisi tüm kişisel görevleri görebilir; diğer kullanıcılar kendilerine ait olanları görür
+    const personalTasks = isAdmin
+      ? db.getTasks(auth.tenant_id).filter(t => !t.project_id)
+      : db.getTasks(auth.tenant_id).filter(t => !t.project_id && (t.assignee_id === auth.user_id || t.assigned_by_user_id === auth.user_id || !t.assignee_id));
+    const enriched = personalTasks.map(t => {
+      const assigneeUser = t.assignee_id ? db.getUserById(auth.tenant_id, t.assignee_id) : null;
+      return {
+        ...t,
+        assigned_by_user_id: t.assigned_by_user_id || auth.user_id,
+        assigned_by_name: (t.assignee_id === auth.user_id) ? 'Siz' : (assigneeUser ? assigneeUser.name : (caller ? caller.name : 'Siz')),
+        assigned_at: t.created_at,
+        limited_dependencies: []
+      };
+    });
     res.json(enriched);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -567,7 +574,8 @@ app.post('/api/tasks', (req, res) => {
       priority,
       predecessor_id,
       workflow_step,
-      task_definition
+      task_definition,
+      auto_expand_project_dates
     } = req.body;
 
     const normalizedProjectId = (project_id && String(project_id).trim() !== '') ? String(project_id).trim() : null;
@@ -591,7 +599,8 @@ app.post('/api/tasks', (req, res) => {
         priority,
         workflow_step,
         task_definition,
-        assigned_by_user_id: auth.user_id
+        assigned_by_user_id: auth.user_id,
+        auto_expand_project_dates: !!auto_expand_project_dates
       }
     );
 
@@ -620,6 +629,9 @@ app.post('/api/tasks', (req, res) => {
     }
     res.status(201).json(createdWithStatus || task);
   } catch (err: any) {
+    if (err.message && err.message.startsWith('PROMPT_PROJECT_REVISION:')) {
+      return res.status(409).json({ error: err.message.replace('PROMPT_PROJECT_REVISION: ', ''), prompt_revision: true });
+    }
     res.status(400).json({ error: err.message });
   }
 });
@@ -732,8 +744,12 @@ app.get('/api/tasks/:id/details', (req, res) => {
     const delays = delayService.getDelayRecords(auth.tenant_id, task.id);
     const plan_changes = db.getTaskPlanChanges(auth.tenant_id, task.id);
     const can_manage_plan = task.project_id ? projectService.canEditTasks(auth, task.project_id) : (task.assignee_id === auth.user_id);
+    const is_project_manager = task.project_id ? projectService.canManageProject(auth, task.project_id) : true;
     const can_edit = can_manage_plan || task.assignee_id === auth.user_id;
     const is_assignee = !task.assignee_id || task.assignee_id === auth.user_id;
+
+    const extension_requests = task.project_id ? taskService.getExtensionRequests(auth, task.id) : [];
+    const pending_extension_request = extension_requests.find(r => r.status === 'PENDING') || null;
 
     const config = emailService.getSmtpConfig(auth.tenant_id);
     const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
@@ -745,13 +761,23 @@ app.get('/api/tasks/:id/details', (req, res) => {
 
     res.json({
       task,
-      project: project ? { id: project.id, title: project.title } : null,
+      project: project ? {
+        id: project.id,
+        title: project.title,
+        current_start_date: project.current_start_date,
+        current_due_date: project.current_due_date,
+        initial_start_date: project.initial_start_date,
+        initial_due_date: project.initial_due_date
+      } : null,
       assignee: safeAssignee,
       predecessors,
       successors,
       delays,
       plan_changes,
       can_manage_plan,
+      is_project_manager,
+      extension_requests,
+      pending_extension_request,
       can_edit,
       is_assignee,
       assigner: safeAssigner,
@@ -955,7 +981,8 @@ app.post('/api/projects/:id/apply-textile-template', (req, res) => {
           priority: 'NORMAL',
           workflow_step: row.step,
           task_definition: row.title,
-          assigned_by_user_id: auth.user_id
+          assigned_by_user_id: auth.user_id,
+          auto_expand_project_dates: true
         }
       );
 
@@ -1116,10 +1143,94 @@ app.post('/api/tasks/:id/assign', (req, res) => {
 app.post('/api/tasks/:id/plan', (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { new_start_date, new_due_date, reason } = req.body;
-    const task = taskService.updateTaskPlan(auth, req.params.id, new_start_date, new_due_date, reason);
+    const { new_start_date, new_due_date, reason, auto_expand_project_dates } = req.body;
+    const task = taskService.updateTaskPlan(auth, req.params.id, new_start_date, new_due_date, reason, !!auto_expand_project_dates);
     res.json(task);
   } catch (err: any) {
+    if (err.message && err.message.startsWith('PROMPT_PROJECT_REVISION:')) {
+      return res.status(409).json({ error: err.message.replace('PROMPT_PROJECT_REVISION: ', ''), prompt_revision: true });
+    }
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Ek Süre / Plan Revizyon Talebi Gönderme (Çalışan / Görev Sorumlusu)
+app.post('/api/tasks/:id/extension-request', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { requested_start_date, requested_due_date, reason } = req.body;
+    if (!requested_due_date || !reason || String(reason).trim().length < 2) {
+      return res.status(400).json({ error: 'Talep edilen bitiş tarihi ve gerekçe açıklaması zorunludur.' });
+    }
+    const extReq = taskService.createExtensionRequest(
+      auth,
+      req.params.id,
+      requested_start_date,
+      requested_due_date,
+      reason
+    );
+    // Proje yöneticisine bildirim oluştur
+    const task = db.getTaskById(auth.tenant_id, req.params.id);
+    if (task && task.project_id) {
+      const pMembers = db.getProjectMembers(auth.tenant_id, task.project_id);
+      const proj = db.getProjectById(auth.tenant_id, task.project_id);
+      const pmUserIds = new Set<string>();
+      if (proj) pmUserIds.add(proj.created_by_user_id);
+      pMembers.filter(m => m.role === 'PROJECT_MANAGER').forEach(m => pmUserIds.add(m.user_id));
+      for (const pmId of pmUserIds) {
+        notificationService.createNotification(
+          auth.tenant_id,
+          pmId,
+          `ext_req_${extReq.id}_${pmId}`,
+          'IN_APP',
+          '⏳ Ek Süre Talebi',
+          `"${auth.name}", "${task.title}" görevi için ek süre talep etti (Yeni Bitiş: ${requested_due_date.slice(0, 10)}).`,
+          task.id,
+          task.project_id
+        );
+      }
+    }
+    res.status(201).json({ success: true, request: extReq });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Ek Süre Talebini Karara Bağlama (Proje Yöneticisi)
+app.post('/api/tasks/:id/extension-request/:reqId/decide', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { approve, auto_expand_project_dates, rejection_reason } = req.body;
+    const result = taskService.decideExtensionRequest(
+      auth,
+      req.params.reqId,
+      !!approve,
+      !!auto_expand_project_dates,
+      rejection_reason
+    );
+
+    // Talep sahibine bildirim gönder
+    const task = db.getTaskById(auth.tenant_id, req.params.id);
+    if (result.request.user_id) {
+      notificationService.createNotification(
+        auth.tenant_id,
+        result.request.user_id,
+        `ext_decide_${req.params.reqId}`,
+        'IN_APP',
+        approve ? '✅ Ek Süre Onaylandı' : '❌ Ek Süre Reddedildi',
+        approve
+          ? `"${task?.title || 'Görev'}" için ek süre talebiniz Proje Yöneticisi tarafından onaylandı.`
+          : `"${task?.title || 'Görev'}" için ek süre talebiniz reddedildi (${rejection_reason || 'Uygun görülmedi'}).`,
+        req.params.id,
+        task?.project_id || undefined
+      );
+    }
+
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    if (err.message && err.message.startsWith('PROMPT_PROJECT_REVISION:')) {
+      return res.status(409).json({ error: err.message.replace('PROMPT_PROJECT_REVISION: ', ''), prompt_revision: true });
+    }
     res.status(400).json({ error: err.message });
   }
 });
@@ -2349,6 +2460,11 @@ app.post('/api/outlook/action', async (req, res) => {
     res.setHeader('CARD-ACTION-STATUS', encodeURIComponent(err.message || 'İşlem başarısız'));
     res.status(400).json({ error: err.message });
   }
+});
+
+// API 404 handler (API isteklerinde HTML fallback dönmesini engeller)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `İstenen API uç noktası bulunamadı (${req.method} ${req.originalUrl}).` });
 });
 
 // Fallback SPA route

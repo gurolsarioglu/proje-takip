@@ -255,6 +255,8 @@ export class ProjectService {
 
   public canManageProject(auth: AuthContext, project_id: UUID): boolean {
     if (this.isTenantAdmin(auth)) return true;
+    const project = this.db.getProjectById(auth.tenant_id, project_id);
+    if (project && project.created_by_user_id === auth.user_id) return true;
     const m = this.db.getProjectMember(auth.tenant_id, project_id, auth.user_id);
     return m?.role === 'PROJECT_MANAGER';
   }

@@ -159,6 +159,22 @@ CREATE TABLE IF NOT EXISTS task_plan_changes (
   reason TEXT
 );
 
+CREATE TABLE IF NOT EXISTS task_extension_requests (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  requested_start_date TEXT,
+  requested_due_date TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  created_at TEXT NOT NULL,
+  decided_by_user_id TEXT,
+  decided_at TEXT,
+  rejection_reason TEXT
+);
+
 CREATE TABLE IF NOT EXISTS task_dependencies (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

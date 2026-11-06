@@ -5,6 +5,8 @@ import {
   Task,
   TaskAssignment,
   TaskPlanChange,
+  ProjectPlanChange,
+  TaskExtensionRequest,
   WorkStatus,
   UUID
 } from '../../core/types.js';
@@ -37,6 +39,7 @@ export class TaskService {
       workflow_step?: string;
       task_definition?: string;
       assigned_by_user_id?: UUID;
+      auto_expand_project_dates?: boolean;
     }
   ): Task {
     const taskId = crypto.randomUUID();
@@ -64,6 +67,48 @@ export class TaskService {
         const targetUser = this.db.getUserById(auth.tenant_id, assignee_id);
         if (targetUser && targetUser.is_active === false) {
           throw new Error(`Seçilen personel (${targetUser.name}) devre dışı bırakıldığı için kendisine görev atanamaz.`);
+        }
+      }
+
+      // 2. Kural: Görev tarihleri mutlaka proje başlangıç ve bitiş tarihleri arasında olmalıdır
+      const taskStartStr = initial_start_date.slice(0, 10);
+      const taskDueStr = initial_due_date.slice(0, 10);
+      const projStartStr = (proj.current_start_date || proj.initial_start_date).slice(0, 10);
+      const projDueStr = (proj.current_due_date || proj.initial_due_date).slice(0, 10);
+
+      const isEarlier = taskStartStr < projStartStr;
+      const isLater = taskDueStr > projDueStr;
+      const isOutOfBounds = isEarlier || isLater;
+
+      if (isOutOfBounds) {
+        const isManager = isFullAdmin || isCreator || member?.role === 'PROJECT_MANAGER';
+        if (isManager) {
+          if (extra?.auto_expand_project_dates) {
+            // Proje takvimini otomatik genişlet
+            const newProjStart = isEarlier ? initial_start_date : proj.current_start_date;
+            const newProjDue = isLater ? initial_due_date : proj.current_due_date;
+            const planChange: ProjectPlanChange = {
+              id: crypto.randomUUID(),
+              tenant_id: auth.tenant_id,
+              project_id: normalizedProjectId,
+              previous_start_date: proj.current_start_date,
+              previous_due_date: proj.current_due_date,
+              new_start_date: newProjStart,
+              new_due_date: newProjDue,
+              changed_by_user_id: auth.user_id,
+              changed_at: new Date().toISOString(),
+              reason: `"${title}" görevi eklendiği için proje takvimi otomatik genişletildi.`
+            };
+            this.db.insertProjectPlanChange(planChange);
+            this.db.updateProject(auth.tenant_id, normalizedProjectId, {
+              current_start_date: newProjStart,
+              current_due_date: newProjDue
+            });
+          } else {
+            throw new Error(`PROMPT_PROJECT_REVISION: Belirlediğiniz görev tarihleri (${taskStartStr} - ${taskDueStr}) proje takvimini (${projStartStr} - ${projDueStr}) aşmaktadır. Proje takvimini genişleterek görevi kaydetmek için onay veriniz.`);
+          }
+        } else {
+          throw new Error(`Görev tarihleri (${taskStartStr} - ${taskDueStr}) proje takvimi (${projStartStr} - ${projDueStr}) dışında olamaz. Proje süresini aşan görevler için Proje Yöneticisi onayı gereklidir.`);
         }
       }
     } else {
@@ -198,12 +243,63 @@ export class TaskService {
     task_id: UUID,
     new_start_date: string,
     new_due_date: string,
-    reason?: string
+    reason?: string,
+    auto_expand_project_dates?: boolean
   ): Task {
     const task = this.db.getTaskById(auth.tenant_id, task_id);
     if (!task) throw new Error('Görev bulunamadı.');
 
     this.assertCanModifyTask(auth, task);
+
+    if (task.project_id) {
+      const proj = this.db.getProjectById(auth.tenant_id, task.project_id);
+      if (proj) {
+        const taskStartStr = new_start_date.slice(0, 10);
+        const taskDueStr = new_due_date.slice(0, 10);
+        const projStartStr = (proj.current_start_date || proj.initial_start_date).slice(0, 10);
+        const projDueStr = (proj.current_due_date || proj.initial_due_date).slice(0, 10);
+
+        const isEarlier = taskStartStr < projStartStr;
+        const isLater = taskDueStr > projDueStr;
+        const isOutOfBounds = isEarlier || isLater;
+
+        if (isOutOfBounds) {
+          const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+          const isFullAdmin = user?.system_role === 'ADMIN';
+          const isCreator = proj.created_by_user_id === auth.user_id;
+          const member = this.db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id);
+          const isManager = isFullAdmin || isCreator || member?.role === 'PROJECT_MANAGER';
+
+          if (isManager) {
+            if (auto_expand_project_dates) {
+              const newProjStart = isEarlier ? new_start_date : proj.current_start_date;
+              const newProjDue = isLater ? new_due_date : proj.current_due_date;
+              const planChange: ProjectPlanChange = {
+                id: crypto.randomUUID(),
+                tenant_id: auth.tenant_id,
+                project_id: task.project_id,
+                previous_start_date: proj.current_start_date,
+                previous_due_date: proj.current_due_date,
+                new_start_date: newProjStart,
+                new_due_date: newProjDue,
+                changed_by_user_id: auth.user_id,
+                changed_at: new Date().toISOString(),
+                reason: `"${task.title}" görevi plan revizyonu nedeniyle proje takvimi otomatik genişletildi.`
+              };
+              this.db.insertProjectPlanChange(planChange);
+              this.db.updateProject(auth.tenant_id, task.project_id, {
+                current_start_date: newProjStart,
+                current_due_date: newProjDue
+              });
+            } else {
+              throw new Error(`PROMPT_PROJECT_REVISION: Yeni görev tarihleri (${taskStartStr} - ${taskDueStr}) proje takvimini (${projStartStr} - ${projDueStr}) aşmaktadır. Proje takvimini genişleterek planı güncellemek için onay veriniz.`);
+            }
+          } else {
+            throw new Error(`Görev tarihleri (${taskStartStr} - ${taskDueStr}) proje takvimi (${projStartStr} - ${projDueStr}) dışında olamaz. Proje süresini aşan süre uzatımları için Proje Yöneticisi onayı gereklidir.`);
+          }
+        }
+      }
+    }
 
     const change: TaskPlanChange = {
       id: crypto.randomUUID(),
@@ -225,6 +321,113 @@ export class TaskService {
     });
 
     return updated!;
+  }
+
+  // --- Ek Süre Talepleri (Task Extension Requests) ---
+  public createExtensionRequest(
+    auth: AuthContext,
+    task_id: UUID,
+    requested_start_date: string | undefined,
+    requested_due_date: string,
+    reason: string
+  ): TaskExtensionRequest {
+    const task = this.db.getTaskById(auth.tenant_id, task_id);
+    if (!task) throw new Error('Görev bulunamadı.');
+    if (!task.project_id) throw new Error('Kişisel görevlerde ek süre talebine gerek yoktur, doğrudan düzenleyebilirsiniz.');
+
+    const caller = this.db.getUserById(auth.tenant_id, auth.user_id);
+    const isAssignee = !task.assignee_id || task.assignee_id === auth.user_id;
+    const isFullAdmin = caller?.system_role === 'ADMIN';
+    const member = this.db.getProjectMember(auth.tenant_id, task.project_id, auth.user_id);
+    const isEditorOrManager = member && (member.role === 'PROJECT_MANAGER' || member.role === 'EDITOR');
+
+    if (!isAssignee && !isFullAdmin && !isEditorOrManager) {
+      throw new Error('Yalnızca görevin sorumlusu veya proje yetkilisi ek süre talebinde bulunabilir.');
+    }
+
+    const existingPending = this.db.getTaskExtensionRequests(auth.tenant_id, task_id).find(r => r.status === 'PENDING');
+    if (existingPending) {
+      throw new Error('Bu görev için zaten onay bekleyen bir ek süre / plan revizyon talebi bulunmaktadır.');
+    }
+
+    const req: TaskExtensionRequest = {
+      id: crypto.randomUUID(),
+      tenant_id: auth.tenant_id,
+      project_id: task.project_id,
+      task_id,
+      user_id: auth.user_id,
+      requested_start_date,
+      requested_due_date,
+      reason: reason.trim(),
+      status: 'PENDING',
+      created_at: new Date().toISOString()
+    };
+
+    return this.db.insertTaskExtensionRequest(req);
+  }
+
+  public decideExtensionRequest(
+    auth: AuthContext,
+    request_id: UUID,
+    approve: boolean,
+    auto_expand_project_dates?: boolean,
+    rejection_reason?: string
+  ): { request: TaskExtensionRequest; task?: Task } {
+    const req = this.db.getTaskExtensionRequestById(auth.tenant_id, request_id);
+    if (!req) throw new Error('Ek süre talebi bulunamadı.');
+
+    const user = this.db.getUserById(auth.tenant_id, auth.user_id);
+    const isFullAdmin = user?.system_role === 'ADMIN';
+    const proj = this.db.getProjectById(auth.tenant_id, req.project_id);
+    const isCreator = proj && proj.created_by_user_id === auth.user_id;
+    const member = this.db.getProjectMember(auth.tenant_id, req.project_id, auth.user_id);
+    const isManager = isFullAdmin || isCreator || member?.role === 'PROJECT_MANAGER';
+
+    if (!isManager) {
+      throw new Error('Yetersiz Yetki: Ek süre taleplerini yalnızca Proje Yöneticisi veya Sistem Yöneticisi onaylayabilir.');
+    }
+
+    if (req.status !== 'PENDING') {
+      throw new Error(`Bu talep daha önce sonuçlandırılmıştır (${req.status}).`);
+    }
+
+    const now = new Date().toISOString();
+    if (!approve) {
+      const updatedReq = this.db.updateTaskExtensionRequest(auth.tenant_id, request_id, {
+        status: 'REJECTED',
+        decided_by_user_id: auth.user_id,
+        decided_at: now,
+        rejection_reason: rejection_reason || 'Proje Yöneticisi tarafından uygun görülmedi.'
+      });
+      return { request: updatedReq! };
+    }
+
+    const task = this.db.getTaskById(auth.tenant_id, req.task_id);
+    if (!task) throw new Error('İlgili görev bulunamadı.');
+
+    const targetStart = req.requested_start_date || task.current_start_date;
+    const targetDue = req.requested_due_date;
+
+    const updatedTask = this.updateTaskPlan(
+      auth,
+      req.task_id,
+      targetStart,
+      targetDue,
+      `[Ek Süre Onayı]: ${req.reason}`,
+      auto_expand_project_dates
+    );
+
+    const updatedReq = this.db.updateTaskExtensionRequest(auth.tenant_id, request_id, {
+      status: 'APPROVED',
+      decided_by_user_id: auth.user_id,
+      decided_at: now
+    });
+
+    return { request: updatedReq!, task: updatedTask };
+  }
+
+  public getExtensionRequests(auth: AuthContext, task_id: UUID): TaskExtensionRequest[] {
+    return this.db.getTaskExtensionRequests(auth.tenant_id, task_id);
   }
 
   /**
@@ -457,7 +660,8 @@ export class TaskService {
         item.description,
         {
           type: item.type || 'TASK',
-          priority: item.priority || 'NORMAL'
+          priority: item.priority || 'NORMAL',
+          auto_expand_project_dates: true
         }
       );
       createdTasks.push(task);

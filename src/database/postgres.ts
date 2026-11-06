@@ -359,6 +359,25 @@ export class PostgresEngine {
       );
     }
 
+    // 11. Task Extension Requests
+    if (state.task_extension_requests) {
+      for (const ter of state.task_extension_requests) {
+        await this.querySql(
+          `INSERT INTO task_extension_requests (id, tenant_id, project_id, task_id, user_id, requested_start_date, requested_due_date, reason, status, created_at, decided_by_user_id, decided_at, rejection_reason)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           ON CONFLICT (id) DO UPDATE SET
+             status = EXCLUDED.status, decided_by_user_id = EXCLUDED.decided_by_user_id,
+             decided_at = EXCLUDED.decided_at, rejection_reason = EXCLUDED.rejection_reason`,
+          [
+            ter.id, ter.tenant_id, ter.project_id, ter.task_id, ter.user_id,
+            ter.requested_start_date || null, ter.requested_due_date, ter.reason,
+            ter.status, ter.created_at, ter.decided_by_user_id || null,
+            ter.decided_at || null, ter.rejection_reason || null
+          ]
+        );
+      }
+    }
+
     this.lastSyncedAt = new Date().toISOString();
   }
 

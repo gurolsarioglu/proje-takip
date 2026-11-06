@@ -535,7 +535,9 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
       'Öncül Altyapı Görevi',
       '2026-12-01T09:00:00Z',
       '2026-12-05T18:00:00Z',
-      assigneeA.id
+      assigneeA.id,
+      undefined,
+      { auto_expand_project_dates: true }
     );
     const tSucc = taskService.createTask(
       authManagerA,
@@ -543,7 +545,9 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
       'Ardıl Entegrasyon Görevi',
       '2026-12-06T09:00:00Z',
       '2026-12-10T18:00:00Z',
-      assigneeA.id
+      assigneeA.id,
+      undefined,
+      { auto_expand_project_dates: true }
     );
 
     const revised = taskService.updateTaskPlan(
@@ -677,7 +681,9 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
       'Numune Kesim & Dikim (Outlook Card)',
       '2026-11-01T09:00:00Z',
       '2026-11-05T18:00:00Z',
-      assigneeA.id
+      assigneeA.id,
+      undefined,
+      { auto_expand_project_dates: true }
     );
     const cardTask2 = taskService.createTask(
       authManagerA,
@@ -685,7 +691,9 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
       'Kalite Kontrol & Showroom Sunumu',
       '2026-11-06T09:00:00Z',
       '2026-11-10T18:00:00Z',
-      editorA.id
+      editorA.id,
+      undefined,
+      { auto_expand_project_dates: true }
     );
     dependencyService.addDependency(authManagerA, cardTask1.id, cardTask2.id);
 
@@ -1445,7 +1453,8 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
         priority: 'HIGH',
         workflow_step: 'AKSESUAR',
         task_definition: 'Fermuar ve Düğme Numunelerinin Temini',
-        assigned_by_user_id: managerA.id
+        assigned_by_user_id: managerA.id,
+        auto_expand_project_dates: true
       }
     );
 
@@ -1496,7 +1505,8 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
           priority: 'NORMAL',
           workflow_step: item.step,
           task_definition: item.def,
-          assigned_by_user_id: managerA.id
+          assigned_by_user_id: managerA.id,
+          auto_expand_project_dates: true
         }
       );
       createdTasks.push(t);
@@ -1602,5 +1612,130 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     // 10. Proje tekrar normal proje listesinde görünmelidir
     const userProjectsAfterRestore = projectService.listProjects(authPm);
     assert.ok(userProjectsAfterRestore.some(p => p.id === pTestDelete.id), 'Geri getirilen proje tekrar proje listesinde görünmelidir');
+  });
+
+  await t.test('PROJE TARİH SINIRLARI & EK SÜRE (EXTENSION REQUEST) MEKANİZMASI: Görevler mutlaka proje tarihleri arasında olmalı, aşımda onay alınmalı ve proje revize edilmelidir', async () => {
+    // 1. Proje oluştur (01.12.2026 - 15.12.2026)
+    const pBounds = projectService.createProject(
+      authManagerA,
+      'Termin Sınır Projesi',
+      'Tarih sınırları ve ek süre testi',
+      '2026-12-01T09:00:00Z',
+      '2026-12-15T18:00:00Z'
+    );
+
+    // Ayşe editör olarak atanıyor
+    projectService.addOrUpdateMember(authManagerA, pBounds.id, editorA.id, 'EDITOR');
+    // Mehmet atanan sorumlu
+    projectService.addOrUpdateMember(authManagerA, pBounds.id, assigneeA.id, 'VIEWER');
+
+    // 2. Proje Yöneticisi olmayan kullanıcı (Ayşe Editör) proje sınırlarını aşan görev ekleyemez
+    assert.throws(
+      () => taskService.createTask(
+        authEditorA,
+        pBounds.id,
+        'Taşan Görev',
+        '2026-12-01T09:00:00Z',
+        '2026-12-20T18:00:00Z',
+        assigneeA.id
+      ),
+      /proje takvimi .* dışında olamaz.*Proje Yöneticisi onayı gereklidir/i,
+      'Proje yöneticisi olmayan kişi proje sınırlarını aşan görev ekleyemez'
+    );
+
+    // 3. Proje Yöneticisi sınırları aşan görev eklerken onay (auto_expand_project_dates) vermezse uyarılır
+    assert.throws(
+      () => taskService.createTask(
+        authManagerA,
+        pBounds.id,
+        'Yönetici Taşan Görev',
+        '2026-11-25T09:00:00Z', // Proje başlangıcından 5 gün önce
+        '2026-12-10T18:00:00Z',
+        assigneeA.id
+      ),
+      /PROMPT_PROJECT_REVISION/i,
+      'Proje yöneticisine onay vermesi için PROMPT_PROJECT_REVISION uyarısı fırlatılmalıdır'
+    );
+
+    // 4. Proje Yöneticisi onay verdiğinde (auto_expand_project_dates: true), proje tarihleri otomatik revize edilmeli ve görev eklenmelidir
+    const taskExpanded = taskService.createTask(
+      authManagerA,
+      pBounds.id,
+      'Otomatik Genişletilen Görev',
+      '2026-11-25T09:00:00Z', // Proje başlangıcını 01.12'den 25.11'e çeker
+      '2026-12-25T18:00:00Z', // Proje bitişini 15.12'den 25.12'ye uzatır
+      assigneeA.id,
+      undefined,
+      { auto_expand_project_dates: true }
+    );
+    assert.ok(taskExpanded.id);
+
+    // Projenin güncel tarihleri kontrol edilir
+    const updatedProj = db.getProjectById(tenantA.id, pBounds.id);
+    assert.equal(updatedProj?.current_start_date.slice(0, 10), '2026-11-25', 'Proje başlangıç tarihi göreve göre geriye çekilmelidir');
+    assert.equal(updatedProj?.current_due_date.slice(0, 10), '2026-12-25', 'Proje bitiş tarihi göreve göre ileriye uzatılmalıdır');
+    assert.equal(updatedProj?.initial_start_date.slice(0, 10), '2026-12-01', 'Proje ilk başlangıç tarihi korunmalıdır');
+    assert.equal(updatedProj?.initial_due_date.slice(0, 10), '2026-12-15', 'Proje ilk bitiş tarihi korunmalıdır');
+
+    // 5. Normal sınırlar içinde görev ekleme
+    const normalTask = taskService.createTask(
+      authManagerA,
+      pBounds.id,
+      'Normal Süreli Görev',
+      '2026-12-05T09:00:00Z',
+      '2026-12-12T18:00:00Z',
+      assigneeA.id
+    );
+
+    // 6. Atanan sorumlu (Mehmet) doğrudan proje sınırlarını aşan plan revizyonu yapamaz
+    assert.throws(
+      () => taskService.updateTaskPlan(
+        authAssigneeA,
+        normalTask.id,
+        '2026-12-05T09:00:00Z',
+        '2026-12-30T18:00:00Z', // 25.12'yi aşıyor
+        'Ek süre istiyorum'
+      ),
+      /proje takvimi .* dışında olamaz/i,
+      'Çalışan proje sınırlarını aşan süreyi doğrudan güncelleyemez'
+    );
+
+    // 7. Çalışan (Mehmet) Ek Süre Talebi (Extension Request) oluşturur
+    const extReq = taskService.createExtensionRequest(
+      authAssigneeA,
+      normalTask.id,
+      '2026-12-05T09:00:00Z',
+      '2026-12-30T18:00:00Z',
+      'Tedarikçi kumaş teslimatı 5 gün gecikti'
+    );
+    assert.equal(extReq.status, 'PENDING');
+    assert.equal(extReq.user_id, assigneeA.id);
+
+    // Mükerrer talep açılamaz
+    assert.throws(
+      () => taskService.createExtensionRequest(
+        authAssigneeA,
+        normalTask.id,
+        '2026-12-05T09:00:00Z',
+        '2026-12-31T18:00:00Z',
+        'Tekrar talep'
+      ),
+      /zaten onay bekleyen bir ek süre/i,
+      'Aynı görev için mükerrer talep açılamaz'
+    );
+
+    // 8. Proje Yöneticisi ek süre talebini onaylar ve gerekirse proje takvimini genişletir
+    const decideRes = taskService.decideExtensionRequest(
+      authManagerA,
+      extReq.id,
+      true,
+      true // auto_expand_project_dates
+    );
+    assert.equal(decideRes.request.status, 'APPROVED');
+    assert.equal(decideRes.task?.current_due_date.slice(0, 10), '2026-12-30', 'Görevin bitiş tarihi talep edilen tarihe güncellenmelidir');
+
+    // Projenin bitiş tarihi de 30.12'ye uzamış olmalıdır
+    const finalProj = db.getProjectById(tenantA.id, pBounds.id);
+    assert.equal(finalProj?.current_due_date.slice(0, 10), '2026-12-30', 'Proje bitiş tarihi onaylanan ek süreye göre uzatılmalıdır');
   });
 });
