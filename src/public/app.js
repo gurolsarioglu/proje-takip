@@ -17,7 +17,14 @@ let state = {
   workflowSteps: [],
   taskDefinitions: [],
   deletedProjects: [],
-  activeProjectsTab: 'active'
+  activeProjectsTab: 'active',
+  projectsViewMode: 'grid',
+  projGanttZoomLevel: 'month',
+  customers: [],
+  selectedCustomerFilter: 'all',
+  masterProjects: [],
+  selectedMasterFilter: 'all',
+  selectedHierarchyFilter: 'all'
 };
 
 function getStepColor(stepName) {
@@ -206,7 +213,8 @@ function setLanguage(lang) {
   // Seçilen dile göre arayüzdeki tarihleri, etiketleri ve görünümleri anında yeniden çiz
   if (state.currentUser) {
     if (typeof renderProjectSelector === 'function') renderProjectSelector();
-    if (typeof renderProjectsGrid === 'function' && state.projects) renderProjectsGrid();
+    if (typeof renderProjectsView === 'function' && state.projects) renderProjectsView();
+    else if (typeof renderProjectsGrid === 'function' && state.projects) renderProjectsGrid();
     if (typeof renderMyTasks === 'function' && state.myTasks) renderMyTasks();
     if (state.currentView === 'view-timeline' && typeof renderTimeline === 'function') renderTimeline();
     if (state.currentView === 'view-board' && typeof renderBoard === 'function') renderBoard();
@@ -774,7 +782,296 @@ function getBlockingSuccessorSummary(task) {
   return { count: 0, titles: [] };
 }
 
+// ================= MÜŞTERİ YÖNETİMİ & PORTFÖY BAŞARI ANALİZİ =================
+
+async function loadCustomers() {
+  try {
+    const list = await apiCall('/api/customers');
+    state.customers = Array.isArray(list) ? list : [];
+    const countBadge = document.getElementById('customersCount');
+    if (countBadge) countBadge.textContent = state.customers.length;
+    renderCustomerSelects();
+  } catch (err) {
+    console.warn('Müşteri listesi alınırken uyarı:', err);
+    state.customers = [];
+  }
+}
+
+function renderCustomerSelects() {
+  // 1. Yeni Proje Modalındaki select (#pCustomer)
+  const pCust = document.getElementById('pCustomer');
+  if (pCust) {
+    const currentVal = pCust.value;
+    let html = '<option value="">-- Müşteri Seçiniz (Opsiyonel) --</option>';
+    (state.customers || []).forEach(c => {
+      html += `<option value="${c.id}">🏢 ${escapeHtml(c.name)}${c.code ? ` (${escapeHtml(c.code)})` : ''}</option>`;
+    });
+    pCust.innerHTML = html;
+    if (currentVal) pCust.value = currentVal;
+  }
+
+  // 2. Projeler sayfasındaki müşteri filtresi (#projectCustomerFilter)
+  const filterSel = document.getElementById('projectCustomerFilter');
+  if (filterSel) {
+    const currentFilter = state.selectedCustomerFilter || 'all';
+    let fHtml = '<option value="all">🏢 Tüm Müşteriler</option>';
+    (state.customers || []).forEach(c => {
+      fHtml += `<option value="${c.id}">🏢 ${escapeHtml(c.name)}</option>`;
+    });
+    filterSel.innerHTML = fHtml;
+    filterSel.value = currentFilter;
+  }
+
+  // 3. Proje Yönetimi (Ekip & Plan) modalındaki select (#pmCustomerSelect)
+  const pmCust = document.getElementById('pmCustomerSelect');
+  if (pmCust) {
+    const pmVal = pmCust.value;
+    let pmHtml = '<option value="">-- Müşteri Atanmadı (Genel) --</option>';
+    (state.customers || []).forEach(c => {
+      pmHtml += `<option value="${c.id}">🏢 ${escapeHtml(c.name)}${c.code ? ` (${escapeHtml(c.code)})` : ''}</option>`;
+    });
+    pmCust.innerHTML = pmHtml;
+    if (pmVal) pmCust.value = pmVal;
+  }
+}
+
+// ================= ÇATI / ANA PROJE YÖNETİMİ (MASTER PROJECTS) =================
+
+async function loadMasterProjects() {
+  try {
+    const list = await apiCall('/api/master-projects');
+    state.masterProjects = Array.isArray(list) ? list : [];
+    renderMasterProjectSelects();
+  } catch (err) {
+    console.warn('Ana proje listesi alınırken uyarı:', err);
+    state.masterProjects = [];
+  }
+}
+
+function renderMasterProjectSelects() {
+  // 1. Yeni Proje Modalındaki select (#pMasterProject)
+  const pMaster = document.getElementById('pMasterProject');
+  if (pMaster) {
+    const curVal = pMaster.value;
+    let html = '';
+    (state.masterProjects || []).forEach(m => {
+      html += `<option value="${m.id}">🏛️ ${escapeHtml(m.title)} (${m.year})</option>`;
+    });
+    html += '<option value="__new__">➕ + Yeni Çatı Yılı / Program Ekle...</option>';
+    pMaster.innerHTML = html;
+    if (curVal && curVal !== '__new__') {
+      pMaster.value = curVal;
+    } else if (state.masterProjects && state.masterProjects.length > 0) {
+      const match2026 = state.masterProjects.find(m => m.year === 2026);
+      pMaster.value = match2026 ? match2026.id : state.masterProjects[0].id;
+    }
+  }
+
+  // 2. Projeler sayfasındaki çatı proje filtresi (#projectMasterFilter)
+  const masterFilter = document.getElementById('projectMasterFilter');
+  if (masterFilter) {
+    const curFilter = state.selectedMasterFilter || 'all';
+    let fHtml = '<option value="all">🏛️ Tüm Çatı Projeler</option>';
+    (state.masterProjects || []).forEach(m => {
+      fHtml += `<option value="${m.id}">🏛️ ${escapeHtml(m.title)}</option>`;
+    });
+    masterFilter.innerHTML = fHtml;
+    masterFilter.value = curFilter;
+  }
+}
+
+function renderParentProjectSelect() {
+  const pParent = document.getElementById('pParentProject');
+  if (!pParent) return;
+  const currentVal = pParent.value;
+  let html = '<option value="">-- Ana Proje Seçiniz --</option>';
+  // Yalnızca Ana Projeleri listele (parent_project_id olmayanlar)
+  const mainProjects = (state.projects || []).filter(p => !p.parent_project_id);
+  mainProjects.forEach(p => {
+    html += `<option value="${p.id}">📁 ${escapeHtml(p.title)}${p.customer_name ? ` (${escapeHtml(p.customer_name)})` : ''}</option>`;
+  });
+  pParent.innerHTML = html;
+  if (currentVal) pParent.value = currentVal;
+}
+
+async function loadAndRenderCustomers() {
+  await loadCustomers();
+  renderCustomerStatsView();
+}
+
+function renderCustomerStatsView() {
+  const grid = document.getElementById('customersGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const customers = state.customers || [];
+  const searchInput = document.getElementById('customerSearchInput');
+  const searchQuery = (searchInput?.value || '').trim().toLowerCase();
+
+  const filtered = customers.filter(c => {
+    if (!searchQuery) return true;
+    return (c.name || '').toLowerCase().includes(searchQuery) ||
+           (c.code || '').toLowerCase().includes(searchQuery) ||
+           (c.description || '').toLowerCase().includes(searchQuery);
+  });
+
+  // KPI Metrikleri
+  const totalCustomersEl = document.getElementById('kpiTotalCustomers');
+  const totalProjectsEl = document.getElementById('kpiTotalCustomerProjects');
+  const avgSuccessEl = document.getElementById('kpiAvgSuccessRate');
+  const topCustEl = document.getElementById('kpiTopCustomer');
+  const topCustDescEl = document.getElementById('kpiTopCustomerDesc');
+
+  if (totalCustomersEl) totalCustomersEl.textContent = customers.length;
+  const totalProjs = customers.reduce((sum, c) => sum + (c.total_projects || 0), 0);
+  if (totalProjectsEl) totalProjectsEl.textContent = totalProjs;
+
+  const validSuccess = customers.filter(c => (c.total_projects || 0) > 0);
+  const avgSuccess = validSuccess.length > 0
+    ? Math.round(validSuccess.reduce((sum, c) => sum + (c.success_rate || 0), 0) / validSuccess.length)
+    : 100;
+  if (avgSuccessEl) avgSuccessEl.textContent = `%${avgSuccess}`;
+
+  // En çok projesi olan müşteri
+  const sortedByProjs = [...customers].sort((a, b) => (b.total_projects || 0) - (a.total_projects || 0));
+  const topCust = sortedByProjs[0];
+  if (topCustEl) {
+    topCustEl.textContent = topCust && (topCust.total_projects || 0) > 0 ? topCust.name : '-';
+  }
+  if (topCustDescEl) {
+    topCustDescEl.textContent = topCust && (topCust.total_projects || 0) > 0
+      ? `${topCust.total_projects} Proje • %${topCust.success_rate || 0} Başarı`
+      : 'Proje hacmi lideri';
+  }
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-tertiary);">
+        <span style="font-size: 2.5rem; display: block; margin-bottom: 8px;">🏢</span>
+        <h4 style="margin: 0 0 6px 0; color: var(--text-primary);">Arama kriterine uygun müşteri bulunamadı.</h4>
+        <p style="font-size: 0.85rem; margin: 0;">Yeni bir müşteri tanımlamak için "+ Yeni Müşteri Ekle" butonunu kullanabilirsiniz.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // Renk gradyanları
+  const brandColors = [
+    'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+    'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+    'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+    'linear-gradient(135deg, #ec4899 0%, #be185d 100%)'
+  ];
+
+  filtered.forEach((c, idx) => {
+    const card = document.createElement('div');
+    card.className = 'customer-card';
+    card.dataset.id = c.id;
+
+    const bgGradient = brandColors[idx % brandColors.length];
+    const initial = (c.name || 'M').slice(0, 2).toUpperCase();
+    const successRate = typeof c.success_rate === 'number' ? c.success_rate : 0;
+    const successClass = successRate >= 80 ? 'high' : (successRate >= 50 ? 'medium' : 'low');
+
+    card.innerHTML = `
+      <div class="customer-card-header">
+        <div class="customer-brand-wrap">
+          <div class="customer-logo-badge" style="background:${bgGradient};">
+            ${initial}
+          </div>
+          <div class="customer-title-area">
+            <h4>${escapeHtml(c.name)}</h4>
+            <span>${c.code ? `Kod: ${escapeHtml(c.code)} • ` : ''}${escapeHtml(c.contact_person || 'İletişim Belirtilmemiş')}</span>
+          </div>
+        </div>
+        <div class="customer-success-pill ${successClass}" title="Zamanında Teslim ve Tamamlanma Başarısı">
+          🎯 %${successRate} Başarı
+        </div>
+      </div>
+
+      <p style="font-size:0.8rem; color:var(--text-secondary); line-height:1.45; margin:0; min-height:36px;">
+        ${escapeHtml(c.description || 'Bu müşteri için özel açıklama girilmemiş.')}
+      </p>
+
+      <!-- İlerleme Çubuğu -->
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.75rem; font-weight:600; color:var(--text-secondary);">
+          <span>Ortalama Proje İlerlemesi</span>
+          <span style="color:var(--text-primary); font-weight:700;">%${c.avg_progress || 0}</span>
+        </div>
+        <div style="height:6px; background:var(--border-subtle); border-radius:999px; overflow:hidden;">
+          <div style="height:100%; width:${c.avg_progress || 0}%; background:#3b82f6; border-radius:999px; transition:width 0.4s ease;"></div>
+        </div>
+      </div>
+
+      <!-- İstatistikler -->
+      <div class="customer-stats-row">
+        <div class="customer-stat-item">
+          <div class="stat-num">${c.total_projects || 0}</div>
+          <div class="stat-label">Toplam Proje</div>
+        </div>
+        <div class="customer-stat-item">
+          <div class="stat-num" style="color:#0284c7;">${c.active_projects || 0}</div>
+          <div class="stat-label">Aktif Proje</div>
+        </div>
+        <div class="customer-stat-item">
+          <div class="stat-num" style="color:#10b981;">${c.completed_projects || 0}</div>
+          <div class="stat-label">Tamamlanan</div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--text-tertiary); padding:0 4px;">
+        <span>📋 Toplam Görev: <strong>${c.total_tasks || 0}</strong></span>
+        ${(c.delayed_tasks || 0) > 0 ? `<span style="color:#ef4444; font-weight:700;">⚠️ ${c.delayed_tasks} Geciken Görev</span>` : `<span style="color:#10b981; font-weight:600;">✓ Gecikmesiz</span>`}
+      </div>
+
+      <div class="customer-card-actions">
+        <button type="button" class="action-btn secondary-btn sm-btn btn-view-cust-projects" data-id="${c.id}" data-name="${escapeHtml(c.name)}">
+          📋 Projelerini Gör (${c.total_projects || 0})
+        </button>
+        <button type="button" class="action-btn outline-btn sm-btn btn-edit-customer" data-id="${c.id}">
+          ✏️ Düzenle
+        </button>
+      </div>
+    `;
+
+    card.querySelector('.btn-view-cust-projects')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.selectedCustomerFilter = c.id;
+      switchView('view-projects');
+      const filterSel = document.getElementById('projectCustomerFilter');
+      if (filterSel) filterSel.value = c.id;
+      renderProjectsView();
+    });
+
+    card.querySelector('.btn-edit-customer')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCustomerModal(c);
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+function openCustomerModal(customer = null) {
+  const modal = document.getElementById('customerModal');
+  if (!modal) return;
+  const isEdit = !!customer;
+  const titleEl = document.getElementById('customerModalTitle');
+  if (titleEl) titleEl.textContent = isEdit ? '🏢 Müşteri Bilgilerini Düzenle' : '🏢 Yeni Müşteri Ekle';
+  document.getElementById('custEditId').value = isEdit ? customer.id : '';
+  document.getElementById('custName').value = isEdit ? (customer.name || '') : '';
+  document.getElementById('custCode').value = isEdit ? (customer.code || '') : '';
+  document.getElementById('custDesc').value = isEdit ? (customer.description || '') : '';
+  document.getElementById('custContactPerson').value = isEdit ? (customer.contact_person || '') : '';
+  document.getElementById('custContactEmail').value = isEdit ? (customer.contact_email || '') : '';
+  modal.classList.add('open');
+}
+
 async function loadProjects() {
+  await loadCustomers();
+  await loadMasterProjects();
   state.projects = await apiCall('/api/projects');
   document.getElementById('projectsCount').textContent = state.projects.length;
 
@@ -796,7 +1093,7 @@ async function loadProjects() {
   }
 
   renderProjectSelector();
-  renderProjectsGrid();
+  renderProjectsView();
 
   if (state.currentProjectId) {
     await loadProjectTasks(state.currentProjectId);
@@ -834,19 +1131,25 @@ async function loadProjectTasks(projectId) {
     }
   }
 
-  // Kullanıcının bireysel (projesiz) görevlerini de yükle
+  // Kullanıcının bireysel (projesiz) görevlerini yalnızca 'personal' veya 'all' (Konsolide) modunda yükle
   let personalTasks = [];
-  try {
-    personalTasks = await apiCall('/api/tasks/personal');
-  } catch (err) {
-    personalTasks = [];
+  if (projectId === 'personal' || projectId === 'all') {
+    try {
+      personalTasks = await apiCall('/api/tasks/personal');
+    } catch (err) {
+      personalTasks = [];
+    }
   }
 
   if (projectId === 'personal') {
     state.tasks = personalTasks;
     state.dependencies = [];
-  } else {
+  } else if (projectId === 'all') {
     state.tasks = [...projTasks, ...personalTasks];
+    state.dependencies = dependencies;
+  } else {
+    // Belirli bir şirket projesi seçildiğinde yalnızca o projeye ait görevler yüklenir (bireysel to-do'lar şirket projesine karışmaz)
+    state.tasks = projTasks;
     state.dependencies = dependencies;
   }
 
@@ -880,6 +1183,42 @@ async function loadPersonnel() {
 
 // ================= RENDER VIEWS =================
 
+// Proje Hiyerarşisi Seçenek Formatlayıcı (Ana Projeler ve altlarında girintili Alt Projeler)
+function formatProjectHierarchyOptions(projects) {
+  const mainProjects = (projects || []).filter(p => !p.parent_project_id);
+  const subProjectsMap = new Map();
+  (projects || []).filter(p => !!p.parent_project_id).forEach(sp => {
+    if (!subProjectsMap.has(sp.parent_project_id)) {
+      subProjectsMap.set(sp.parent_project_id, []);
+    }
+    subProjectsMap.get(sp.parent_project_id).push(sp);
+  });
+
+  const renderedIds = new Set();
+  let html = '';
+
+  mainProjects.forEach(mp => {
+    renderedIds.add(mp.id);
+    const subs = subProjectsMap.get(mp.id) || [];
+    const subBadge = subs.length > 0 ? ` (${subs.length} Alt Proje)` : '';
+    html += `<option value="${mp.id}" style="font-weight:700;">📁 ${escapeHtml(mp.title)}${subBadge}</option>`;
+    subs.forEach((sub, sIdx) => {
+      renderedIds.add(sub.id);
+      const prefix = (sIdx === subs.length - 1) ? '└── 📦 ' : '├── 📦 ';
+      html += `<option value="${sub.id}">&nbsp;&nbsp;&nbsp;&nbsp;${prefix}${escapeHtml(sub.title)}</option>`;
+    });
+  });
+
+  // Üst projesi listede olmayan veya bağımsız kalan alt projeler
+  (projects || []).forEach(p => {
+    if (!renderedIds.has(p.id)) {
+      html += `<option value="${p.id}">📦 ${escapeHtml(p.title)}</option>`;
+    }
+  });
+
+  return html;
+}
+
 function renderProjectSelector() {
   const el = document.getElementById('projectSelect');
   if (!el) return;
@@ -890,7 +1229,7 @@ function renderProjectSelector() {
 
   if (state.projects.length > 0) {
     html += `<optgroup label="📁 ${t('label_company_projects', 'Şirket Projeleri')}">` +
-      state.projects.map(p => `<option value="${p.id}">📁 ${escapeHtml(p.title)}</option>`).join('') +
+      formatProjectHierarchyOptions(state.projects) +
       `</optgroup>`;
   } else {
     html += `<option value="">(${t('label_no_projects', 'Proje Yok')})</option>`;
@@ -943,11 +1282,14 @@ function renderMyTasks() {
   document.getElementById('myTasksCount').textContent = myOwnTasks.length;
 
   if (filtered.length === 0) {
+    const isCompanyProj = state.currentProjectId && state.currentProjectId !== 'all' && state.currentProjectId !== 'personal';
+    const currProj = isCompanyProj ? state.projects.find(p => p.id === state.currentProjectId) : null;
+    const projName = currProj ? currProj.title : 'Bu projede';
     container.innerHTML = `
-      <div style="padding:40px; text-align:center; color:var(--text-tertiary);">
-        <span style="font-size:2rem;">🔍</span>
-        <h4 style="margin-top:10px; color:var(--text-primary);">Arama veya filtre kriterine uygun görev bulunamadı.</h4>
-        <p style="font-size:0.85rem; margin-top:4px;">Yeni görev ekleyebilir veya arama filtresini temizleyebilirsiniz.</p>
+      <div style="padding:48px 24px; text-align:center; color:var(--text-tertiary); background:var(--surface-primary); border-radius:12px; border:1px dashed var(--border-subtle); margin:16px 0;">
+        <span style="font-size:2.5rem; display:block; margin-bottom:12px;">${isCompanyProj ? '📁' : '🔍'}</span>
+        <h4 style="margin:0 0 6px 0; color:var(--text-primary); font-size:1.05rem;">${isCompanyProj ? `"${escapeHtml(projName)}" projesinde henüz tanımlı bir görev bulunmuyor.` : 'Arama veya filtre kriterine uygun görev bulunamadı.'}</h4>
+        <p style="font-size:0.88rem; margin:0; color:var(--text-secondary);">${isCompanyProj ? 'Sağ üstteki <strong>"+ Görev Ekle"</strong> butonunu veya yöneticiler için <strong>"✨ Tekstil Şablonunu Uygula"</strong> butonunu kullanarak iş adımlarını oluşturabilirsiniz.' : 'Yeni görev ekleyebilir veya arama filtresini temizleyebilirsiniz.'}</p>
       </div>
     `;
     return;
@@ -1075,7 +1417,7 @@ function setupProjectTabsListener() {
     const targetTab = btn.dataset.tab;
     if (targetTab && targetTab !== state.activeProjectsTab) {
       state.activeProjectsTab = targetTab;
-      renderProjectsGrid();
+      renderProjectsView();
     }
   });
 }
@@ -1196,14 +1538,30 @@ function renderProjectsGrid() {
   }
 
   // 2. AKTİF PROJELER TABI
-  if (state.projects.length === 0) {
-    container.innerHTML = '<div class="board-empty-placeholder" style="grid-column: 1 / -1; padding:36px; text-align:center;"><span>Henüz aktif proje bulunmuyor.</span></div>';
+  const custFilter = state.selectedCustomerFilter || 'all';
+  const masterFilter = state.selectedMasterFilter || 'all';
+  const hierFilter = state.selectedHierarchyFilter || 'all';
+  let activeProjectsToRender = state.projects || [];
+  if (custFilter !== 'all') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => p.customer_id === custFilter || (p.customer_name && p.customer_name.toLowerCase() === custFilter.toLowerCase()));
+  }
+  if (masterFilter !== 'all') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => p.master_project_id === masterFilter || (p.master_project_title && p.master_project_title.toLowerCase().includes(masterFilter.toLowerCase())));
+  }
+  if (hierFilter === 'main') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => !p.parent_project_id);
+  } else if (hierFilter === 'sub') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => !!p.parent_project_id);
+  }
+
+  if (activeProjectsToRender.length === 0) {
+    container.innerHTML = `<div class="board-empty-placeholder" style="grid-column: 1 / -1; padding:36px; text-align:center;"><span>${custFilter !== 'all' || masterFilter !== 'all' || hierFilter !== 'all' ? 'Seçilen filtrelere ait aktif proje bulunmuyor.' : 'Henüz aktif proje bulunmuyor.'}</span></div>`;
     return;
   }
 
-  state.projects.forEach(p => {
+  activeProjectsToRender.forEach(p => {
     const card = document.createElement('div');
-    card.className = 'project-card';
+    card.className = `project-card ${p.parent_project_id ? 'project-card-sub' : 'project-card-main'}`;
     card.dataset.id = p.id;
 
     const rate = typeof p.completion_rate === 'number' ? p.completion_rate : 0;
@@ -1211,10 +1569,20 @@ function renderProjectsGrid() {
     const completedTasks = typeof p.completed_tasks === 'number' ? p.completed_tasks : 0;
     const delayedTasks = typeof p.delayed_tasks === 'number' ? p.delayed_tasks : 0;
     const isRevised = p.initial_due_date && p.current_due_date && p.initial_due_date.slice(0, 10) !== p.current_due_date.slice(0, 10);
+    const isSub = !!p.parent_project_id;
 
     card.innerHTML = `
       <div class="proj-card-header" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-        <h4 class="proj-title">${escapeHtml(p.title)}</h4>
+        <div>
+          <h4 class="proj-title">${isSub ? '📦' : '📁'} ${escapeHtml(p.title)}</h4>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+            ${p.customer_name ? `<span class="customer-badge-tag">🏢 ${escapeHtml(p.customer_name)}</span>` : ''}
+            ${!isSub ? `<span class="nav-badge" style="background:#dbeafe; color:#1e40af; font-weight:700;">📁 Ana Proje</span>` : `<span class="nav-badge" style="background:#ede9fe; color:#5b21b6; font-weight:700;">📦 Alt Proje</span>`}
+            ${!isSub && (p.sub_projects_count || 0) > 0 ? `<span class="nav-badge" style="background:#e0f2fe; color:#0369a1; font-weight:700;">📦 ${p.sub_projects_count} Alt Proje</span>` : ''}
+            ${isSub && p.parent_project_title ? `<span class="badge" style="font-size:0.7rem; color:#64748b; background:#f1f5f9; padding:2px 6px; border-radius:4px;">↳ ${escapeHtml(p.parent_project_title)}</span>` : ''}
+            ${p.timeline_period ? `<span class="nav-badge" style="background:#fef3c7; color:#92400e; font-weight:700;">📅 ${escapeHtml(p.timeline_period)}</span>` : ''}
+          </div>
+        </div>
         <span class="nav-badge ${p.id === state.currentProjectId ? '' : 'neutral'}">
           ${p.id === state.currentProjectId ? t('label_active_project', 'Aktif Proje') : `%${rate}`}
         </span>
@@ -1286,6 +1654,652 @@ function renderProjectsGrid() {
 
     container.appendChild(card);
   });
+}
+
+// ================= GANTT DİNAMİK YÜKSEKLİK OTOMASYONU =================
+function adjustGanttHeights() {
+  const wrappers = [
+    document.getElementById('projGanttWrapper'),
+    document.getElementById('opGanttWrapper')
+  ];
+  wrappers.forEach(wrap => {
+    if (!wrap) return;
+    const isVisible = wrap.offsetParent !== null || wrap.offsetWidth > 0 || wrap.offsetHeight > 0;
+    if (!isVisible) return;
+    const rect = wrap.getBoundingClientRect();
+    if (rect.top > 0) {
+      const bottomGap = 26; // Sayfa alt boşluğu (padding)
+      const targetHeight = Math.max(460, Math.floor(window.innerHeight - rect.top - bottomGap));
+      wrap.style.height = `${targetHeight}px`;
+    }
+  });
+}
+
+window.addEventListener('resize', adjustGanttHeights);
+window.addEventListener('orientationchange', adjustGanttHeights);
+
+if (typeof ResizeObserver !== 'undefined') {
+  const mainArea = document.querySelector('.app-main-area');
+  if (mainArea) {
+    const ro = new ResizeObserver(() => {
+      adjustGanttHeights();
+    });
+    ro.observe(mainArea);
+  }
+}
+
+// ================= PROJELER GÖRÜNÜM SEÇİCİ, LİSTE (TABLO) VE ZAMAN ÇİZELGESİ (GANTT) =================
+function setupProjectViewModeListener() {
+  const modeGroup = document.getElementById('projectViewModeGroup');
+  if (!modeGroup || modeGroup.dataset.listenerSetup === 'true') return;
+  modeGroup.dataset.listenerSetup = 'true';
+
+  modeGroup.addEventListener('click', (e) => {
+    const btn = e.target.closest('.view-mode-btn');
+    if (!btn) return;
+    const mode = btn.dataset.mode;
+    if (mode && mode !== state.projectsViewMode) {
+      state.projectsViewMode = mode;
+      document.querySelectorAll('#projectViewModeGroup .view-mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      renderProjectsView();
+      if (mode === 'gantt') {
+        requestAnimationFrame(adjustGanttHeights);
+        setTimeout(adjustGanttHeights, 50);
+      }
+    }
+  });
+}
+
+let projGanttListenersInitialized = false;
+
+function setupProjectsGanttInteractions() {
+  if (projGanttListenersInitialized) return;
+  projGanttListenersInitialized = true;
+
+  // 1. Zoom seviyesi butonları (Günlük, Haftalık, Aylık, Yıllık)
+  document.querySelectorAll('#projGanttZoomGroup .zoom-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const zoom = btn.dataset.zoom;
+      if (zoom && zoom !== state.projGanttZoomLevel) {
+        state.projGanttZoomLevel = zoom;
+        document.querySelectorAll('#projGanttZoomGroup .zoom-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.zoom === zoom);
+        });
+        renderProjectsGantt();
+      }
+    });
+  });
+
+  // 2. Bugün Butonu
+  const todayBtn = document.getElementById('projGanttTodayBtn');
+  if (todayBtn) {
+    todayBtn.addEventListener('click', () => {
+      const chartPane = document.getElementById('projGanttChartPane');
+      const todayLine = chartPane?.querySelector('.gantt-today-line');
+      if (chartPane && todayLine) {
+        const left = parseFloat(todayLine.style.left) || 0;
+        const targetScroll = Math.max(0, left - (chartPane.clientWidth / 2));
+        chartPane.scrollTo({ left: targetScroll, behavior: 'smooth' });
+      }
+    });
+  }
+
+  // 3. Tabloyu Gizle / Göster
+  const toggleBtn = document.getElementById('projGanttToggleTableBtn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const tablePane = document.getElementById('projGanttTablePane');
+      const splitter = document.getElementById('projGanttSplitter');
+      if (!tablePane) return;
+      const isHidden = tablePane.style.display === 'none';
+      if (isHidden) {
+        tablePane.style.display = 'block';
+        if (splitter) splitter.style.display = 'block';
+        toggleBtn.textContent = 'Tabloyu Gizle';
+      } else {
+        tablePane.style.display = 'none';
+        if (splitter) splitter.style.display = 'none';
+        toggleBtn.textContent = 'Tabloyu Göster';
+      }
+    });
+  }
+
+  // 4. Splitter Boyutlandırma (Sol panel genişliği)
+  const splitter = document.getElementById('projGanttSplitter');
+  const tablePane = document.getElementById('projGanttTablePane');
+  if (splitter && tablePane) {
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    splitter.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = tablePane.offsetWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const newWidth = Math.max(280, Math.min(850, startWidth + dx));
+      tablePane.style.width = `${newWidth}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
+  }
+
+  // 5. Senkronize Dikey Kaydırma (Sol Tablo ve Sağ Çizelge)
+  const tablePaneEl = document.getElementById('projGanttTablePane');
+  const chartPaneEl = document.getElementById('projGanttChartPane');
+  if (tablePaneEl && chartPaneEl) {
+    let isSyncingLeft = false;
+    let isSyncingRight = false;
+
+    tablePaneEl.addEventListener('scroll', () => {
+      if (!isSyncingLeft) {
+        isSyncingRight = true;
+        chartPaneEl.scrollTop = tablePaneEl.scrollTop;
+      }
+      isSyncingLeft = false;
+    });
+
+    chartPaneEl.addEventListener('scroll', () => {
+      if (!isSyncingRight) {
+        isSyncingLeft = true;
+        tablePaneEl.scrollTop = chartPaneEl.scrollTop;
+      }
+      isSyncingRight = false;
+    });
+  }
+}
+
+function renderProjectsView() {
+  setupProjectTabsListener();
+  setupProjectViewModeListener();
+  setupProjectsGanttInteractions();
+
+  const mode = state.projectsViewMode || 'grid';
+
+  const gridEl = document.getElementById('projectsCardsGrid');
+  const tableEl = document.getElementById('projectsTableView');
+  const ganttEl = document.getElementById('projectsGanttView');
+
+  if (gridEl) gridEl.style.display = mode === 'grid' ? 'grid' : 'none';
+  if (tableEl) tableEl.style.display = mode === 'table' ? 'block' : 'none';
+  if (ganttEl) ganttEl.style.display = mode === 'gantt' ? 'flex' : 'none';
+
+  // Görünüm butonlarının active durumunu güncelle
+  document.querySelectorAll('#projectViewModeGroup .view-mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+
+  // Sayaçları ve tab butonlarını güncelle
+  const activeCountEl = document.getElementById('activeProjectsCount');
+  if (activeCountEl) activeCountEl.textContent = state.projects.length;
+
+  const deletedTabBtn = document.getElementById('deletedProjectsTabBtn');
+  const deletedCountEl = document.getElementById('deletedProjectsCount');
+  const isAdmin = state.currentUser?.system_role === 'ADMIN';
+
+  if (deletedTabBtn) {
+    deletedTabBtn.style.display = isAdmin ? 'inline-block' : 'none';
+  }
+  if (deletedCountEl) {
+    deletedCountEl.textContent = state.deletedProjects.length;
+  }
+
+  document.querySelectorAll('#projectStatusTabs .filter-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === state.activeProjectsTab);
+  });
+
+  if (mode === 'grid') {
+    renderProjectsGrid();
+  } else if (mode === 'table') {
+    renderProjectsTable();
+  } else if (mode === 'gantt') {
+    renderProjectsGantt();
+    adjustGanttHeights();
+    setTimeout(adjustGanttHeights, 50);
+  }
+}
+
+function renderProjectsTable() {
+  const tbody = document.getElementById('projectsTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const isAdmin = state.currentUser?.system_role === 'ADMIN';
+
+  // 1. Silinen Projeler Sekmesi
+  if (state.activeProjectsTab === 'deleted') {
+    if (!isAdmin) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#ef4444;">Silinen projeleri yalnızca Sistem Yöneticisi (Admin) görüntüleyebilir.</td></tr>';
+      return;
+    }
+    if (state.deletedProjects.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#94a3b8;">🗑️ Çöp kutusunda silinmiş proje bulunmuyor.</td></tr>';
+      return;
+    }
+
+    state.deletedProjects.forEach((p, idx) => {
+      const tr = document.createElement('tr');
+      tr.className = 'projects-table-row';
+      tr.innerHTML = `
+        <td style="padding:12px; text-align:center; font-weight:700; color:#94a3b8;">#${idx + 1}</td>
+        <td style="padding:12px;">
+          <div style="font-weight:700; color:#64748b; text-decoration:line-through; font-size:0.9rem;">${escapeHtml(p.title)}</div>
+          <div style="font-size:0.75rem; color:#94a3b8; margin-top:2px;">${escapeHtml(p.description || 'Açıklama belirtilmemiş.')}</div>
+          <div style="font-size:0.72rem; color:#dc2626; margin-top:4px;">🕒 Silinme: ${formatDate(p.deleted_at)} • Silen: ${escapeHtml(p.deleted_by_name || 'Bilinmiyor')}</div>
+        </td>
+        <td style="padding:12px;">
+          <span class="nav-badge" style="background:#fee2e2; color:#b91c1c; font-weight:700;">🗑️ Silindi</span>
+        </td>
+        <td style="padding:12px; text-align:center; font-size:0.78rem; color:#64748b;">
+          ${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)}
+        </td>
+        <td style="padding:12px; font-size:0.8rem; color:#64748b;">
+          ${escapeHtml(p.manager_name || 'Bilinmiyor')}
+        </td>
+        <td style="padding:12px; text-align:center;">
+          <span class="nav-badge neutral">${p.total_tasks || 0} Görev</span>
+        </td>
+        <td style="padding:12px; text-align:center;">
+          <button type="button" class="action-btn success-btn sm-btn btn-table-restore" data-id="${p.id}">
+            ♻️ Geri Getir
+          </button>
+        </td>
+      `;
+
+      tr.querySelector('.btn-table-restore')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await confirmRestoreProject(p.id, p.title);
+      });
+
+      tbody.appendChild(tr);
+    });
+    return;
+  }
+
+  // 2. Aktif Projeler
+  const custFilter = state.selectedCustomerFilter || 'all';
+  const masterFilter = state.selectedMasterFilter || 'all';
+  const hierFilter = state.selectedHierarchyFilter || 'all';
+  let activeProjectsToRender = state.projects || [];
+  if (custFilter !== 'all') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => p.customer_id === custFilter || (p.customer_name && p.customer_name.toLowerCase() === custFilter.toLowerCase()));
+  }
+  if (masterFilter !== 'all') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => p.master_project_id === masterFilter || (p.master_project_title && p.master_project_title.toLowerCase().includes(masterFilter.toLowerCase())));
+  }
+  if (hierFilter === 'main') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => !p.parent_project_id);
+  } else if (hierFilter === 'sub') {
+    activeProjectsToRender = activeProjectsToRender.filter(p => !!p.parent_project_id);
+  }
+
+  if (activeProjectsToRender.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:32px; color:#94a3b8;">${custFilter !== 'all' || masterFilter !== 'all' || hierFilter !== 'all' ? 'Seçilen filtrelere ait aktif proje bulunmuyor.' : 'Henüz aktif proje bulunmuyor.'}</td></tr>`;
+    return;
+  }
+
+  activeProjectsToRender.forEach((p, idx) => {
+    const rate = typeof p.completion_rate === 'number' ? p.completion_rate : 0;
+    const totalTasks = typeof p.total_tasks === 'number' ? p.total_tasks : 0;
+    const completedTasks = typeof p.completed_tasks === 'number' ? p.completed_tasks : 0;
+    const delayedTasks = typeof p.delayed_tasks === 'number' ? p.delayed_tasks : 0;
+    const isRevised = p.initial_due_date && p.current_due_date && p.initial_due_date.slice(0, 10) !== p.current_due_date.slice(0, 10);
+    const isCurrent = p.id === state.currentProjectId;
+    const isSub = !!p.parent_project_id;
+
+    const tr = document.createElement('tr');
+    tr.className = `projects-table-row ${isSub ? 'tr-sub-project' : 'tr-main-project'}`;
+    tr.style.cursor = 'pointer';
+
+    tr.innerHTML = `
+      <td style="padding:12px; text-align:center; font-weight:700; color:#64748b;">#${idx + 1}</td>
+      <td style="padding:12px; ${isSub ? 'padding-left:24px;' : ''}">
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <span style="font-size:1rem;">${isSub ? '↳ 📦' : '📁'}</span>
+          <span style="font-weight:700; color:#0f172a; font-size:0.9rem;">${escapeHtml(p.title)}</span>
+          ${p.customer_name ? `<span class="customer-badge-tag" style="font-size:0.7rem;">🏢 ${escapeHtml(p.customer_name)}</span>` : ''}
+          ${!isSub ? `<span class="nav-badge" style="background:#dbeafe; color:#1e40af; font-size:0.68rem; font-weight:700;">Ana Proje</span>` : `<span class="nav-badge" style="background:#ede9fe; color:#5b21b6; font-size:0.68rem; font-weight:700;">Alt Proje</span>`}
+          ${!isSub && (p.sub_projects_count || 0) > 0 ? `<span class="nav-badge" style="background:#e0f2fe; color:#0369a1; font-size:0.68rem; font-weight:700;">${p.sub_projects_count} Alt Proje</span>` : ''}
+          ${isSub && p.parent_project_title ? `<span class="badge" style="font-size:0.68rem; color:#64748b; background:#f1f5f9; padding:1px 5px; border-radius:4px;">↳ ${escapeHtml(p.parent_project_title)}</span>` : ''}
+          ${p.timeline_period ? `<span class="nav-badge" style="background:#fef3c7; color:#92400e; font-size:0.7rem; font-weight:700;">📅 ${escapeHtml(p.timeline_period)}</span>` : ''}
+          ${isCurrent ? `<span class="nav-badge" style="background:#e0f2fe; color:#0284c7; font-weight:700;">Aktif Proje</span>` : ''}
+          ${isRevised ? `<span class="proj-revised-tag" style="font-size:0.7rem; padding:1px 6px;">🔄 Revize</span>` : ''}
+        </div>
+        <div style="font-size:0.75rem; color:#64748b; margin-top:2px; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          ${escapeHtml(p.description || 'Açıklama belirtilmemiş.')}
+        </div>
+      </td>
+      <td style="padding:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-bottom:4px;">
+          <strong>%${rate}</strong>
+          ${delayedTasks > 0 ? `<span style="color:#ef4444; font-weight:700; font-size:0.72rem;">⚠️ ${delayedTasks} Geciken</span>` : `<span style="color:#10b981; font-weight:600; font-size:0.72rem;">✓ Takvimde</span>`}
+        </div>
+        <div class="proj-track" style="margin:0; height:6px;">
+          <div class="proj-fill" style="width: ${rate}%;"></div>
+        </div>
+        <div style="font-size:0.7rem; color:#94a3b8; margin-top:2px;">${completedTasks}/${totalTasks} Görev tamamlandı</div>
+      </td>
+      <td style="padding:12px; text-align:center; font-size:0.8rem; font-weight:600; color:#334155; white-space:nowrap;">
+        📅 ${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)}
+      </td>
+      <td style="padding:12px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div style="width:24px; height:24px; border-radius:50%; background:#e2e8f0; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; color:#475569;">
+            ${(p.manager_name || '?').slice(0, 1).toUpperCase()}
+          </div>
+          <span style="font-size:0.8rem; font-weight:600; color:#334155;">${escapeHtml(p.manager_name || 'Atanmadı')}</span>
+        </div>
+      </td>
+      <td style="padding:12px; text-align:center;">
+        <span class="nav-badge ${totalTasks > 0 ? '' : 'neutral'}">${totalTasks} Görev</span>
+      </td>
+      <td style="padding:12px; text-align:center;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="action-btn secondary-btn sm-btn btn-table-open" data-id="${p.id}" title="Görevleri Aç">
+            📋 Aç
+          </button>
+          ${p.is_manager ? `
+            <button type="button" class="action-btn outline-btn sm-btn btn-table-manage" data-id="${p.id}" title="Ekip & Plan">
+              ⚙️ Plan
+            </button>
+            <button type="button" class="action-btn danger-outline-btn sm-btn btn-table-delete" data-id="${p.id}" title="Projeyi Sil">
+              🗑️
+            </button>
+          ` : ''}
+        </div>
+      </td>
+    `;
+
+    // Satır tıklama & aksiyonlar
+    tr.addEventListener('click', async (e) => {
+      if (e.target.closest('.btn-table-delete')) {
+        e.stopPropagation();
+        await confirmDeleteProject(p.id, p.title);
+        return;
+      }
+      if (e.target.closest('.btn-table-manage')) {
+        e.stopPropagation();
+        openProjectManageModal(p.id);
+        return;
+      }
+      await loadProjectTasks(p.id);
+      switchView('view-my-tasks');
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+function renderProjectsGantt() {
+  const tableBody = document.getElementById('projGanttTableBody');
+  const chartContainer = document.getElementById('projGanttChart');
+  const badge = document.getElementById('projGanttCountBadge');
+
+  if (!tableBody || !chartContainer) return;
+  tableBody.innerHTML = '';
+  chartContainer.innerHTML = '';
+
+  const custFilter = state.selectedCustomerFilter || 'all';
+  const masterFilter = state.selectedMasterFilter || 'all';
+  const hierFilter = state.selectedHierarchyFilter || 'all';
+  let projectsToRender = state.projects || [];
+  if (custFilter !== 'all') {
+    projectsToRender = projectsToRender.filter(p => p.customer_id === custFilter || (p.customer_name && p.customer_name.toLowerCase() === custFilter.toLowerCase()));
+  }
+  if (masterFilter !== 'all') {
+    projectsToRender = projectsToRender.filter(p => p.master_project_id === masterFilter || (p.master_project_title && p.master_project_title.toLowerCase().includes(masterFilter.toLowerCase())));
+  }
+  if (hierFilter === 'main') {
+    projectsToRender = projectsToRender.filter(p => !p.parent_project_id);
+  } else if (hierFilter === 'sub') {
+    projectsToRender = projectsToRender.filter(p => !!p.parent_project_id);
+  }
+
+  if (badge) badge.textContent = `${projectsToRender.length} Proje`;
+
+  if (projectsToRender.length === 0) {
+    tableBody.innerHTML = `<div style="padding:24px; text-align:center; color:#94a3b8;">${custFilter !== 'all' || masterFilter !== 'all' || hierFilter !== 'all' ? 'Seçilen filtrelere ait aktif proje bulunmuyor.' : 'Aktif proje bulunmuyor.'}</div>`;
+    chartContainer.innerHTML = `<div style="padding:40px; text-align:center; color:#94a3b8;">${custFilter !== 'all' || masterFilter !== 'all' || hierFilter !== 'all' ? 'Seçilen filtrelere ait aktif proje bulunmuyor.' : 'Aktif proje bulunmuyor.'}</div>`;
+    return;
+  }
+
+  // 1. Zaman Aralığı (minTime / maxTime)
+  let minTime = Infinity;
+  let maxTime = -Infinity;
+  const now = new Date();
+
+  projectsToRender.forEach(p => {
+    const s = p.current_start_date ? new Date(p.current_start_date) : (p.created_at ? new Date(p.created_at) : now);
+    const d = p.current_due_date ? new Date(p.current_due_date) : new Date(s.getTime() + 30 * 24 * 60 * 60 * 1000);
+    if (s.getTime() < minTime) minTime = s.getTime();
+    if (d.getTime() > maxTime) maxTime = d.getTime();
+  });
+
+  if (minTime === Infinity || isNaN(minTime)) {
+    minTime = Date.now();
+    maxTime = Date.now() + 60 * 24 * 60 * 60 * 1000;
+  }
+  if (maxTime <= minTime) {
+    maxTime = minTime + 30 * 24 * 60 * 60 * 1000;
+  }
+
+  // 2. Gantt Ölçeği (calculateGanttScale)
+  const zoomLevel = state.projGanttZoomLevel || 'month';
+  const scale = calculateGanttScale(minTime, maxTime, zoomLevel);
+
+  // 3. Sol Paneli Doldur (Proje Tablosu)
+  projectsToRender.forEach((p, idx) => {
+    const row = document.createElement('div');
+    row.className = 'g-table-row';
+    row.id = `proj-table-row-${p.id}`;
+    row.dataset.id = p.id;
+    row.style.height = '54px';
+
+    const shortId = idx + 1;
+    const rate = typeof p.completion_rate === 'number' ? p.completion_rate : 0;
+    const isCurrent = p.id === state.currentProjectId;
+    const isRevised = p.initial_due_date && p.current_due_date && p.initial_due_date.slice(0, 10) !== p.current_due_date.slice(0, 10);
+    const managerName = p.manager_name || 'Atanmadı';
+    const managerInitials = managerName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+
+    row.innerHTML = `
+      <div class="g-col" style="width:36px; text-align:center; font-weight:700; color:#64748b;">#${shortId}</div>
+      <div class="g-col" style="flex:1; min-width:140px; display:flex; align-items:center; gap:6px; overflow:hidden; ${p.parent_project_id ? 'padding-left:14px;' : ''}">
+        <span style="font-size:1rem;">${p.parent_project_id ? '↳ 📦' : '📁'}</span>
+        <span style="font-weight:700; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(p.title)}">${escapeHtml(p.title)}</span>
+        ${p.customer_name ? `<span class="customer-badge-tag" style="font-size:0.65rem; padding:1px 4px;">🏢 ${escapeHtml(p.customer_name)}</span>` : ''}
+        ${!p.parent_project_id ? `<span class="nav-badge" style="background:#dbeafe; color:#1e40af; font-size:0.65rem; padding:1px 4px; font-weight:700;">Ana</span>` : ''}
+        ${!p.parent_project_id && (p.sub_projects_count || 0) > 0 ? `<span class="nav-badge" style="background:#e0f2fe; color:#0369a1; font-size:0.65rem; padding:1px 5px; font-weight:700;">${p.sub_projects_count} Alt</span>` : ''}
+        ${p.timeline_period ? `<span class="nav-badge" style="background:#fef3c7; color:#92400e; font-size:0.65rem; padding:1px 5px; font-weight:700;">📅 ${escapeHtml(p.timeline_period)}</span>` : ''}
+        ${isCurrent ? `<span class="nav-badge" style="background:#e0f2fe; color:#0284c7; font-size:0.65rem; padding:1px 5px;">Aktif</span>` : ''}
+        ${isRevised ? `<span class="proj-revised-tag" style="font-size:0.65rem; padding:1px 4px;">🔄</span>` : ''}
+      </div>
+      <div class="g-col" style="width:110px; text-align:center;">
+        <span class="g-progress-pill" style="font-size:0.75rem; font-weight:700; background:#f1f5f9; padding:2px 8px; border-radius:12px; color:#0284c7;">%${rate}</span>
+      </div>
+      <div class="g-col" style="width:130px; text-align:left; display:flex; align-items:center; gap:6px;" title="${escapeHtml(managerName)}">
+        <div class="g-assignee-avatar" style="width:24px; height:24px; font-size:0.7rem;">${managerInitials}</div>
+        <span class="g-assignee-name" style="font-size:0.78rem; font-weight:600; color:#334155; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(managerName)}</span>
+      </div>
+      <div class="g-col g-col-dates" style="width:200px; text-align:center;" title="${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)}">
+        <span class="proj-gantt-date-chip">📅 ${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)}</span>
+      </div>
+    `;
+
+    // Tıklanınca projenin görevlerini aç
+    row.addEventListener('click', async () => {
+      await loadProjectTasks(p.id);
+      switchView('view-my-tasks');
+    });
+
+    // Senkronize Hover
+    row.addEventListener('mouseenter', () => {
+      row.classList.add('row-highlighted');
+      const track = document.getElementById(`proj-track-${p.id}`);
+      if (track) track.classList.add('row-highlighted');
+    });
+    row.addEventListener('mouseleave', () => {
+      row.classList.remove('row-highlighted');
+      const track = document.getElementById(`proj-track-${p.id}`);
+      if (track) track.classList.remove('row-highlighted');
+    });
+
+    tableBody.appendChild(row);
+  });
+
+  // 4. Sağ Paneli Doldur (Zaman Çizelgesi Izgarası ve Proje Çubukları)
+  let maxBarRight = scale.timelineWidth;
+
+  const projectLayouts = new Map();
+  projectsToRender.forEach(p => {
+    const s = p.current_start_date ? new Date(p.current_start_date) : new Date(p.created_at || Date.now());
+    const d = p.current_due_date ? new Date(p.current_due_date) : new Date(s.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const pStart = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0).getTime();
+    const pDueEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
+
+    const leftPx = Math.round(scale.dateToPx(pStart));
+    const rightPx = Math.round(scale.dateToPx(pDueEnd));
+    const widthPx = Math.max(scale.colWidth || 48, rightPx - leftPx);
+
+    projectLayouts.set(p.id, { leftPx, widthPx });
+
+    if (leftPx + widthPx + 200 > maxBarRight) {
+      maxBarRight = leftPx + widthPx + 200;
+    }
+  });
+
+  const effectiveTimelineWidth = Math.max(scale.timelineWidth, maxBarRight);
+
+  const scrollWrap = document.createElement('div');
+  scrollWrap.className = 'timeline-scroll-wrap';
+  scrollWrap.style.width = `${effectiveTimelineWidth}px`;
+
+  // Üst Takvim Başlığı
+  const header = document.createElement('div');
+  header.className = 'gantt-grid-header';
+  header.style.width = `${effectiveTimelineWidth}px`;
+
+  const topRow = document.createElement('div');
+  topRow.className = 'gantt-months-track';
+  topRow.innerHTML = scale.topHeaderHtml;
+
+  const subRow = document.createElement('div');
+  subRow.className = 'gantt-days-track';
+  subRow.innerHTML = scale.subHeaderHtml;
+
+  header.appendChild(topRow);
+  header.appendChild(subRow);
+  scrollWrap.appendChild(header);
+
+  // Satırlar Kapsayıcısı
+  const rowsContainer = document.createElement('div');
+  rowsContainer.className = 'gantt-rows-container';
+  rowsContainer.style.width = `${effectiveTimelineWidth}px`;
+
+  // Izgara Çizgileri
+  const gridLines = document.createElement('div');
+  gridLines.className = 'gantt-grid-lines';
+  gridLines.style.width = `${effectiveTimelineWidth}px`;
+  gridLines.innerHTML = scale.gridLinesHtml;
+  rowsContainer.appendChild(gridLines);
+
+  // Bugün Çizgisi
+  if (scale.todayOffsetPx >= 0) {
+    const todayLine = document.createElement('div');
+    todayLine.className = 'gantt-today-line';
+    todayLine.style.left = `${scale.todayOffsetPx}px`;
+    todayLine.innerHTML = `<span class="gantt-today-badge">Bugün</span>`;
+    rowsContainer.appendChild(todayLine);
+  }
+
+  // Her proje için bir satır (height: 54px)
+  projectsToRender.forEach(p => {
+    const layout = projectLayouts.get(p.id) || { leftPx: 0, widthPx: 100 };
+    const rate = typeof p.completion_rate === 'number' ? p.completion_rate : 0;
+    const completedTasks = p.completed_tasks || 0;
+    const totalTasks = p.total_tasks || 0;
+    const isSub = !!p.parent_project_id;
+
+    const track = document.createElement('div');
+    track.className = 'gantt-row-track';
+    track.id = `proj-track-${p.id}`;
+    track.dataset.id = p.id;
+    track.style.width = `${effectiveTimelineWidth}px`;
+    track.style.height = '54px';
+
+    const bar = document.createElement('div');
+    bar.className = `proj-gantt-pill-bar ${isSub ? 'sub-project-bar' : 'main-project-bar'}`;
+    bar.style.left = `${layout.leftPx}px`;
+    bar.style.width = `${layout.widthPx}px`;
+    bar.title = `${p.title} (Dönem: ${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)} - %${rate} Tamamlandı)`;
+
+    bar.innerHTML = `
+      <div class="proj-gantt-fill" style="width: ${rate}%;"></div>
+      <div class="proj-gantt-title-row">
+        <span class="proj-gantt-name">${isSub ? '📦' : '📁'} ${escapeHtml(p.title)}${p.timeline_period ? ` [${escapeHtml(p.timeline_period)}]` : ''}</span>
+        <span class="proj-gantt-rate-tag">%${rate}</span>
+      </div>
+      <div class="proj-gantt-dates-row">
+        📅 ${formatDate(p.current_start_date)} – ${formatDate(p.current_due_date)} • ${completedTasks}/${totalTasks} Görev
+      </div>
+    `;
+
+    bar.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await loadProjectTasks(p.id);
+      switchView('view-my-tasks');
+    });
+
+    track.appendChild(bar);
+
+    // Çizelgede çubuğun hemen yanında net tarih aralığı etiketi (Dönem / Sezon)
+    const dateLabel = document.createElement('span');
+    dateLabel.className = 'proj-gantt-side-date';
+    dateLabel.style.left = `${layout.leftPx + layout.widthPx + 8}px`;
+    dateLabel.innerHTML = `📅 ${formatDate(p.current_start_date)} → ${formatDate(p.current_due_date)}`;
+    track.appendChild(dateLabel);
+
+    // Senkronize Hover
+    track.addEventListener('mouseenter', () => {
+      track.classList.add('row-highlighted');
+      const row = document.getElementById(`proj-table-row-${p.id}`);
+      if (row) row.classList.add('row-highlighted');
+    });
+    track.addEventListener('mouseleave', () => {
+      track.classList.remove('row-highlighted');
+      const row = document.getElementById(`proj-table-row-${p.id}`);
+      if (row) row.classList.remove('row-highlighted');
+    });
+
+    rowsContainer.appendChild(track);
+  });
+
+  scrollWrap.appendChild(rowsContainer);
+  chartContainer.appendChild(scrollWrap);
+
+  // Başlangıçta bugüne veya projelere odaklan
+  if (scale.todayOffsetPx > 200) {
+    setTimeout(() => {
+      chartContainer.scrollTo({ left: Math.max(0, scale.todayOffsetPx - 250), behavior: 'smooth' });
+    }, 50);
+  }
+
+  adjustGanttHeights();
+  setTimeout(adjustGanttHeights, 50);
 }
 
 // 3. ZAMAN ÇİZELGESİ (GANTT TIMELINE) - OPENPROJECT MODELİ BÖLÜNMÜŞ (SPLIT) EKRAN & ÇOKLU ZOOM (GÜNLÜK, HAFTALIK, AYLIK, YILLIK)
@@ -1812,8 +2826,11 @@ function showGanttTaskHoverPopup(task, targetElement) {
 
     <div class="gh-meta-grid">
       <div class="gh-meta-item">
-        <span class="gh-meta-lbl">📁 Proje</span>
-        <span class="gh-meta-val" title="${escapeHtml(project?.title || 'Bireysel Takip')}">${escapeHtml(project?.title || 'Bireysel Takip')}</span>
+        <span class="gh-meta-lbl">📁 Proje / Kırılım</span>
+        <span class="gh-meta-val" title="${escapeHtml(project?.title || 'Bireysel Takip')}">
+          ${project?.parent_project_id ? `${escapeHtml((state.projects.find(p => p.id === project.parent_project_id)?.title) || 'Ana Proje')} ➔ ` : ''}
+          ${escapeHtml(project?.title || 'Bireysel Takip')}
+        </span>
       </div>
       <div class="gh-meta-item">
         <span class="gh-meta-lbl">👤 Görev Sahibi</span>
@@ -1912,9 +2929,29 @@ function renderTimeline() {
   const titleEl = document.getElementById('timelineProjectName');
   if (titleEl) {
     if (state.currentProjectId === 'personal') {
-      titleEl.textContent = `👤 ${t('label_personal_todos', 'Kişisel To-Do\'larım')}`;
+      titleEl.innerHTML = `👤 ${t('label_personal_todos', 'Kişisel To-Do\'larım')}`;
+    } else if (state.currentProjectId === 'all') {
+      titleEl.innerHTML = `<span>🌐 ${t('label_all_projects_consolidated', 'Tüm Projeler & Kişisel (Konsolide)')}</span>`;
+    } else if (activeProj) {
+      const datesBadge = (activeProj.current_start_date && activeProj.current_due_date)
+        ? ` <span class="proj-gantt-date-chip" style="font-size:0.75rem; margin-left:6px; font-weight:700;">📅 Dönem: ${formatDate(activeProj.current_start_date)} → ${formatDate(activeProj.current_due_date)}</span>`
+        : '';
+      const periodBadge = activeProj.timeline_period
+        ? ` <span class="nav-badge" style="background:#fef3c7; color:#92400e; font-size:0.7rem; margin-left:4px; font-weight:700;">${escapeHtml(activeProj.timeline_period)}</span>`
+        : '';
+
+      let breadcrumbHtml = '';
+      if (activeProj.parent_project_id) {
+        const parentProj = state.projects.find(p => p.id === activeProj.parent_project_id);
+        const parentTitle = parentProj ? parentProj.title : (activeProj.parent_project_title || 'Ana Proje');
+        breadcrumbHtml = `<span style="color:var(--text-tertiary); font-weight:600; font-size:0.85rem;">📁 ${escapeHtml(parentTitle)} ➔ </span>`;
+      } else if ((activeProj.sub_projects_count || 0) > 0) {
+        breadcrumbHtml = `<span class="nav-badge" style="background:#e0f2fe; color:#0369a1; font-size:0.7rem; margin-right:6px; font-weight:700;">📁 Ana Proje (${activeProj.sub_projects_count} Alt Proje Kırılımı)</span>`;
+      }
+
+      titleEl.innerHTML = `<div>${breadcrumbHtml}<span>${activeProj.parent_project_id ? '📦' : '📁'} ${escapeHtml(activeProj.title)}</span>${periodBadge}${datesBadge}</div>`;
     } else {
-      titleEl.textContent = activeProj ? activeProj.title : 'Proje Çizelgesi';
+      titleEl.textContent = 'Proje Çizelgesi';
     }
   }
 
@@ -1928,12 +2965,26 @@ function renderTimeline() {
     ganttFilterQuery = '';
   }
   const activeGanttQuery = state.searchQuery || ganttFilterQuery;
+
+  // Ana proje seçiliyse, o ana projeye bağlı tüm alt projelerin görevlerini dahil et
+  const allowedProjectIds = new Set();
+  if (state.currentProjectId && state.currentProjectId !== 'all' && state.currentProjectId !== 'personal') {
+    allowedProjectIds.add(state.currentProjectId);
+    (state.projects || []).forEach(p => {
+      if (p.parent_project_id === state.currentProjectId) {
+        allowedProjectIds.add(p.id);
+      }
+    });
+  }
+
   const tasksToRender = state.tasks.filter(t => {
     // Kişisel görevler seçildiğinde yalnızca kişisel to-do'lar; şirket projesi seçildiğinde o projeye ait görevler çizilir
     if (state.currentProjectId === 'personal') {
       if (t.project_id) return false;
-    } else if (t.project_id !== state.currentProjectId) {
-      return false;
+    } else if (state.currentProjectId !== 'all') {
+      if (!allowedProjectIds.has(t.project_id)) {
+        return false;
+      }
     }
     if (!activeGanttQuery) return true;
     return matchesTaskQuery(t, activeGanttQuery);
@@ -2000,12 +3051,20 @@ function renderTimeline() {
       tableTitle = tableTitle.substring(`[${t.workflow_step}]`.length).trim();
     }
 
+    // Görevin ait olduğu proje / alt proje etiketi
+    const taskProj = (state.projects || []).find(p => p.id === t.project_id);
+    const isSubTask = taskProj && (taskProj.id !== state.currentProjectId || !!taskProj.parent_project_id);
+    const subProjBadge = isSubTask
+      ? `<span class="op-subproject-badge" style="background:#ede9fe; color:#5b21b6; font-size:0.67rem; font-weight:700; padding:1px 5px; border-radius:4px; margin-right:4px; white-space:nowrap;" title="Alt Proje: ${escapeHtml(taskProj.title)}">📦 ${escapeHtml(taskProj.title)}</span>`
+      : '';
+
     row.innerHTML = `
       <div class="g-col g-col-id">#${shortId}</div>
-      <div class="g-col g-col-title">
+      <div class="g-col g-col-title" style="display:flex; align-items:center; gap:4px; overflow:hidden;">
         <span class="g-type-icon">${typeIcon}</span>
-        ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 5px; border-radius:3px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; margin-right:4px;">${escapeHtml(t.workflow_step)}</span>` : ''}
-        <span class="g-title-text">${escapeHtml(tableTitle)}</span>
+        ${subProjBadge}
+        ${t.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 5px; border-radius:3px; font-weight:700; color:#fff; background:${getStepColor(t.workflow_step)}; margin-right:4px; white-space:nowrap;">${escapeHtml(t.workflow_step)}</span>` : ''}
+        <span class="g-title-text" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(t.title)}">${escapeHtml(tableTitle)}</span>
         <span class="g-progress-pill">${prog}%</span>
       </div>
       <div class="g-col g-col-status">
@@ -2195,11 +3254,18 @@ function renderTimeline() {
         displayTitle = displayTitle.substring(`[${t.workflow_step}]`.length).trim();
       }
 
+      const taskProj = (state.projects || []).find(p => p.id === t.project_id);
+      const isSubTaskBar = taskProj && (taskProj.id !== state.currentProjectId || !!taskProj.parent_project_id);
+      const subProjBarBadge = isSubTaskBar
+        ? `<span class="pill-subproject-tag" style="background:rgba(91, 33, 182, 0.45); color:#ffffff; font-size:0.65rem; font-weight:700; padding:1px 5px; border-radius:3px; margin-right:4px; white-space:nowrap;">📦 ${escapeHtml(taskProj.title)}</span>`
+        : '';
+
       pill.innerHTML = `
         <div class="pill-progress-fill" style="width: ${prog}%;"></div>
         <div class="pill-content-col">
           <div class="pill-row-top">
             <span class="pill-icon">${typeIcon}</span>
+            ${subProjBarBadge}
             ${t.workflow_step ? `<span class="pill-step-tag" style="background:${stepColor};">${escapeHtml(t.workflow_step)}</span>` : ''}
             <span class="pill-title" title="${escapeHtml(t.title)}">${escapeHtml(displayTitle)}</span>
           </div>
@@ -2264,6 +3330,9 @@ function renderTimeline() {
       chartPane.scrollLeft = Math.max(0, scale.todayOffsetPx - (chartPane.clientWidth / 2) + 20);
     }, 120);
   }
+
+  adjustGanttHeights();
+  setTimeout(adjustGanttHeights, 50);
 }
 
 function drawDependencyArrows(svg, container) {
@@ -2350,11 +3419,24 @@ function renderBoard() {
     state.kanbanSearchQuery = '';
   }
   const activeBoardQuery = state.searchQuery || state.kanbanSearchQuery || '';
+
+  const allowedProjectIds = new Set();
+  if (state.currentProjectId && state.currentProjectId !== 'all' && state.currentProjectId !== 'personal') {
+    allowedProjectIds.add(state.currentProjectId);
+    (state.projects || []).forEach(p => {
+      if (p.parent_project_id === state.currentProjectId) {
+        allowedProjectIds.add(p.id);
+      }
+    });
+  }
+
   const filteredTasks = state.tasks.filter(task => {
     if (state.currentProjectId === 'personal') {
       if (task.project_id) return false;
-    } else if (state.currentProjectId && task.project_id !== state.currentProjectId) {
-      return false;
+    } else if (state.currentProjectId && state.currentProjectId !== 'all') {
+      if (!allowedProjectIds.has(task.project_id)) {
+        return false;
+      }
     }
     if (!activeBoardQuery) return true;
     return matchesTaskQuery(task, activeBoardQuery);
@@ -2388,8 +3470,19 @@ function renderBoard() {
     const progressVal = typeof task.progress === 'number' ? task.progress : (task.work_status === 'COMPLETED' ? 100 : 0);
     const blockingSucc = getBlockingSuccessorSummary(task);
 
+    const taskProj = task.project_id ? (state.projects || []).find(p => p.id === task.project_id) : null;
+    const isSubTask = taskProj && (taskProj.id !== state.currentProjectId || !!taskProj.parent_project_id);
+    const subProjBadge = isSubTask
+      ? `<span class="board-card-subproj" style="background:#ede9fe; color:#5b21b6; font-size:0.65rem; font-weight:700; padding:1px 5px; border-radius:4px;" title="Alt Proje: ${escapeHtml(taskProj.title)}">📦 ${escapeHtml(taskProj.title)}</span>`
+      : '';
+
     card.innerHTML = `
-      <div class="board-card-header">
+      <div class="board-card-header" style="display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
+        ${subProjBadge}
+        ${task.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(task.workflow_step)}; display:inline-block;">${escapeHtml(task.workflow_step)}</span>` : ''}
+        <span class="board-card-type ${typeClass}">${typeIcon} ${typeLabel}</span>
+        <span class="board-card-priority ${priorityClass}">${priorityLabel}</span>
+      </div>
         ${task.workflow_step ? `<span class="op-step-badge" style="font-size:0.68rem; padding:1px 6px; border-radius:4px; font-weight:700; color:#fff; background:${getStepColor(task.workflow_step)}; display:inline-block;">${escapeHtml(task.workflow_step)}</span>` : ''}
         <span class="board-card-type ${typeClass}">${typeIcon} ${typeLabel}</span>
         <span class="board-card-priority ${priorityClass}">${priorityLabel}</span>
@@ -3048,6 +4141,7 @@ function switchView(viewId) {
   const titles = {
     'view-my-tasks': 'Görevlerim',
     'view-projects': 'Projeler',
+    'view-customers': 'Müşteriler & Başarı Analizi',
     'view-timeline': 'Zaman Çizelgesi (Gantt)',
     'view-board': 'İş Panosu (Kanban)',
     'view-team': 'Ekip & Personel',
@@ -3065,7 +4159,7 @@ function switchView(viewId) {
 
   // Proje seçici göster/gizle
   const projContainer = document.getElementById('projectSelectorContainer');
-  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo' || viewId === 'view-email-automation' || viewId === 'view-backup-recovery') {
+  if (viewId === 'view-team' || viewId === 'view-projects' || viewId === 'view-customers' || viewId === 'view-report-builder' || viewId === 'view-microsoft-todo' || viewId === 'view-email-automation' || viewId === 'view-backup-recovery') {
     projContainer.style.display = 'none';
   } else {
     projContainer.style.display = 'flex';
@@ -3073,12 +4167,18 @@ function switchView(viewId) {
 
   if (viewId === 'view-timeline') {
     renderTimeline();
+    adjustGanttHeights();
+    setTimeout(adjustGanttHeights, 50);
   } else if (viewId === 'view-board') {
     renderBoard();
   } else if (viewId === 'view-my-tasks') {
     renderMyTasks();
   } else if (viewId === 'view-projects') {
-    renderProjectsGrid();
+    renderProjectsView();
+    adjustGanttHeights();
+    setTimeout(adjustGanttHeights, 50);
+  } else if (viewId === 'view-customers') {
+    loadAndRenderCustomers();
   }
 
   if (viewId === 'view-report-builder') {
@@ -3109,6 +4209,8 @@ function setupModals() {
 }
 
 function setupEventListeners() {
+  setupPrintActions();
+
   // Login Form
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -3396,10 +4498,16 @@ function setupEventListeners() {
   }
 
   document.querySelectorAll('.op-tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       document.querySelectorAll('.op-tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       state.activeFilter = btn.dataset.filter;
+      if (state.activeFilter === 'personal' && state.currentProjectId !== 'personal' && state.currentProjectId !== 'all') {
+        const projectSelect = document.getElementById('projectSelect');
+        if (projectSelect) projectSelect.value = 'personal';
+        await loadProjectTasks('personal');
+        return;
+      }
       renderMyTasks();
     });
   });
@@ -3953,8 +5061,51 @@ async function handleRejectExtensionRequest(task, req) {
     }
   });
 
-  // Yeni Proje Modalı
+  // Yeni Proje Modalı & Proje Tipi (Ana / Alt Proje) Yönetimi
+  function updateProjectTypeUI() {
+    const isSub = document.getElementById('pTypeSubRadio')?.checked;
+    const parentGroup = document.getElementById('pParentProjectGroup');
+    const periodGroup = document.getElementById('pTimelinePeriodGroup');
+    const titleLabel = document.getElementById('pTitleLabel');
+    const titleInput = document.getElementById('pTitle');
+    const pParent = document.getElementById('pParentProject');
+
+    if (parentGroup) parentGroup.style.display = isSub ? 'block' : 'none';
+    if (periodGroup) periodGroup.style.display = isSub ? 'block' : 'none';
+    if (titleLabel) titleLabel.textContent = isSub ? 'Alt Proje / Sezon Adı *' : 'Ana Proje Adı *';
+    if (titleInput) titleInput.placeholder = isSub ? 'Örn: AW / KIŞ ANA KOLEKSİYON FG SUMMIT FAIR' : 'Örn: NEWYORKER 2026 Koleksiyon Programı';
+    if (pParent) pParent.required = !!isSub;
+    if (isSub) renderParentProjectSelect();
+  }
+
+  document.getElementById('pTypeMainRadio')?.addEventListener('change', updateProjectTypeUI);
+  document.getElementById('pTypeSubRadio')?.addEventListener('change', updateProjectTypeUI);
+
+  document.getElementById('pParentProject')?.addEventListener('change', (e) => {
+    const parentId = e.target.value;
+    if (parentId) {
+      const parentProj = (state.projects || []).find(p => p.id === parentId);
+      if (parentProj) {
+        if (parentProj.customer_id) {
+          const custSelect = document.getElementById('pCustomer');
+          if (custSelect) custSelect.value = parentProj.customer_id;
+        }
+        if (parentProj.master_project_id) {
+          const masterSelect = document.getElementById('pMasterProject');
+          if (masterSelect) masterSelect.value = parentProj.master_project_id;
+        }
+      }
+    }
+  });
+
   document.getElementById('newProjectBtn').addEventListener('click', () => {
+    renderCustomerSelects();
+    renderMasterProjectSelects();
+    renderParentProjectSelect();
+    const mainRadio = document.getElementById('pTypeMainRadio');
+    if (mainRadio) mainRadio.checked = true;
+    updateProjectTypeUI();
+
     const checklistEl = document.getElementById('newProjectMembersChecklist');
     if (checklistEl) {
       const otherUsers = (state.personnelList || []).filter(u => u.id !== state.currentUser?.id && u.is_active !== false);
@@ -3982,12 +5133,48 @@ async function handleRejectExtensionRequest(task, req) {
     document.getElementById('projectModal').classList.add('open');
   });
 
+  document.getElementById('pAddCustomerQuickBtn')?.addEventListener('click', () => {
+    openCustomerModal();
+  });
+
+  const updateProjectDatePreview = () => {
+    const sVal = document.getElementById('pStart')?.value;
+    const dVal = document.getElementById('pDue')?.value;
+    const previewEl = document.getElementById('pDateRangePreview');
+    if (!previewEl) return;
+    if (sVal && dVal) {
+      const sDate = new Date(sVal);
+      const dDate = new Date(dVal);
+      const diffDays = Math.max(1, Math.round((dDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      previewEl.textContent = `📅 Dönem: ${formatDate(sVal)} – ${formatDate(dVal)} (${diffDays} Gün)`;
+    } else {
+      previewEl.textContent = '';
+    }
+  };
+  document.getElementById('pStart')?.addEventListener('input', updateProjectDatePreview);
+  document.getElementById('pDue')?.addEventListener('input', updateProjectDatePreview);
+  document.getElementById('pStart')?.addEventListener('change', updateProjectDatePreview);
+  document.getElementById('pDue')?.addEventListener('change', updateProjectDatePreview);
+
   document.getElementById('projectForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const isSub = document.getElementById('pTypeSubRadio')?.checked;
     const title = document.getElementById('pTitle').value.trim();
     const description = document.getElementById('pDesc').value.trim();
-    const initial_start_date = new Date(document.getElementById('pStart').value).toISOString();
-    const initial_due_date = new Date(document.getElementById('pDue').value).toISOString();
+    const parent_project_id = isSub ? (document.getElementById('pParentProject')?.value || undefined) : undefined;
+    const master_project_id = document.getElementById('pMasterProject')?.value || undefined;
+    const customer_id = document.getElementById('pCustomer')?.value || undefined;
+    const seasonTag = document.getElementById('pSeasonTag')?.value.trim();
+    const sVal = document.getElementById('pStart').value;
+    const dVal = document.getElementById('pDue').value;
+    const initial_start_date = new Date(sVal).toISOString();
+    const initial_due_date = new Date(dVal).toISOString();
+
+    // Dönem / Sezon alanı: kullanıcının seçtiği başlangıç-bitiş tarih aralığı
+    let timeline_period = `${formatDate(sVal)} – ${formatDate(dVal)}`;
+    if (seasonTag) {
+      timeline_period = `${seasonTag} (${formatDate(sVal)} – ${formatDate(dVal)})`;
+    }
 
     const members = [];
     document.querySelectorAll('#newProjectMembersChecklist .new-proj-member-cb:checked').forEach(cb => {
@@ -4004,20 +5191,162 @@ async function handleRejectExtensionRequest(task, req) {
       description,
       initial_start_date,
       initial_due_date,
-      members
+      members,
+      customer_id,
+      master_project_id,
+      timeline_period,
+      parent_project_id
     });
 
     showToast(
       members.length > 0
-        ? `📁 Yeni proje oluşturuldu ve seçilen ${members.length} kişiye "Projeye Dahil Edildiniz" Adaptive Card e-postası gönderildi!`
-        : '📁 Yeni proje oluşturuldu.',
+        ? `📁 Yeni ${isSub ? 'alt proje' : 'ana proje'} oluşturuldu ve seçilen ${members.length} kişiye bildirim gönderildi!`
+        : `📁 Yeni ${isSub ? 'alt proje' : 'ana proje'} oluşturuldu.`,
       'success'
     );
     document.getElementById('projectModal').classList.remove('open');
     e.target.reset();
+    const previewEl = document.getElementById('pDateRangePreview');
+    if (previewEl) previewEl.textContent = '';
     await loadProjects();
     await loadProjectTasks(newProj.id);
     await loadNotifications();
+  });
+
+  // Çatı Yılı / Program Yönetimi Dinleyicileri
+  function openMasterProjectModal() {
+    const currentYears = (state.masterProjects || []).map(m => m.year);
+    const maxYear = currentYears.length > 0 ? Math.max(...currentYears) : new Date().getFullYear();
+    const nextYear = maxYear + 1;
+
+    const yearEl = document.getElementById('mpYear');
+    const titleEl = document.getElementById('mpTitle');
+    const startEl = document.getElementById('mpStart');
+    const dueEl = document.getElementById('mpDue');
+    const descEl = document.getElementById('mpDesc');
+
+    if (yearEl) yearEl.value = nextYear;
+    if (titleEl) titleEl.value = `FG COLLECTION TIMELINE ${nextYear}`;
+    if (startEl) startEl.value = `${nextYear}-01-01`;
+    if (dueEl) dueEl.value = `${nextYear}-12-31`;
+    if (descEl) descEl.value = '';
+
+    document.getElementById('masterProjectModal')?.classList.add('open');
+  }
+
+  document.getElementById('btnOpenMasterProjectModal')?.addEventListener('click', openMasterProjectModal);
+  document.getElementById('pAddMasterProjectQuickBtn')?.addEventListener('click', openMasterProjectModal);
+
+  document.getElementById('pMasterProject')?.addEventListener('change', (e) => {
+    if (e.target.value === '__new__') {
+      openMasterProjectModal();
+    }
+  });
+
+  document.getElementById('mpYear')?.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (val && val >= 2020 && val <= 2050) {
+      const titleEl = document.getElementById('mpTitle');
+      const startEl = document.getElementById('mpStart');
+      const dueEl = document.getElementById('mpDue');
+      if (titleEl) titleEl.value = `FG COLLECTION TIMELINE ${val}`;
+      if (startEl) startEl.value = `${val}-01-01`;
+      if (dueEl) dueEl.value = `${val}-12-31`;
+    }
+  });
+
+  document.getElementById('masterProjectForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const year = parseInt(document.getElementById('mpYear')?.value, 10) || 2027;
+    const title = document.getElementById('mpTitle')?.value.trim();
+    const start_date = document.getElementById('mpStart')?.value;
+    const due_date = document.getElementById('mpDue')?.value;
+    const description = document.getElementById('mpDesc')?.value.trim();
+
+    try {
+      const created = await apiCall('/api/master-projects', 'POST', { year, title, start_date, due_date, description });
+      showToast(`🏛️ Yeni Çatı Yılı Başarıyla Tanımlandı: "${created.title}"`, 'success');
+      document.getElementById('masterProjectModal')?.classList.remove('open');
+      e.target.reset();
+      await loadMasterProjects();
+
+      // Proje oluşturma modalındaki çatı seçim kutusunda yeni oluşturulanı otomatik seç
+      const pMaster = document.getElementById('pMasterProject');
+      if (pMaster) {
+        pMaster.value = created.id;
+      }
+
+      state.selectedMasterFilter = created.id;
+      const masterFilter = document.getElementById('projectMasterFilter');
+      if (masterFilter) masterFilter.value = created.id;
+      renderProjectsView();
+    } catch (err) {
+      showToast(err.message || 'Çatı yılı eklenirken hata oluştu.', 'error');
+    }
+  });
+
+  // Müşteri Yönetimi Dinleyicileri
+  document.getElementById('openNewCustomerModalBtn')?.addEventListener('click', () => {
+    openCustomerModal();
+  });
+
+  document.getElementById('refreshCustomersBtn')?.addEventListener('click', async () => {
+    await loadAndRenderCustomers();
+    showToast('🔄 Müşteri istatistikleri güncellendi.', 'info');
+  });
+
+  document.getElementById('customerSearchInput')?.addEventListener('input', () => {
+    renderCustomerStatsView();
+  });
+
+  document.getElementById('projectMasterFilter')?.addEventListener('change', (e) => {
+    state.selectedMasterFilter = e.target.value;
+    renderProjectsView();
+  });
+
+  document.getElementById('projectCustomerFilter')?.addEventListener('change', (e) => {
+    state.selectedCustomerFilter = e.target.value;
+    renderProjectsView();
+  });
+
+  document.getElementById('projectHierarchyFilter')?.addEventListener('change', (e) => {
+    state.selectedHierarchyFilter = e.target.value;
+    renderProjectsView();
+  });
+
+  document.getElementById('customerForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const editId = document.getElementById('custEditId').value;
+    const name = document.getElementById('custName').value.trim();
+    const code = document.getElementById('custCode').value.trim();
+    const description = document.getElementById('custDesc').value.trim();
+    const contact_person = document.getElementById('custContactPerson').value.trim();
+    const contact_email = document.getElementById('custContactEmail').value.trim();
+
+    try {
+      if (editId) {
+        await apiCall(`/api/customers/${editId}`, 'PUT', { name, code, description, contact_person, contact_email });
+        showToast('🏢 Müşteri bilgileri güncellendi.', 'success');
+      } else {
+        const created = await apiCall('/api/customers', 'POST', { name, code, description, contact_person, contact_email });
+        showToast(`🏢 "${created.name}" müşterisi başarıyla eklendi.`, 'success');
+        setTimeout(() => {
+          const pCust = document.getElementById('pCustomer');
+          if (pCust) pCust.value = created.id;
+        }, 150);
+      }
+      document.getElementById('customerModal')?.classList.remove('open');
+      e.target.reset();
+      await loadCustomers();
+      if (state.currentView === 'view-customers') {
+        renderCustomerStatsView();
+      }
+      if (state.currentView === 'view-projects') {
+        renderProjectsView();
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   });
 
   let editingPersonnelId = null;
@@ -4219,10 +5548,17 @@ function setupImportExportListeners() {
     exportProjectToJson();
   });
 
-  // 3. Yazdır / PDF
-  document.getElementById('printReportBtn')?.addEventListener('click', () => {
+  // 3. Yazdır & A3 Yatay PDF Kaydetme
+  document.getElementById('printReportBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
     exportWrapper?.classList.remove('open');
-    window.print();
+    prepareAndPrintA3({ isPdf: false });
+  });
+
+  document.getElementById('exportPdfA3Btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    exportWrapper?.classList.remove('open');
+    prepareAndPrintA3({ isPdf: true });
   });
 
   // 4. İçe Aktar Modalı Aç
@@ -4557,6 +5893,175 @@ function downloadFileBlob(content, fileName, mimeType) {
   }, 100);
 }
 
+// ================= A3 YATAY (LANDSCAPE) YAZDIRMA & PDF ÇIKTI MOTORU =================
+function prepareAndPrintA3(options = {}) {
+  const isPdf = options.isPdf || false;
+  const originalTitle = document.title;
+
+  // 1. Aktif Görünümü ve Kapsamı Tespit Et
+  const activeViewId = state.currentView;
+  const isProjGantt = activeViewId === 'view-projects' && state.projectsViewMode === 'gantt';
+  const isTaskGantt = activeViewId === 'view-timeline';
+
+  // 2. Banner Alanlarını Doldur
+  const bannerProjectTitle = document.getElementById('printBannerProjectTitle');
+  const bannerDate = document.getElementById('printBannerDate');
+  const bannerMeta = document.getElementById('printBannerMeta');
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timeStr = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  if (bannerDate) bannerDate.textContent = `${dateStr} ${timeStr}`;
+
+  let currentProject = state.projects.find(p => p.id === state.currentProjectId);
+  let docTitleBase = 'FG-Group';
+
+  if (isProjGantt) {
+    if (bannerProjectTitle) bannerProjectTitle.textContent = '📁 Şirket Projeleri Portföy Çizelgesi (Gantt)';
+    if (bannerMeta) bannerMeta.textContent = `Toplam ${state.projects.length} Aktif Proje • ${((state.projGanttZoomLevel || 'month')).toUpperCase()} Zaman Ölçeği`;
+    docTitleBase = 'FG_Group_Sirket_Projeleri_Gantt_A3';
+  } else if (isTaskGantt) {
+    const projName = currentProject ? currentProject.title : 'Tüm Görevler';
+    const rate = currentProject ? (currentProject.completion_rate || 0) : 0;
+    const taskCount = state.tasks.length;
+    if (bannerProjectTitle) bannerProjectTitle.textContent = `📁 ${projName} — Zaman Çizelgesi (Gantt)`;
+    if (bannerMeta) bannerMeta.textContent = `%${rate} Tamamlandı • ${taskCount} Görev • ${(ganttZoomLevel || 'day').toUpperCase()} Zaman Ölçeği`;
+    const cleanProjName = (projName || 'Proje').replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, '_');
+    docTitleBase = `FG_Group_${cleanProjName}_Zaman_Cizelgesi_A3`;
+  } else if (activeViewId === 'view-projects') {
+    const viewName = state.projectsViewMode === 'table' ? 'Tablo / Liste' : 'Kartlar';
+    if (bannerProjectTitle) bannerProjectTitle.textContent = `📁 Şirket Projeleri (${viewName})`;
+    if (bannerMeta) bannerMeta.textContent = `${state.projects.length} Aktif Proje`;
+    docTitleBase = 'FG_Group_Projeler_Listesi_A3';
+  } else if (activeViewId === 'view-board') {
+    const projName = currentProject ? currentProject.title : 'İş Panosu';
+    if (bannerProjectTitle) bannerProjectTitle.textContent = `📌 ${projName} — İş Panosu (Kanban)`;
+    if (bannerMeta) bannerMeta.textContent = `${state.tasks.length} Görev`;
+    docTitleBase = 'FG_Group_Is_Panosu_A3';
+  } else {
+    const projName = currentProject ? currentProject.title : 'Görevler';
+    if (bannerProjectTitle) bannerProjectTitle.textContent = `📋 ${projName} — Görev Listesi`;
+    if (bannerMeta) bannerMeta.textContent = `${state.tasks.length} Görev`;
+    docTitleBase = 'FG_Group_Gorevler_A3';
+  }
+
+  const fileDateStr = now.toISOString().slice(0, 10);
+  if (isPdf) {
+    document.title = `${docTitleBase}_${fileDateStr}`;
+    showToast('📄 A3 Yatay PDF çıktısı hazırlanıyor... Yazıcı hedefinden "PDF Olarak Kaydet" (Save as PDF) seçeneğini seçebilirsiniz.', 'info');
+  } else {
+    document.title = `${docTitleBase}_Yazdir_${fileDateStr}`;
+  }
+
+  // 3. Yazdırma Modu Sınıflarını Uygula
+  document.body.classList.add('print-a3-active');
+  document.querySelectorAll('.view-section').forEach(sec => {
+    sec.classList.toggle('active-for-print', sec.id === activeViewId);
+  });
+
+  // 4. Gantt Şeması İçin Yatay Otomatik Sığdırma (Auto-fit horizontal scaling)
+  let targetGanttWrapper = null;
+  if (isProjGantt) {
+    targetGanttWrapper = document.getElementById('projGanttWrapper');
+  } else if (isTaskGantt) {
+    targetGanttWrapper = document.getElementById('opGanttWrapper');
+  }
+
+  let originalTransform = '';
+  let originalTransformOrigin = '';
+  let originalWidth = '';
+  let parentEl = null;
+  let originalParentHeight = '';
+  let originalParentOverflow = '';
+
+  if (targetGanttWrapper) {
+    const tablePane = targetGanttWrapper.querySelector('.op-gantt-table-pane');
+    const scrollWrap = targetGanttWrapper.querySelector('.timeline-scroll-wrap');
+
+    // Sol panel genişliği (gizli değilse)
+    const tableWidth = (tablePane && tablePane.style.display !== 'none') ? tablePane.offsetWidth : 0;
+    // Sağ zaman çizelgesi genişliği
+    const chartWidth = scrollWrap ? Math.max(scrollWrap.scrollWidth, scrollWrap.offsetWidth) : 1200;
+    const totalGanttWidth = tableWidth + chartWidth;
+
+    // A3 Landscape yazdırılabilir genişlik (8-10mm kenar boşluklarıyla ~1512px)
+    const PRINTABLE_A3_WIDTH_PX = 1512;
+
+    originalTransform = targetGanttWrapper.style.transform || '';
+    originalTransformOrigin = targetGanttWrapper.style.transformOrigin || '';
+    originalWidth = targetGanttWrapper.style.width || '';
+
+    parentEl = targetGanttWrapper.parentElement;
+    if (parentEl) {
+      originalParentHeight = parentEl.style.height || '';
+      originalParentOverflow = parentEl.style.overflow || '';
+    }
+
+    if (totalGanttWidth > PRINTABLE_A3_WIDTH_PX) {
+      const scale = (PRINTABLE_A3_WIDTH_PX / totalGanttWidth).toFixed(4);
+      targetGanttWrapper.style.transform = `scale(${scale})`;
+      targetGanttWrapper.style.transformOrigin = 'top left';
+      targetGanttWrapper.style.width = `${totalGanttWidth}px`;
+      if (parentEl) {
+        parentEl.style.height = `${Math.ceil(targetGanttWrapper.offsetHeight * scale) + 30}px`;
+        parentEl.style.overflow = 'hidden';
+      }
+    }
+  }
+
+  // 5. Yazdır Penceresini Aç
+  setTimeout(() => {
+    window.print();
+
+    // 6. Temizlik (Yazdırma sonrası ekranı orijinal haline döndür)
+    const cleanup = () => {
+      document.body.classList.remove('print-a3-active');
+      document.querySelectorAll('.view-section').forEach(sec => {
+        sec.classList.remove('active-for-print');
+      });
+      document.title = originalTitle;
+
+      if (targetGanttWrapper) {
+        targetGanttWrapper.style.transform = originalTransform;
+        targetGanttWrapper.style.transformOrigin = originalTransformOrigin;
+        targetGanttWrapper.style.width = originalWidth;
+      }
+      if (parentEl) {
+        parentEl.style.height = originalParentHeight;
+        parentEl.style.overflow = originalParentOverflow;
+      }
+      adjustGanttHeights();
+      window.removeEventListener('afterprint', cleanup);
+    };
+
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(cleanup, 2500); // Tarayıcı desteği fallback
+  }, 120);
+}
+
+let printActionsInitialized = false;
+function setupPrintActions() {
+  if (printActionsInitialized) return;
+  printActionsInitialized = true;
+
+  document.addEventListener('click', (e) => {
+    const printBtn = e.target.closest('.btn-trigger-print');
+    if (printBtn) {
+      e.preventDefault();
+      document.getElementById('exportDropdownWrapper')?.classList.remove('open');
+      prepareAndPrintA3({ isPdf: false });
+      return;
+    }
+    const pdfBtn = e.target.closest('.btn-trigger-pdf-a3');
+    if (pdfBtn) {
+      e.preventDefault();
+      document.getElementById('exportDropdownWrapper')?.classList.remove('open');
+      prepareAndPrintA3({ isPdf: true });
+      return;
+    }
+  });
+}
+
 function openExplanationModal(taskId, title) {
   const form = document.getElementById('explanationForm');
   form.dataset.taskId = taskId;
@@ -4846,7 +6351,7 @@ function populateTaskModalSelects() {
     // PROJE YETKİLİSİ / ADMİN (Şirket projesi seçebilir veya bireysel to-do açabilir)
     projSelect.disabled = false;
     let projOptions = '<option value="">📌 Bireysel Görev / Kişisel To-Do (Projesiz Takip)</option>';
-    projOptions += authorizedProjects.map(p => `<option value="${p.id}">📁 ${escapeHtml(p.title)}</option>`).join('');
+    projOptions += formatProjectHierarchyOptions(authorizedProjects);
     projSelect.innerHTML = projOptions;
 
     // Varsayılan seçim: Aktif proje yetkiliyse o proje seçili gelsin
@@ -5053,6 +6558,13 @@ async function openProjectManageModal(projectId) {
 
     document.getElementById('pmModalTitle').textContent = `📁 ${project.title}`;
 
+    // Proje Müşterisi Seçimi
+    renderCustomerSelects();
+    const pmCust = document.getElementById('pmCustomerSelect');
+    if (pmCust) {
+      pmCust.value = project.customer_id || '';
+    }
+
     // Üye ekleme personel listesi
     const userSelect = document.getElementById('pmUserSelect');
     if (userSelect) {
@@ -5163,6 +6675,19 @@ let pmListenersAttached = false;
 function setupProjectManageModalListeners() {
   if (pmListenersAttached) return;
   pmListenersAttached = true;
+
+  document.getElementById('pmSaveCustomerBtn')?.addEventListener('click', async () => {
+    if (!managingProjectId) return;
+    const customer_id = document.getElementById('pmCustomerSelect')?.value || undefined;
+    try {
+      await apiCall(`/api/projects/${managingProjectId}/customer`, 'PUT', { customer_id });
+      showToast('🏢 Proje müşterisi güncellendi.', 'success');
+      await openProjectManageModal(managingProjectId);
+      await loadProjects();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
 
   document.getElementById('pmDeleteProjectBtn')?.addEventListener('click', async () => {
     if (!managingProjectId) return;
@@ -5345,7 +6870,7 @@ function setupReportControls() {
   const printBtn = document.getElementById('printReportBtn');
   if (printBtn) {
     printBtn.onclick = () => {
-      window.print();
+      prepareAndPrintA3({ isPdf: false });
     };
   }
 }

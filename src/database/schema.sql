@@ -34,6 +34,36 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_tenant_email ON users(tenant_id, email);
 
+CREATE TABLE IF NOT EXISTS master_projects (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  year INTEGER NOT NULL DEFAULT 2026,
+  description TEXT,
+  start_date TEXT,
+  due_date TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by_user_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_master_projects_tenant ON master_projects(tenant_id);
+
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  code TEXT,
+  description TEXT,
+  contact_person TEXT,
+  contact_email TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by_user_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);
+
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -47,7 +77,14 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at TEXT NOT NULL,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   deleted_at TEXT,
-  deleted_by_user_id TEXT
+  deleted_by_user_id TEXT,
+  customer_id TEXT,
+  customer_name TEXT,
+  master_project_id TEXT,
+  master_project_title TEXT,
+  parent_project_id TEXT,
+  parent_project_title TEXT,
+  timeline_period TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_tenant ON projects(tenant_id);

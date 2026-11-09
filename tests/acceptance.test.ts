@@ -966,14 +966,13 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     const cardMail = await emailService.sendTaskAssignedActionableCard(tenantA.id, qTask.id, authManagerA.name);
     assert.ok(cardMail);
     assert.ok(cardMail.html_preview);
-    // Kart ribbon, başlık, rozet ve tek tık butonları içermeli
+    // Sadeleştirilmiş kart: Ribbon, başlık, rozet, görev detay satırları ve doğrudan sisteme yönlendiren aksiyon butonu
     assert.ok(cardMail.html_preview.includes('YENİ GÖREV ATAMA BİLDİRİMİ'));
     assert.ok(cardMail.html_preview.includes('Başlamaya Hazır'));
-    assert.ok(cardMail.html_preview.includes('/api/quick-action?tenant_id='));
-    assert.ok(cardMail.html_preview.includes('action=START_TASK'));
-    assert.ok(cardMail.html_preview.includes('action=COMPLETE_TASK'));
-    assert.ok(cardMail.html_preview.includes('action=UPDATE_PROGRESS&progress='));
-    assert.ok(cardMail.html_preview.includes('%50 Yarılandı'));
+    assert.ok(cardMail.html_preview.includes('Görev Açıklaması:'));
+    assert.ok(cardMail.html_preview.includes('Görevi Atayan:'));
+    assert.ok(cardMail.html_preview.includes('Atanma Zamanı:'));
+    assert.ok(cardMail.html_preview.includes('Göreve Git'));
 
     // 2. E-postadaki linkten görevi başlat (START_TASK)
     const startRes = await emailService.handleOutlookCardAction({
@@ -1377,13 +1376,15 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     assert.ok(calLinks.outlookWebUrl.includes(encodeURIComponent(pCal.title)), 'Outlook linkinde proje adı geçmelidir');
     assert.ok(calLinks.googleCalendarUrl.includes('calendar.google.com/calendar/render'), 'Google Calendar deeplink olmalıdır');
 
-    // 4. E-posta Gönderimi & Görsel HTML Şablonunda Takvim Bölümü
+    // 4. E-posta Gönderimi: Sadeleştirilmiş E-posta Şablonu, Ekler Kaldırıldı ve Görev Detay Satırları
     const emailItem = await emailService.sendTaskAssignedActionableCard(tenantA.id, taskCal.id, 'Ali Yönetici');
     assert.ok(emailItem, 'E-posta kaydı oluşmalıdır');
-    assert.ok(emailItem?.html_preview.includes('📅 KİŞİSEL TAKVİMİNİZE EKLEYİN'), 'E-posta kartında takvime ekleme kutusu bulunmalıdır');
-    assert.ok(emailItem?.html_preview.includes(`/api/tasks/${taskCal.id}/calendar.ics`), 'HTML gövdesinde .ics indirme butonu olmalıdır');
-    assert.ok(emailItem?.html_preview.includes('🌐 Outlook Web (M365)'), 'HTML gövdesinde Outlook Web butonu olmalıdır');
-    assert.ok(emailItem?.html_preview.includes('📆 Google Takvim'), 'HTML gövdesinde Google Calendar butonu olmalıdır');
+    assert.equal(emailItem?.ical_event, undefined, 'E-posta ekinde .ics takvim dosyası olmamalıdır (kullanıcı talebi doğrultusunda kaldırıldı)');
+    assert.ok(emailItem?.html_preview.includes('Görev Açıklaması:'), 'HTML tablosunda Görev Açıklaması satırı bulunmalıdır');
+    assert.ok(emailItem?.html_preview.includes('Görevi Atayan:'), 'HTML tablosunda Görevi Atayan satırı bulunmalıdır');
+    assert.ok(emailItem?.html_preview.includes('Atanma Zamanı:'), 'HTML tablosunda Atanma Zamanı satırı bulunmalıdır');
+    assert.ok(emailItem?.html_preview.includes('Bekleyen Ardıl İş:'), 'HTML tablosunda Bekleyen Ardıl İş satırı bulunmalıdır');
+    assert.ok(!emailItem?.html_preview.includes('KİŞİSEL TAKVİMİNİZE EKLEYİN'), 'Faz 2 takvim kutusu e-postadan kaldırılmış olmalıdır');
   });
 
   await t.test('BİLDİRİM MERKEZİ: Bildirimlerin okunması, rozet sıfırlama (read-all) ve temizleme (clear-all)', () => {
@@ -1737,5 +1738,159 @@ test('Görev ve Bağımlılık Yönetim Sistemi - Şartname v0.3 Kabul Senaryola
     // Projenin bitiş tarihi de 30.12'ye uzamış olmalıdır
     const finalProj = db.getProjectById(tenantA.id, pBounds.id);
     assert.equal(finalProj?.current_due_date.slice(0, 10), '2026-12-30', 'Proje bitiş tarihi onaylanan ek süreye göre uzatılmalıdır');
+  });
+
+  await t.test('MÜŞTERİ YÖNETİMİ & PORTFÖY BAŞARI ANALİZİ: 4 Standart Müşteri, Proje Yöneticisi/Admin Yetkisi, Proje Müşteri Kırılımı ve Başarı Metrikleri', async () => {
+    // 1. Varsayılan 4 müşterinin otomatik tanımlı gelmesi
+    const customers = projectService.listCustomers(authManagerA);
+    assert.ok(customers.length >= 4, 'En az 4 varsayılan müşteri tanımlı olmalıdır');
+    const names = customers.map(c => c.name.toUpperCase());
+    assert.ok(names.includes('NEWYORKER'), 'NEWYORKER müşterisi bulunmalıdır');
+    assert.ok(names.includes('JULES'), 'JULES müşterisi bulunmalıdır');
+    assert.ok(names.includes('PEPE JEANS'), 'PEPE JEANS müşterisi bulunmalıdır');
+    assert.ok(names.some(n => n.includes('BESTSELLER ONLY') || n.includes('ONLY & SONS') || n.includes('ONLY& SONS')), 'BESTSELLER ONLY & SONS müşterisi bulunmalıdır');
+
+    // 2. Yetkisiz personelin (standart çalışan) müşteri ekleyememesi koruması
+    assert.throws(
+      () => projectService.createCustomer(authAssigneeA, 'YENİ MARKA', 'YM', 'İzinsiz müşteri'),
+      /Yetkisiz İşlem/i,
+      'Standart çalışan müşteri tanımlayamaz'
+    );
+
+    // 3. Proje Yöneticisi veya Adminin yeni müşteri ekleyebilmesi
+    const newCust = projectService.createCustomer(
+      authManagerA,
+      'ZARA MAN',
+      'ZR',
+      'Zara erkek koleksiyon ve denim projeleri',
+      'Carlos Sanchez',
+      'carlos@inditex.com'
+    );
+    assert.ok(newCust.id);
+    assert.equal(newCust.name, 'ZARA MAN');
+
+    // 4. Müşteri kırılımında yeni proje oluşturma
+    const pCustomer = projectService.createProject(
+      authManagerA,
+      'ZARA SS27 Ceket Koleksiyonu',
+      'Zara için 50.000 adet ceket projesi',
+      '2026-11-01T09:00:00Z',
+      '2026-11-30T18:00:00Z',
+      newCust.id
+    );
+    assert.equal(pCustomer.customer_id, newCust.id);
+    assert.equal(pCustomer.customer_name, 'ZARA MAN');
+
+    // Projeye 2 görev ekle: 1 tamamlanan, 1 devam eden
+    const tCust1 = taskService.createTask(authManagerA, pCustomer.id, 'Kalıp Hazırlama', '2026-11-01', '2026-11-10', assigneeA.id);
+    const tCust2 = taskService.createTask(authManagerA, pCustomer.id, 'Numune Dikim', '2026-11-10', '2026-11-20', assigneeA.id);
+    taskService.completeTask(authAssigneeA, tCust1.id);
+
+    // 5. Müşteri başarı ve performans istatistiklerinin hesaplanması
+    const stats = projectService.getCustomerStats(authManagerA);
+    const zaraStat = stats.find(s => s.id === newCust.id);
+    assert.ok(zaraStat);
+    assert.equal(zaraStat.total_projects, 1, 'ZARA müşterisine ait 1 proje olmalıdır');
+    assert.equal(zaraStat.active_projects, 1, 'Proje henüz devam ettiği için 1 aktif olmalıdır');
+    assert.equal(zaraStat.total_tasks, 2, '2 görev bulunmalıdır');
+    assert.equal(zaraStat.completed_tasks, 1, '1 görev tamamlanmış olmalıdır');
+    assert.ok(zaraStat.success_rate > 0, 'Başarı oranı hesaplanmalıdır');
+
+    // 6. Proje müşterisini sonradan güncelleme
+    const julesCust = customers.find(c => c.name.toUpperCase().includes('JULES'));
+    assert.ok(julesCust);
+    const updatedProj = projectService.updateProjectCustomer(authManagerA, pCustomer.id, julesCust.id);
+    assert.equal(updatedProj.customer_id, julesCust.id);
+    assert.equal(updatedProj.customer_name, julesCust.name);
+  });
+
+  await t.test('ÇATI / ANA PROJE (MASTER PROJECT) & SEZON DÖNEMİ HİYERARŞİSİ: Master Project -> Müşteri -> Ana Proje -> Alt Projeler -> 8 Adımlı Görevler', async () => {
+    // 1. Varsayılan Çatı Projenin otomatik gelmesi (FG COLLECTION TIMELINE 2026)
+    const masterProjects = projectService.listMasterProjects(authManagerA);
+    assert.ok(masterProjects.length >= 1, 'En az 1 adet varsayılan Çatı Proje bulunmalıdır');
+    const defaultMaster = masterProjects[0];
+    assert.equal(defaultMaster.title, 'FG COLLECTION TIMELINE 2026');
+    assert.equal(defaultMaster.year, 2026);
+
+    // 2. Proje Yöneticisinin yeni çatı yılı tanımlayabilmesi (2027 Çatısı)
+    const newMaster2027 = projectService.createMasterProject(
+      authManagerA,
+      'FG COLLECTION TIMELINE 2027',
+      2027,
+      'FG Group 2027 Yıllık Koleksiyon ve Müşteri Portföy Çatı Programı',
+      '2027-01-01',
+      '2027-12-31'
+    );
+    assert.equal(newMaster2027.year, 2027);
+    assert.equal(newMaster2027.title, 'FG COLLECTION TIMELINE 2027');
+
+    // 3. Yetkisiz personelin çatı yılı ekleyememesi koruması
+    assert.throws(
+      () => projectService.createMasterProject(authAssigneeA, 'İZİNSİZ ÇATI', 2028),
+      /Yetkisiz İşlem/i,
+      'Yetkisiz çalışan yeni çatı yılı oluşturamaz'
+    );
+
+    // 4. Müşteri seçimi (NEWYORKER)
+    const customers = projectService.listCustomers(authManagerA);
+    const newyorker = customers.find(c => c.name.toUpperCase() === 'NEWYORKER')!;
+    assert.ok(newyorker);
+
+    // 5. 3. Kademe: Müşterinin Ana Koleksiyon Projesini Oluşturma (Yıllık Ana Proje)
+    const mainProject = projectService.createProject(
+      authManagerA,
+      'NEWYORKER 2026 Yıllık Koleksiyon Programı',
+      'Newyorker markası için tüm 2026 sezonlarının ana koleksiyon programı',
+      '2026-01-01T08:00:00Z',
+      '2026-12-31T18:00:00Z',
+      newyorker.id,
+      newyorker.name,
+      defaultMaster.id,
+      defaultMaster.title
+    );
+    assert.ok(!mainProject.parent_project_id, 'Ana projenin parent_project_id alanı boş olmalıdır');
+    assert.equal(mainProject.customer_id, newyorker.id);
+
+    // 6. 4. Kademe: Ana Projeye Bağlı Alt Proje (Sezon / Dönem Projesi) Oluşturma
+    const subProjectOctNov = projectService.createProject(
+      authManagerA,
+      'AW / KIŞ ANA KOLEKSİYON FG SUMMIT FAIR',
+      'Smog Pant, Non-Denim Pant, Gömlek, Ceket',
+      '2026-10-01T08:00:00Z',
+      '2026-11-30T18:00:00Z',
+      undefined, // Ana projeden otomatik devralacak
+      undefined,
+      undefined, // Ana projeden otomatik devralacak
+      undefined,
+      'EKİM/KASIM',
+      mainProject.id
+    );
+
+    assert.equal(subProjectOctNov.parent_project_id, mainProject.id, 'Alt proje ana projeye bağlı olmalıdır');
+    assert.equal(subProjectOctNov.parent_project_title, mainProject.title);
+    assert.equal(subProjectOctNov.customer_id, newyorker.id, 'Alt proje müşteriyi ana projeden devralmalıdır');
+    assert.equal(subProjectOctNov.master_project_id, defaultMaster.id, 'Alt proje çatı yılı ana projeden devralmalıdır');
+    assert.equal(subProjectOctNov.timeline_period, 'EKİM/KASIM');
+
+    // 7. listProjects çağrıldığında ana projenin sub_projects_count değerinin 1 gelmesi
+    const allProjects = projectService.listProjects(authManagerA);
+    const listedMain = allProjects.find(p => p.id === mainProject.id);
+    assert.ok(listedMain);
+    assert.equal(listedMain.sub_projects_count, 1, 'Ana projenin alt proje sayısı 1 olmalıdır');
+
+    // 8. 5. Kademe: Alt projeye 8 adımlı tekstil görev zincirinin bağlanması
+    const t1 = taskService.createTask(authManagerA, subProjectOctNov.id, '[KOLEKSİYON OLUŞTURMA] AW27 koleksiyon eksikleri', '2026-10-01', '2026-10-21', assigneeA.id);
+    const t2 = taskService.createTask(authManagerA, subProjectOctNov.id, '[KUMAŞ] Kumaşların organize edilmesi', '2026-10-22', '2026-10-30', assigneeA.id);
+    assert.equal(t1.project_id, subProjectOctNov.id);
+    assert.equal(t2.project_id, subProjectOctNov.id);
+
+    // 9. Deneme projelerini temizleme (wipeTrialProjects) testi
+    const projBeforeWipe = db.getProjects(authManagerA.tenant_id);
+    assert.ok(projBeforeWipe.length > 0);
+    db.wipeTrialProjects(authManagerA.tenant_id);
+    const projAfterWipe = db.getProjects(authManagerA.tenant_id);
+    assert.equal(projAfterWipe.length, 0, 'Deneme projeleri temizlendiğinde liste boşalmalıdır');
+    const projectTasksAfterWipe = db.getTasks(authManagerA.tenant_id).filter(t => t.project_id);
+    assert.equal(projectTasksAfterWipe.length, 0, 'Deneme projelerine ait görevler de temizlenmelidir');
   });
 });

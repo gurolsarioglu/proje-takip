@@ -24,8 +24,11 @@ import {
   BackupPayload,
   WorkflowStep,
   TaskDefinitionTemplate,
+  Customer,
+  MasterProject,
   UUID
 } from '../core/types.js';
+import crypto from 'crypto';
 import { CryptoVault } from '../core/crypto-vault.js';
 
 export interface DatabaseState {
@@ -51,6 +54,8 @@ export interface DatabaseState {
   backup_schedules: Record<string, BackupScheduleConfig>;
   workflow_steps: WorkflowStep[];
   task_definition_templates: TaskDefinitionTemplate[];
+  customers?: Customer[];
+  master_projects?: MasterProject[];
 }
 
 export class Database {
@@ -92,6 +97,12 @@ export class Database {
         }
         if (!Array.isArray(this.state.task_definition_templates)) {
           this.state.task_definition_templates = [];
+        }
+        if (!Array.isArray(this.state.customers)) {
+          this.state.customers = [];
+        }
+        if (!Array.isArray(this.state.master_projects)) {
+          this.state.master_projects = [];
         }
         // Düz metin kalmış SMTP şifresi varsa anında AES-256-GCM ile şifrele
         let smtpMigrated = false;
@@ -163,7 +174,9 @@ export class Database {
       backups: [],
       backup_schedules: {},
       workflow_steps: [],
-      task_definition_templates: []
+      task_definition_templates: [],
+      customers: [],
+      master_projects: []
     };
   }
 
@@ -254,6 +267,154 @@ export class Database {
     Object.assign(p, update);
     this.save();
     return p;
+  }
+
+  // --- Customers ---
+  public getCustomers(tenant_id: UUID): Customer[] {
+    this.ensureDefaultCustomers(tenant_id);
+    return (this.state.customers || []).filter(c => c.tenant_id === tenant_id);
+  }
+
+  public getCustomerById(tenant_id: UUID, id?: UUID | null): Customer | undefined {
+    if (!id) return undefined;
+    return (this.state.customers || []).find(c => c.tenant_id === tenant_id && c.id === id);
+  }
+
+  public insertCustomer(customer: Customer): Customer {
+    if (!Array.isArray(this.state.customers)) {
+      this.state.customers = [];
+    }
+    this.state.customers.push(customer);
+    this.save();
+    return customer;
+  }
+
+  public updateCustomer(tenant_id: UUID, id: UUID, update: Partial<Customer>): Customer | undefined {
+    const c = this.getCustomerById(tenant_id, id);
+    if (!c) return undefined;
+    Object.assign(c, update);
+    this.save();
+    return c;
+  }
+
+  public ensureDefaultCustomers(tenant_id: UUID, created_by_user_id?: UUID): Customer[] {
+    if (!Array.isArray(this.state.customers)) {
+      this.state.customers = [];
+    }
+    const tenantCustomers = this.state.customers.filter(c => c.tenant_id === tenant_id);
+    if (tenantCustomers.length > 0) return tenantCustomers;
+
+    const defaultNames = [
+      { name: 'NEWYORKER', code: 'NY', desc: 'Newyorker tekstil ve koleksiyon projeleri' },
+      { name: 'JULES', code: 'JLS', desc: 'Jules hazır giyim ve modelhane projeleri' },
+      { name: 'PEPE JEANS', code: 'PJ', desc: 'Pepe Jeans denim ve koleksiyon projeleri' },
+      { name: 'BESTSELLER ONLY & SONS', code: 'BOS', desc: 'Bestseller Only & Sons sipariş ve üretim projeleri' }
+    ];
+
+    const admin = this.getUsers(tenant_id).find(u => u.system_role === 'ADMIN');
+    const authorId = created_by_user_id || admin?.id || this.getUsers(tenant_id)[0]?.id || 'system-admin';
+
+    for (const d of defaultNames) {
+      const cust: Customer = {
+        id: crypto.randomUUID(),
+        tenant_id,
+        name: d.name,
+        code: d.code,
+        description: d.desc,
+        is_active: true,
+        created_by_user_id: authorId,
+        created_at: new Date().toISOString()
+      };
+      this.state.customers.push(cust);
+    }
+
+    // Mevcut projelere varsa otomatik müşteri eşleştirmesi yap
+    const projects = this.getProjects(tenant_id);
+    for (const proj of projects) {
+      if (!proj.customer_id) {
+        const titleUpper = (proj.title || '').toUpperCase();
+        const matched = this.state.customers.find(c => c.tenant_id === tenant_id && titleUpper.includes(c.name.toUpperCase()));
+        if (matched) {
+          proj.customer_id = matched.id;
+          proj.customer_name = matched.name;
+        }
+      }
+    }
+
+    this.save();
+    return this.state.customers.filter(c => c.tenant_id === tenant_id);
+  }
+
+  // --- Ana Proje / Çatı Program (Master Projects) ---
+  public getMasterProjects(tenant_id: UUID): MasterProject[] {
+    this.ensureDefaultMasterProject(tenant_id);
+    return (this.state.master_projects || []).filter(m => m.tenant_id === tenant_id && m.is_active !== false);
+  }
+
+  public getMasterProjectById(tenant_id: UUID, id?: UUID | null): MasterProject | undefined {
+    if (!id) return undefined;
+    return (this.state.master_projects || []).find(m => m.tenant_id === tenant_id && m.id === id);
+  }
+
+  public insertMasterProject(masterProject: MasterProject): MasterProject {
+    if (!Array.isArray(this.state.master_projects)) {
+      this.state.master_projects = [];
+    }
+    this.state.master_projects.push(masterProject);
+    this.save();
+    return masterProject;
+  }
+
+  public updateMasterProject(tenant_id: UUID, id: UUID, update: Partial<MasterProject>): MasterProject | undefined {
+    const m = this.getMasterProjectById(tenant_id, id);
+    if (!m) return undefined;
+    Object.assign(m, update);
+    this.save();
+    return m;
+  }
+
+  public ensureDefaultMasterProject(tenant_id: UUID, created_by_user_id?: UUID): MasterProject {
+    if (!Array.isArray(this.state.master_projects)) {
+      this.state.master_projects = [];
+    }
+    const existing = this.state.master_projects.find(m => m.tenant_id === tenant_id && m.year === 2026);
+    if (existing) return existing;
+
+    const admin = this.getUsers(tenant_id).find(u => u.system_role === 'ADMIN');
+    const authorId = created_by_user_id || admin?.id || this.getUsers(tenant_id)[0]?.id || 'system-admin';
+
+    const defaultMaster: MasterProject = {
+      id: crypto.randomUUID(),
+      tenant_id,
+      title: 'FG COLLECTION TIMELINE 2026',
+      year: 2026,
+      description: 'FG Group 2026 Yıllık Koleksiyon ve Müşteri Portföy Çatı Programı',
+      start_date: '2026-01-01',
+      due_date: '2026-12-31',
+      is_active: true,
+      created_by_user_id: authorId,
+      created_at: new Date().toISOString()
+    };
+    this.state.master_projects.push(defaultMaster);
+    this.save();
+    return defaultMaster;
+  }
+
+  /**
+   * Kullanıcının talebi üzerine eski deneme projelerini ve bağlı görevlerini temizler
+   */
+  public wipeTrialProjects(tenant_id: UUID): void {
+    const deletedProjectIds = new Set(this.state.projects.filter(p => p.tenant_id === tenant_id).map(p => p.id));
+    this.state.projects = this.state.projects.filter(p => p.tenant_id !== tenant_id);
+    this.state.tasks = this.state.tasks.filter(t => !t.project_id || !deletedProjectIds.has(t.project_id));
+    this.state.task_assignments = this.state.task_assignments.filter(a => a.tenant_id !== tenant_id);
+    this.state.task_dependencies = this.state.task_dependencies.filter(d => d.tenant_id !== tenant_id);
+    this.state.task_plan_changes = this.state.task_plan_changes.filter(c => c.tenant_id !== tenant_id);
+    this.state.project_plan_changes = this.state.project_plan_changes.filter(c => c.tenant_id !== tenant_id);
+    this.state.project_members = this.state.project_members.filter(m => m.tenant_id !== tenant_id);
+    this.state.delay_records = this.state.delay_records.filter(r => r.tenant_id !== tenant_id);
+    this.state.visibility_requests = this.state.visibility_requests.filter(v => v.tenant_id !== tenant_id);
+    this.save();
   }
 
   // --- Project Plan Changes ---

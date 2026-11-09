@@ -540,15 +540,46 @@ z-index: 9999;
   font-size: 0.8rem;
   font-weight: 600;
   padding: 2px 4px;
-  max-width: 190px;
+  max-width: 320px;
   text-overflow: ellipsis;
   outline: none;
   cursor: pointer;
 }
 
+#projectSelect.sm-select {
+  max-width: 340px;
+  min-width: 190px;
+}
+
 .sm-select option {
   background: var(--bg-card);
   color: var(--text-primary);
+}
+
+.op-subproject-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #ede9fe;
+  color: #5b21b6;
+  font-size: 0.67rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #ddd6fe;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.pill-subproject-badge {
+  display: inline-block;
+  background: rgba(91, 33, 182, 0.45);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 4px;
+  white-space: nowrap;
 }
 
 .topbar-global-search {
@@ -1039,10 +1070,20 @@ z-index: 9999;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 460px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.projects-gantt-view,
+#projectsGanttView {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 460px;
 }
 
 /* Üst Araç Çubuğu (Toolbar) */
@@ -1204,8 +1245,9 @@ z-index: 9999;
 .op-gantt-wrapper {
   display: flex;
   position: relative;
-  height: 640px;
-  min-height: 500px;
+  flex: 1 1 auto;
+  height: calc(100vh - 230px);
+  min-height: 460px;
   background: #ffffff;
   overflow: hidden;
 }
@@ -1962,6 +2004,195 @@ z-index: 9999;
   color: #94a3b8;
 }
 
+/* ================= PROJELER GÖRÜNÜM SEÇİCİ & GANTT & TABLO ================= */
+.project-view-mode-group {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 3px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  gap: 2px;
+}
+
+.view-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.view-mode-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.view-mode-btn.active {
+  background: #ffffff;
+  color: #005973;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .project-view-mode-group {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme="dark"] .view-mode-btn {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .view-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .view-mode-btn.active {
+  background: #334155;
+  color: #38bdf8;
+}
+
+/* Projeler Tablo Görünümü */
+.projects-table-row {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.15s ease;
+}
+
+.projects-table-row:hover {
+  background: #f8fafc;
+}
+
+[data-theme="dark"] .projects-table-row:hover {
+  background: #1e293b;
+}
+
+/* Projeler Gantt Zaman Çubuğu */
+.proj-gantt-pill-bar {
+  position: absolute;
+  height: 44px;
+  min-height: 44px;
+  min-width: 32px;
+  background: linear-gradient(135deg, #0e7490, #0891b2);
+  border: 1px solid #0891b2;
+  border-radius: 8px;
+  padding: 3px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  z-index: 10;
+  overflow: hidden;
+  box-sizing: border-box;
+  color: #ffffff !important;
+}
+
+.proj-gantt-pill-bar:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(14, 116, 144, 0.35);
+  z-index: 20;
+}
+
+.proj-gantt-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  pointer-events: none;
+  transition: width 0.3s ease;
+}
+
+.proj-gantt-pill-bar.sub-project-bar {
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  border-color: #4f46e5;
+}
+
+.proj-gantt-title-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.proj-gantt-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-gantt-rate-tag {
+  background: rgba(0, 0, 0, 0.28);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.proj-gantt-dates-row {
+  position: relative;
+  z-index: 2;
+  font-size: 0.66rem;
+  opacity: 0.95;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.proj-gantt-side-date {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  z-index: 5;
+}
+
+.proj-gantt-date-chip {
+  display: inline-block;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
 /* ================= PROJELER GRID ================= */
 .projects-grid {
   display: grid;
@@ -2647,6 +2878,11 @@ z-index: 9999;
 
 .modal-backdrop.open {
   display: flex;
+}
+
+#masterProjectModal,
+#customerModal {
+  z-index: 200;
 }
 
 .modal-content {
@@ -4022,32 +4258,259 @@ z-index: 9999;
   }
 }
 
-/* Baskı / PDF Çıktı Modu (@media print) */
+/* ==============================================================
+   A3 YATAY (LANDSCAPE) YAZDIRMA & PDF ÇIKTI DÜZENİ (@media print)
+   ============================================================== */
+
+.print-banner-header {
+  display: none;
+}
+
 @media print {
-  body {
-    background: #ffffff !important;
-    color: #111827 !important;
+  @page {
+    size: A3 landscape;
+    margin: 8mm 10mm;
   }
 
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Yazdırma Modunda Gizlenecek Elemanlar */
   .app-sidebar,
+  .topbar,
+  .gantt-toolbar,
+  .projects-tabs-bar,
+  .op-toolbar,
+  .welcome-banner,
+  .op-gantt-splitter,
+  .timeline-legend,
+  .zoom-btn-group,
+  .gantt-zoom-group,
+  .gantt-tool-btn,
+  .action-btn,
+  .btn-table-manage,
+  .btn-table-delete,
+  .btn-manage-project,
+  .btn-delete-project,
+  .btn-open-project,
+  .btn-restore-project,
+  .btn-req-visibility,
+  .proj-card-actions,
+  .op-split-drawer,
+  .op-drawer-backdrop,
+  .modal,
+  .toast,
+  .floating-theme-toggle,
   .report-toolbox-panel,
   .report-controls-bar,
   .widget-chrome-actions,
-  .widget-chrome-handle,
-  .op-split-drawer,
-  .op-drawer-backdrop {
+  .widget-chrome-handle {
     display: none !important;
   }
 
+  /* Ana Taşıyıcı ve İçerik */
   .app-layout {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .app-main-area,
+  .app-main {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Aktif Olmayan Görünümleri Gizle */
+  .view-section {
+    display: none !important;
+  }
+
+  .view-section.active-for-print,
+  .view-section.active {
     display: block !important;
   }
 
-  .app-main {
+  /* Kartların gölgelerini kaldırıp çerçeveyi netleştir */
+  .clean-card,
+  .op-gantt-card {
+    border: none !important;
+    box-shadow: none !important;
     padding: 0 !important;
-    margin: 0 !important;
+    background: transparent !important;
   }
 
+  /* A3 Çıktı Üst Bilgi Bannerı (Print Banner Header) */
+  .print-banner-header {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #005973 !important;
+    padding: 8px 12px 10px 12px !important;
+    margin-bottom: 12px !important;
+    background: #f8fafc !important;
+    border-radius: 6px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-banner-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .print-company-name {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #005973 !important;
+  }
+
+  .print-company-sub {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #64748b !important;
+  }
+
+  .print-banner-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a !important;
+    margin-top: 3px;
+  }
+
+  .print-banner-right {
+    text-align: right;
+    font-size: 0.78rem;
+    color: #475569 !important;
+  }
+
+  .print-banner-badge {
+    display: inline-block;
+    background: #005973 !important;
+    color: #ffffff !important;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+  }
+
+  .print-banner-meta-row {
+    font-size: 0.76rem;
+    color: #334155 !important;
+    line-height: 1.3;
+  }
+
+  /* Gantt Splitter Çizelgesi Yazdırma Düzeni (Otomatik Yatay Sığdırma) */
+  .op-gantt-wrapper {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: row !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .op-gantt-table-pane {
+    height: auto !important;
+    overflow: visible !important;
+    border-right: 2px solid #005973 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .op-gantt-table-body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .op-gantt-chart-pane {
+    height: auto !important;
+    overflow: visible !important;
+    flex: 1 !important;
+  }
+
+  .timeline-chart-container,
+  .timeline-scroll-wrap,
+  .gantt-rows-container {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .g-table-row,
+  .gantt-row-track {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .op-gantt-table-header {
+    background: #005973 !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .gantt-grid-header {
+    position: static !important;
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  .gantt-months-track,
+  .gantt-days-track {
+    background: #f8fafc !important;
+  }
+
+  .gantt-pill-bar,
+  .proj-gantt-pill-bar {
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Tabloların Yazdırma Düzeni */
+  .projects-table-view,
+  .tasks-table-view {
+    display: block !important;
+    overflow: visible !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+  }
+
+  .projects-table,
+  .styled-table {
+    width: 100% !important;
+    min-width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .projects-table-header,
+  .styled-table thead tr {
+    background: #005973 !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .projects-table-row {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Rapor Oluşturucu (Report Builder) Çıktı Düzeni */
   .report-builder-header {
     background: transparent !important;
     border: none !important;
@@ -6500,4 +6963,139 @@ z-index: 9999;
   font-weight: 600;
   padding-top: 6px;
   border-top: 1px dashed var(--border-color, #e2e8f0);
+}
+
+/* ================= MÜŞTERİ PORTFÖYÜ & BAŞARI ANALİZİ ================= */
+.customer-card {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.customer-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  border-color: #3b82f6;
+}
+
+.customer-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.customer-brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.customer-logo-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #ffffff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+.customer-title-area h4 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.customer-title-area span {
+  font-size: 0.76rem;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.customer-success-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.customer-success-pill.high {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.customer-success-pill.medium {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.customer-success-pill.low {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.customer-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: var(--surface-hover, #f8fafc);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  text-align: center;
+}
+
+.customer-stat-item .stat-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.customer-stat-item .stat-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.customer-card-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.customer-badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(2, 132, 199, 0.1);
+  color: #0284c7;
+  border: 1px solid rgba(2, 132, 199, 0.25);
 }

@@ -120,6 +120,41 @@ export class PostgresEngine {
         await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;`);
         await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_at TEXT;`);
         await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS deleted_by_user_id TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer_id TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer_name TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS master_project_id TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS master_project_title TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS parent_project_id TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS parent_project_title TEXT;`);
+        await this.execSql(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS timeline_period TEXT;`);
+        await this.execSql(`
+          CREATE TABLE IF NOT EXISTS master_projects (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            year INTEGER NOT NULL DEFAULT 2026,
+            description TEXT,
+            start_date TEXT,
+            due_date TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_by_user_id TEXT,
+            created_at TEXT NOT NULL
+          );
+        `);
+        await this.execSql(`
+          CREATE TABLE IF NOT EXISTS customers (
+            id TEXT PRIMARY KEY,
+            tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            code TEXT,
+            description TEXT,
+            contact_person TEXT,
+            contact_email TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_by_user_id TEXT,
+            created_at TEXT NOT NULL
+          );
+        `);
       } catch (e) {}
     }
 
@@ -226,20 +261,58 @@ export class PostgresEngine {
       );
     }
 
+    // 2.B. Master Projects
+    if (Array.isArray(state.master_projects)) {
+      for (const m of state.master_projects) {
+        await this.querySql(
+          `INSERT INTO master_projects (id, tenant_id, title, year, description, start_date, due_date, is_active, created_by_user_id, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (id) DO UPDATE SET
+             title = EXCLUDED.title, year = EXCLUDED.year, description = EXCLUDED.description,
+             start_date = EXCLUDED.start_date, due_date = EXCLUDED.due_date,
+             is_active = EXCLUDED.is_active`,
+          [m.id, m.tenant_id, m.title, m.year || 2026, m.description || null, m.start_date || null, m.due_date || null, m.is_active !== false, m.created_by_user_id || null, m.created_at]
+        );
+      }
+    }
+
+    // 2.C. Customers
+    if (Array.isArray(state.customers)) {
+      for (const c of state.customers) {
+        await this.querySql(
+          `INSERT INTO customers (id, tenant_id, name, code, description, contact_person, contact_email, is_active, created_by_user_id, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (id) DO UPDATE SET
+             name = EXCLUDED.name, code = EXCLUDED.code, description = EXCLUDED.description,
+             contact_person = EXCLUDED.contact_person, contact_email = EXCLUDED.contact_email,
+             is_active = EXCLUDED.is_active`,
+          [c.id, c.tenant_id, c.name, c.code || null, c.description || null, c.contact_person || null, c.contact_email || null, c.is_active !== false, c.created_by_user_id || null, c.created_at]
+        );
+      }
+    }
+
     // 3. Projects
     for (const p of state.projects) {
       await this.querySql(
-        `INSERT INTO projects (id, tenant_id, title, description, initial_start_date, initial_due_date, current_start_date, current_due_date, created_by_user_id, created_at, is_deleted, deleted_at, deleted_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        `INSERT INTO projects (id, tenant_id, title, description, initial_start_date, initial_due_date, current_start_date, current_due_date, created_by_user_id, created_at, is_deleted, deleted_at, deleted_by_user_id, customer_id, customer_name, master_project_id, master_project_title, parent_project_id, parent_project_title, timeline_period)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          ON CONFLICT (id) DO UPDATE SET
            title = EXCLUDED.title, description = EXCLUDED.description,
            current_start_date = EXCLUDED.current_start_date, current_due_date = EXCLUDED.current_due_date,
-           is_deleted = EXCLUDED.is_deleted, deleted_at = EXCLUDED.deleted_at, deleted_by_user_id = EXCLUDED.deleted_by_user_id`,
+           is_deleted = EXCLUDED.is_deleted, deleted_at = EXCLUDED.deleted_at, deleted_by_user_id = EXCLUDED.deleted_by_user_id,
+           customer_id = EXCLUDED.customer_id, customer_name = EXCLUDED.customer_name,
+           master_project_id = EXCLUDED.master_project_id, master_project_title = EXCLUDED.master_project_title,
+           parent_project_id = EXCLUDED.parent_project_id, parent_project_title = EXCLUDED.parent_project_title,
+           timeline_period = EXCLUDED.timeline_period`,
         [
           p.id, p.tenant_id, p.title, p.description, p.initial_start_date,
           p.initial_due_date, p.current_start_date, p.current_due_date,
           p.created_by_user_id, p.created_at,
-          p.is_deleted === true, p.deleted_at || null, p.deleted_by_user_id || null
+          p.is_deleted === true, p.deleted_at || null, p.deleted_by_user_id || null,
+          p.customer_id || null, p.customer_name || null,
+          p.master_project_id || null, p.master_project_title || null,
+          p.parent_project_id || null, p.parent_project_title || null,
+          p.timeline_period || null
         ]
       );
     }

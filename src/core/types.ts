@@ -95,6 +95,45 @@ export interface CustomReportLayout {
   created_at: string;
 }
 
+// 1.B. Müşteri (Customer / Client)
+export interface Customer {
+  id: UUID;
+  tenant_id: UUID;
+  name: string;
+  code?: string;
+  description?: string;
+  contact_person?: string;
+  contact_email?: string;
+  is_active?: boolean;
+  created_by_user_id?: UUID;
+  created_at: string;
+}
+
+export interface CustomerStatsDTO extends Customer {
+  total_projects: number;
+  active_projects: number;
+  completed_projects: number;
+  total_tasks: number;
+  completed_tasks: number;
+  delayed_tasks: number;
+  avg_progress: number;
+  success_rate: number;
+}
+
+// 1.C. Ana Proje / Çatı Program (Master Project / Program)
+export interface MasterProject {
+  id: UUID;
+  tenant_id: UUID;
+  title: string;
+  year: number;
+  description?: string;
+  start_date?: string;
+  due_date?: string;
+  is_active?: boolean;
+  created_by_user_id?: UUID;
+  created_at: string;
+}
+
 // 2. Proje ve Yetki
 export interface Project {
   id: UUID;
@@ -110,6 +149,15 @@ export interface Project {
   is_deleted?: boolean;
   deleted_at?: string;
   deleted_by_user_id?: UUID;
+  customer_id?: UUID;
+  customer_name?: string;
+  master_project_id?: UUID;
+  master_project_title?: string;
+  parent_project_id?: UUID; // Doluysa bu bir Alt Projedir ve belirtilen Ana Projeye bağlıdır
+  parent_project_title?: string;
+  is_main_project?: boolean;
+  sub_projects_count?: number;
+  timeline_period?: string; // örn: "EKİM/KASIM", "ARALIK", "ŞUBAT", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ/AĞUSTOS", "EYLÜL"
 }
 
 export interface ProjectPlanChange {

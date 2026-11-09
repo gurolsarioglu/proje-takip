@@ -829,6 +829,7 @@ export class EmailAndAutomationService {
       style?: 'primary' | 'success' | 'warning' | 'secondary';
     }>;
     quickProgressPillUrlPattern?: string;
+    showPhase2Extras?: boolean;
     baseUrl: string;
   }): string {
     const badgeColors = {
@@ -842,12 +843,13 @@ export class EmailAndAutomationService {
 
     const factsHtml = options.facts.map(f => `
       <tr>
-        <td style="padding: 6px 0; color: #64748b; font-size: 13px; font-weight: 600; width: 145px; vertical-align: top;">${f.label}</td>
-        <td style="padding: 6px 0; color: #0f172a; font-size: 13px; font-weight: 700; vertical-align: top;">${f.value}</td>
+        <td style="padding: 7px 0; color: #64748b; font-size: 13px; font-weight: 600; width: 160px; vertical-align: top;">${f.label}</td>
+        <td style="padding: 7px 0; color: #0f172a; font-size: 13px; font-weight: 700; vertical-align: top; line-height: 1.45;">${f.value}</td>
       </tr>
     `).join('');
 
-    const progressHtml = options.progress !== undefined ? `
+    // 2. Faz Ekstra Alanlar (İlerleme çubuğu, hızlı butonlar, takvim kutusu - Kullanıcı isteğiyle sadeleştirme gereği varsayılan olarak kapalıdır)
+    const progressHtml = (options.showPhase2Extras && options.progress !== undefined) ? `
       <div style="margin: 14px 0 10px 0; padding: 12px 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; font-weight: 700;">
           <span style="color: #475569;">İlerleme Oranı</span>
@@ -859,7 +861,7 @@ export class EmailAndAutomationService {
       </div>
     ` : '';
 
-    const quickChipsHtml = options.quickProgressPillUrlPattern ? `
+    const quickChipsHtml = (options.showPhase2Extras && options.quickProgressPillUrlPattern) ? `
       <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1;">
         <div style="font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 8px;">
           ⚡ Hızlı İlerleme Bildirimi (%40 / %50 / %60) — E-postadan Tek Tıkla Bildir:
@@ -896,7 +898,7 @@ export class EmailAndAutomationService {
       </div>
     ` : '';
 
-    const calendarHtml = options.calendarBox ? `
+    const calendarHtml = (options.showPhase2Extras && options.calendarBox) ? `
       <div style="margin: 16px 0; padding: 14px 16px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px;">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
           <span style="font-size: 12px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.3px;">
@@ -926,13 +928,13 @@ export class EmailAndAutomationService {
     const buttonsHtml = (options.actionButtons && options.actionButtons.length > 0) ? `
       <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         ${options.actionButtons.map(b => {
-      let bg = '#2563eb';
+      let bg = '#005973';
       let color = '#ffffff';
-      let border = '#2563eb';
+      let border = '#005973';
       if (b.style === 'success') { bg = '#059669'; color = '#ffffff'; border = '#059669'; }
       else if (b.style === 'warning') { bg = '#d97706'; color = '#ffffff'; border = '#d97706'; }
       else if (b.style === 'secondary') { bg = '#ffffff'; color = '#1e293b'; border = '#cbd5e1'; }
-      return `<a href="${b.url}" style="display: inline-block; padding: 10px 18px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">${b.title}</a>`;
+      return `<a href="${b.url}" style="display: inline-block; padding: 10px 20px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">${b.title}</a>`;
     }).join('')}
       </div>
     ` : '';
@@ -1006,6 +1008,36 @@ export class EmailAndAutomationService {
       if (admin?.email) emails.add(admin.email);
     }
     return Array.from(emails);
+  }
+
+  /**
+   * Yardımcı: Görevin atayan yetkili adını, oluşturulma zamanını ve açıklama metnini hazırlar
+   */
+  public getTaskAssignerAndCreatedInfo(tenant_id: UUID, task: any, project?: any | null, fallbackAssigner = 'Proje Yönetimi') {
+    let assignerName = fallbackAssigner;
+    if (task.assigned_by_user_id) {
+      const u = this.db.getUserById(tenant_id, task.assigned_by_user_id);
+      if (u) assignerName = u.name;
+    } else if (project?.created_by_user_id) {
+      const u = this.db.getUserById(tenant_id, project.created_by_user_id);
+      if (u) assignerName = u.name;
+    } else if (project) {
+      const members = this.db.getProjectMembers(tenant_id, project.id);
+      const pm = members.find((m: any) => m.role === 'PROJECT_MANAGER');
+      if (pm) {
+        const u = this.db.getUserById(tenant_id, pm.user_id);
+        if (u) assignerName = u.name;
+      }
+    }
+
+    const assignedDate = task.created_at ? new Date(task.created_at) : null;
+    const assignedTimeStr = assignedDate
+      ? `${assignedDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${assignedDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`
+      : '-';
+
+    const descriptionStr = (task.description && task.description.trim()) ? task.description.trim() : 'Açıklama belirtilmemiş.';
+
+    return { assignerName, assignedTimeStr, descriptionStr };
   }
 
   /**
@@ -1171,41 +1203,31 @@ export class EmailAndAutomationService {
       baseUrl
     });
 
+    const { assignerName, assignedTimeStr, descriptionStr } = this.getTaskAssignerAndCreatedInfo(tenant_id, task, project);
+    const succs = this.db.getSuccessors(tenant_id, task.id);
+
     const htmlBody = this.renderAdaptiveCardHtmlFrame({
       categoryTag: `📁 ${project?.title || 'FG Group Projesi'} • SIRA SİZDE`,
       badgeText: '🟢 Başlamaya Hazır (READY)',
       badgeType: 'ready',
       projectTitle: project?.title || 'FG Group Projesi',
       taskTitle: task.title,
-      subtitleText: task.description || 'Öncül görevler tamamlandı. Görevinize hemen başlayabilir, %40/%50/%60 ilerleme bildirebilir veya tamamlayabilirsiniz.',
+      subtitleText: `Merhaba <strong>${assignee.name}</strong>, bu görevin öncülleri tamamlanmış olup iş sırası size gelmiştir. Göreve panel üzerinden başlayabilir ve ilerlemeyi güncelleyebilirsiniz.`,
       facts: [
+        { label: 'Proje:', value: project?.title || 'FG Group Projesi' },
         { label: 'Durum:', value: `🟢 HAZIR (${task.work_status})` },
         { label: 'Sorumlu:', value: `${assignee.name} (${assignee.department || 'Ekip'})` },
         { label: 'Hedef Teslim:', value: dueStr },
-        ...(predFacts.map(pf => ({ label: pf.title, value: pf.value })))
+        { label: 'Bekleyen Ardıl İş:', value: succs.length > 0 ? `${succs.length} görev bu işin bitmesini bekliyor` : 'Yok (Son adım)' },
+        { label: 'Görev Açıklaması:', value: descriptionStr },
+        { label: 'Görevi Atayan:', value: assignerName },
+        { label: 'Atanma Zamanı:', value: assignedTimeStr }
       ],
-      progress: task.progress || 0,
-      calendarBox: {
-        startDateStr: task.current_start_date ? task.current_start_date.slice(0, 10) : '-',
-        dueDateStr: dueStr,
-        ...calLinks
-      },
-      quickProgressPillUrlPattern: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`,
       actionButtons: [
         {
-          title: '▶️ Görevi Başlat (%25)',
-          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=START_TASK`,
-          style: 'primary'
-        },
-        {
-          title: '✅ Tamamlandı İşaretle (%100)',
-          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=COMPLETE_TASK`,
-          style: 'success'
-        },
-        {
-          title: '🔗 Görev Detayını Aç & Yönet ➔',
+          title: '📋 Göreve Git (Sistemi Aç) ➔',
           url: `${baseUrl}/?task_id=${task.id}`,
-          style: 'secondary'
+          style: 'primary'
         }
       ],
       baseUrl
@@ -1219,11 +1241,7 @@ export class EmailAndAutomationService {
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
-      linked_project_id: task.project_id,
-      icalEvent: {
-        filename: `gorev_${task.id.slice(0, 8)}.ics`,
-        content: icsContent
-      }
+      linked_project_id: task.project_id
     });
   }
 
@@ -1399,49 +1417,30 @@ export class EmailAndAutomationService {
       baseUrl
     });
 
+    const { assignerName, assignedTimeStr, descriptionStr } = this.getTaskAssignerAndCreatedInfo(tenant_id, task, project, assigned_by_name);
+    const succs = this.db.getSuccessors(tenant_id, task.id);
+
     const htmlBody = this.renderAdaptiveCardHtmlFrame({
       categoryTag: `📌 YENİ GÖREV ATAMA BİLDİRİMİ • ${project?.title || 'FG GROUP'}`,
       badgeText: isBlocked ? '⏳ Öncül Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)',
       badgeType: isBlocked ? 'blocked' : 'ready',
       projectTitle: project?.title || 'FG Group Projesi',
       taskTitle: task.title,
-      subtitleText: `Merhaba <strong>${assignee.name}</strong>, <strong>${assigned_by_name}</strong> tarafından <strong>${project?.title || 'Proje'}</strong> kapsamında bu görev size atandı.`,
+      subtitleText: `Merhaba <strong>${assignee.name}</strong>, <strong>${assignerName}</strong> tarafından <strong>${project?.title || 'Proje'}</strong> kapsamında bu görev size atandı.`,
       facts: [
         { label: 'Proje:', value: project?.title || 'FG Group' },
-        { label: 'Atayan Yetkili:', value: assigned_by_name },
         { label: 'Sorumlu:', value: `${assignee.name} (${assignee.department || 'Ekip'})` },
         { label: 'Planlanan Takvim:', value: `${startStr} ➔ ${dueStr}` },
         { label: 'Başlangıç Durumu:', value: isBlocked ? '⏳ Öncül Görev Bekliyor (BLOCKED)' : '🟢 Başlamaya Hazır (READY)' },
+        { label: 'Bekleyen Ardıl İş:', value: succs.length > 0 ? `${succs.length} görev bu işin bitmesini bekliyor` : 'Yok (Son adım)' },
+        { label: 'Görev Açıklaması:', value: descriptionStr },
+        { label: 'Görevi Atayan:', value: assignerName },
+        { label: 'Atanma Zamanı:', value: assignedTimeStr },
         ...(predTitles.length > 0 ? [{ label: 'Öncül Görevler:', value: predTitles.join(', ') }] : [])
       ],
-      progress: task.progress || 0,
-      calendarBox: {
-        startDateStr: startStr,
-        dueDateStr: dueStr,
-        ...calLinks
-      },
-      quickProgressPillUrlPattern: !isBlocked
-        ? `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`
-        : undefined,
-      actionButtons: !isBlocked ? [
+      actionButtons: [
         {
-          title: '▶️ Görevi Başlat (%25)',
-          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=START_TASK`,
-          style: 'primary'
-        },
-        {
-          title: '✅ Tamamlandı İşaretle (%100)',
-          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=COMPLETE_TASK`,
-          style: 'success'
-        },
-        {
-          title: '🔗 Görev Detayını Aç & Yönet ➔',
-          url: `${baseUrl}/?task_id=${task.id}`,
-          style: 'secondary'
-        }
-      ] : [
-        {
-          title: '🔗 Görev Detayını Aç & Yönet ➔',
+          title: '📋 Göreve Git (Sistemi Aç) ➔',
           url: `${baseUrl}/?task_id=${task.id}`,
           style: 'primary'
         }
@@ -1457,11 +1456,7 @@ export class EmailAndAutomationService {
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
-      linked_project_id: task.project_id,
-      icalEvent: {
-        filename: `gorev_${task.id.slice(0, 8)}.ics`,
-        content: icsContent
-      }
+      linked_project_id: task.project_id
     });
   }
 
@@ -1851,6 +1846,7 @@ export class EmailAndAutomationService {
     const succs = this.db.getSuccessors(tenant_id, task.id);
     const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
     const dueStr = task.current_due_date ? task.current_due_date.slice(0, 10) : '-';
+    const { assignerName, assignedTimeStr, descriptionStr } = this.getTaskAssignerAndCreatedInfo(tenant_id, task, project);
 
     const adaptiveCard = {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
@@ -1878,7 +1874,10 @@ export class EmailAndAutomationService {
             { title: 'Sorumlu:', value: assignee.name },
             { title: 'Aşılan Termin:', value: dueStr },
             { title: 'Mevcut İlerleme:', value: `%${task.progress || 0}` },
-            { title: 'Bekleyen Ardıl İş:', value: `${succs.length} görev tamamlanmasını bekliyor` }
+            { title: 'Bekleyen Ardıl İş:', value: succs.length > 0 ? `${succs.length} görev tamamlanmasını bekliyor` : 'Yok (Son adım)' },
+            { title: 'Görev Açıklaması:', value: descriptionStr },
+            { title: 'Görevi Atayan:', value: assignerName },
+            { title: 'Atanma Zamanı:', value: assignedTimeStr }
           ]
         },
         this.buildProgressChoiceSet(task.progress || 50),
@@ -1935,50 +1934,28 @@ export class EmailAndAutomationService {
       ]
     };
 
-    const icsContent = this.generateTaskIcsContent({
-      task,
-      projectTitle: project?.title,
-      assigneeName: assignee.name,
-      assigneeEmail: assignee.email,
-      baseUrl
-    });
-    const calLinks = this.buildCalendarLinks({
-      task,
-      projectTitle: project?.title,
-      baseUrl
-    });
-
     const htmlBody = this.renderAdaptiveCardHtmlFrame({
       categoryTag: '⚠️ GÖREV ZAMANINDA YAPILMADI • TERMİN AŞILDI (KAB07)',
       badgeText: '🚨 Termin Aşıldı (Gecikme)',
       badgeType: 'delay',
       projectTitle: project?.title || 'FG Group',
       taskTitle: task.title,
-      subtitleText: `Merhaba <strong>${assignee.name}</strong>, bu görevin teslim tarihi (<strong>${dueStr}</strong>) aşılmıştır ve <strong>${succs.length} ardıl görev</strong> sizin görevinizi beklemektedir. Lütfen e-postadan veya panelden ilerleme yüzdesini (%40, %50, %60) ve zorunlu gecikme açıklamanızı giriniz.`,
+      subtitleText: `Merhaba <strong>${assignee.name}</strong>, bu görevin teslim tarihi (<strong>${dueStr}</strong>) aşılmıştır ve <strong>${succs.length} ardıl görev</strong> sizin görevinizi beklemektedir. Lütfen sistem üzerinden görevi inceleyip mazeret açıklamanızı ve güncel ilerleme durumunuzu bildiriniz.`,
       facts: [
         { label: 'Proje:', value: project?.title || 'FG Group' },
         { label: 'Sorumlu:', value: assignee.name },
         { label: 'Aşılan Termin:', value: dueStr },
         { label: 'Mevcut İlerleme:', value: `%${task.progress || 0}` },
-        { label: 'Bekleyen Ardıl İş:', value: `${succs.length} görev tamamlanmasını bekliyor` }
+        { label: 'Bekleyen Ardıl İş:', value: succs.length > 0 ? `${succs.length} görev tamamlanmasını bekliyor` : 'Yok (Son adım)' },
+        { label: 'Görev Açıklaması:', value: descriptionStr },
+        { label: 'Görevi Atayan:', value: assignerName },
+        { label: 'Atanma Zamanı:', value: assignedTimeStr }
       ],
-      progress: task.progress || 0,
-      calendarBox: {
-        startDateStr: task.current_start_date ? task.current_start_date.slice(0, 10) : '-',
-        dueDateStr: dueStr,
-        ...calLinks
-      },
-      quickProgressPillUrlPattern: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=UPDATE_PROGRESS&progress=`,
       actionButtons: [
         {
-          title: '✅ Görevi Şimdi Tamamla (%100)',
-          url: `${baseUrl}/api/quick-action?tenant_id=${tenant_id}&task_id=${task.id}&user_id=${assignee.id}&action=COMPLETE_TASK`,
-          style: 'success'
-        },
-        {
-          title: '🔗 Görev Detayını Aç & Mazeret Yaz ➔',
+          title: '📋 Göreve Git & Mazeret / İlerleme Bildir ➔',
           url: `${baseUrl}/?task_id=${task.id}`,
-          style: 'warning'
+          style: 'primary'
         }
       ],
       baseUrl
@@ -1992,11 +1969,7 @@ export class EmailAndAutomationService {
       htmlBody,
       adaptiveCardJson: adaptiveCard,
       linked_task_id: task.id,
-      linked_project_id: task.project_id,
-      icalEvent: {
-        filename: `gorev_${task.id.slice(0, 8)}.ics`,
-        content: icsContent
-      }
+      linked_project_id: task.project_id
     });
 
     // Aynı anda projedeki yetkili kişilere de "Bu kişi verilen görevi zamanında yapmadı" uyarısı gönder!
@@ -2035,6 +2008,7 @@ export class EmailAndAutomationService {
     if (managerEmails.length === 0) return null;
 
     const succs = this.db.getSuccessors(tenant_id, task.id);
+    const { assignerName, assignedTimeStr, descriptionStr } = this.getTaskAssignerAndCreatedInfo(tenant_id, task, project, 'Proje Yöneticisi');
     const config = this.getSmtpConfig(tenant_id);
     const baseUrl = config.public_base_url || 'http://10.1.0.45:3000';
 
@@ -2065,7 +2039,10 @@ export class EmailAndAutomationService {
             { title: 'Sorumlu Personel:', value: `${assigneeName} (${assignee?.email || '-'})` },
             { title: 'Aşılan Teslim Tarihi:', value: dueStr },
             { title: 'Mevcut Durum / İlerleme:', value: `${task.work_status} (%${task.progress || 0})` },
-            { title: 'Etkilenen Ardıl Görev:', value: `${succs.length} görev bekliyor` }
+            { title: 'Etkilenen Ardıl Görev:', value: `${succs.length} görev bekliyor` },
+            { title: 'Görev Açıklaması:', value: descriptionStr },
+            { title: 'Görevi Atayan:', value: assignerName },
+            { title: 'Atanma Zamanı:', value: assignedTimeStr }
           ]
         }
       ],
@@ -2091,7 +2068,10 @@ export class EmailAndAutomationService {
         { label: 'Sorumlu Personel:', value: `${assigneeName} (${assignee?.email || '-'})` },
         { label: 'Aşılan Teslim Tarihi:', value: dueStr },
         { label: 'Mevcut Durum / İlerleme:', value: `${task.work_status} (%${task.progress || 0})` },
-        { label: 'Etkilenen Ardıl Görev:', value: `${succs.length} görev bekliyor` }
+        { label: 'Etkilenen Ardıl Görev:', value: `${succs.length} görev bekliyor` },
+        { label: 'Görev Açıklaması:', value: descriptionStr },
+        { label: 'Görevi Atayan:', value: assignerName },
+        { label: 'Atanma Zamanı:', value: assignedTimeStr }
       ],
       progress: task.progress || 0,
       actionButtons: [

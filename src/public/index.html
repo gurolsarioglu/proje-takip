@@ -121,6 +121,12 @@
           <span class="nav-badge neutral" id="projectsCount">0</span>
         </button>
 
+        <button class="nav-item" data-nav="view-customers">
+          <span class="nav-icon">🏢</span>
+          <span class="nav-text">Müşteriler</span>
+          <span class="nav-badge neutral" id="customersCount">4</span>
+        </button>
+
         <button class="nav-item" data-nav="view-timeline">
           <span class="nav-icon">📅</span>
           <span class="nav-text" data-i18n="nav_timeline">Zaman Çizelgesi (Gantt)</span>
@@ -257,10 +263,15 @@
                     bağımlılıklar</small></span>
               </button>
               <div class="dropdown-divider"></div>
-              <button type="button" class="dropdown-item" id="printReportBtn">
+              <button type="button" class="dropdown-item btn-trigger-print" id="printReportBtn">
                 <span class="dropdown-icon">🖨️</span>
-                <span class="dropdown-text"><strong>Sayfayı Yazdır / PDF</strong><small>A4 formatında temiz
-                    çıktı</small></span>
+                <span class="dropdown-text"><strong>Yazdır (Print)</strong><small>Sayfayı veya çizelgeyi
+                    yazdır</small></span>
+              </button>
+              <button type="button" class="dropdown-item btn-trigger-pdf-a3" id="exportPdfA3Btn">
+                <span class="dropdown-icon">📄</span>
+                <span class="dropdown-text"><strong>A3 Yatay PDF Kaydet</strong><small>Otomatik sığdırmalı A3
+                    çıktısı</small></span>
               </button>
             </div>
           </div>
@@ -292,6 +303,24 @@
           </button>
         </div>
       </header>
+
+      <!-- YAZDIRMA & A3 PDF ÜST BİLGİ BANNERI (Yalnızca Yazdırmada Görünür) -->
+      <div class="print-banner-header" id="printBannerHeader">
+        <div class="print-banner-left">
+          <div class="print-banner-logo">
+            <span class="print-company-name">FG Group</span>
+            <span class="print-company-sub">| Proje ve Görev Yönetim Sistemi</span>
+          </div>
+          <div class="print-banner-title" id="printBannerProjectTitle">
+            Zaman Çizelgesi (Gantt) Portföy Planı
+          </div>
+        </div>
+        <div class="print-banner-right">
+          <div class="print-banner-badge">A3 Yatay (Landscape) • Otomatik Sığdırma</div>
+          <div class="print-banner-meta-row"><strong>Rapor Tarihi:</strong> <span id="printBannerDate">-</span></div>
+          <div class="print-banner-meta-row" id="printBannerMeta">-</div>
+        </div>
+      </div>
 
       <!-- ================= GÖRÜNÜM 1: GÖREVLERİM & İŞ PAKETLERİ ================= -->
       <section id="view-my-tasks" class="view-section active">
@@ -350,7 +379,22 @@
             <p class="intro-desc" data-i18n="projects_intro">Şirketinizdeki aktif projeler, tamamlanma yüzdeleri ve
               takvimleri.</p>
           </div>
-          <div class="projects-tabs-bar" style="display:flex; align-items:center; gap:8px;">
+          <div class="projects-tabs-bar" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <!-- Görünüm Seçici (Kare/Kartlar, Liste, Gantt) -->
+            <div class="project-view-mode-group" id="projectViewModeGroup">
+              <span class="view-mode-label"
+                style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin-right:4px;">Görünüm:</span>
+              <button type="button" class="view-mode-btn active" data-mode="grid" title="Kare / Kart Görünümü">
+                🗂️ <span class="mode-text">Kartlar</span>
+              </button>
+              <button type="button" class="view-mode-btn" data-mode="table" title="Tablo / Liste Görünümü">
+                📋 <span class="mode-text">Liste</span>
+              </button>
+              <button type="button" class="view-mode-btn" data-mode="gantt" title="Zaman Çizelgesi (Gantt) Görünümü">
+                📊 <span class="mode-text">Zaman Çizelgesi (Gantt)</span>
+              </button>
+            </div>
+
             <div class="filter-tabs" id="projectStatusTabs">
               <button type="button" class="filter-tab active" data-tab="active">📁 Aktif Projeler (<span
                   id="activeProjectsCount">0</span>)</button>
@@ -358,11 +402,220 @@
                 style="display:none; color:#dc2626;">🗑️ Silinen Projeler (<span
                   id="deletedProjectsCount">0</span>)</button>
             </div>
+
+            <!-- Çatı / Ana Proje Seçici -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="projectMasterFilter"
+                style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin:0;">🏛️ Çatı:</label>
+              <select id="projectMasterFilter" class="styled-select sm-select"
+                style="min-width:180px; font-weight:600;">
+                <option value="all">Tüm Çatı Yılları</option>
+              </select>
+              <button type="button" id="btnOpenMasterProjectModal" class="action-btn text-btn sm-btn"
+                style="padding:3px 8px; font-size:0.72rem; color:var(--primary-color); font-weight:700; border:1px solid var(--border-color); border-radius:6px; background:var(--surface-hover);"
+                title="Yeni Çatı Yılı / Program Tanımla">+ Çatı Ekle</button>
+            </div>
+
+            <!-- Müşteri Filtresi -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="projectCustomerFilter"
+                style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin:0;">🏢 Müşteri:</label>
+              <select id="projectCustomerFilter" class="styled-select sm-select"
+                style="min-width:150px; font-weight:600;">
+                <option value="all">Tüm Müşteriler</option>
+              </select>
+            </div>
+
+            <!-- Hiyerarşi Kırılım Filtresi (Tümü / Ana Projeler / Alt Projeler) -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="projectHierarchyFilter"
+                style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin:0;">Kırılım:</label>
+              <select id="projectHierarchyFilter" class="styled-select sm-select"
+                style="min-width:140px; font-weight:600;">
+                <option value="all">Tüm Projeler</option>
+                <option value="main">📁 Yıllık Ana Projeler</option>
+                <option value="sub">📦 Dönem Alt Projeleri</option>
+              </select>
+            </div>
+
+            <!-- Yazdır & PDF Buton Grubu -->
+            <div class="print-actions-group" style="display:flex; align-items:center; gap:6px; margin-left:auto;">
+              <button type="button" class="action-btn outline-btn sm-btn btn-trigger-print" title="Sayfayı Yazdır">
+                🖨️ Yazdır
+              </button>
+              <button type="button" class="action-btn primary-btn sm-btn btn-trigger-pdf-a3"
+                title="A3 Formatında Yatay PDF Kaydet" style="background:#005973; border-color:#005973; color:#ffffff;">
+                📄 A3 PDF Kaydet
+              </button>
+            </div>
           </div>
         </div>
 
+        <!-- 1. KARE KARTLAR GÖRÜNÜMÜ (GRID) -->
         <div class="projects-grid" id="projectsCardsGrid">
           <!-- Proje kartları gelecek -->
+        </div>
+
+        <!-- 2. LİSTE / TABLO GÖRÜNÜMÜ -->
+        <div class="projects-table-view card clean-card" id="projectsTableView"
+          style="display:none; padding:0; overflow:hidden;">
+          <div class="projects-table-wrapper" style="overflow-x:auto;">
+            <table class="styled-table projects-table" style="width:100%; border-collapse:collapse; min-width:960px;">
+              <thead>
+                <tr class="projects-table-header"
+                  style="background:#005973; color:#ffffff; font-size:0.78rem; font-weight:700;">
+                  <th style="padding:12px; width:45px; text-align:center;">#</th>
+                  <th style="padding:12px; text-align:left;">Proje Adı & Tanımı</th>
+                  <th style="padding:12px; width:170px; text-align:left;">Tamamlanma</th>
+                  <th style="padding:12px; width:210px; text-align:center;">Tarih Aralığı</th>
+                  <th style="padding:12px; width:150px; text-align:left;">Proje Yöneticisi</th>
+                  <th style="padding:12px; width:100px; text-align:center;">Görevler</th>
+                  <th style="padding:12px; width:180px; text-align:center;">İşlemler</th>
+                </tr>
+              </thead>
+              <tbody id="projectsTableBody">
+                <!-- Proje satırları gelecek -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3. ZAMAN ÇİZELGESİ (PROJELER GANTT) GÖRÜNÜMÜ -->
+        <div class="projects-gantt-view card clean-card op-gantt-card" id="projectsGanttView"
+          style="display:none; padding:0; overflow:hidden;">
+          <div class="gantt-toolbar"
+            style="padding:10px 16px; border-bottom:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div class="gantt-toolbar-left" style="display:flex; align-items:center; gap:10px;">
+              <span class="timeline-meta" style="font-weight:700; color:#005973; font-size:0.95rem;">📁 Şirket Projeleri
+                Portföy Çizelgesi</span>
+              <span class="nav-badge" id="projGanttCountBadge"
+                style="background:#e0f2fe; color:#0369a1; font-weight:700;">0 Proje</span>
+            </div>
+            <div class="gantt-toolbar-right" style="display:flex; align-items:center; gap:8px;">
+              <div class="zoom-btn-group" id="projGanttZoomGroup">
+                <button type="button" class="zoom-btn" data-zoom="day">Günlük</button>
+                <button type="button" class="zoom-btn" data-zoom="week">Haftalık</button>
+                <button type="button" class="zoom-btn active" data-zoom="month">Aylık</button>
+                <button type="button" class="zoom-btn" data-zoom="year">Yıllık</button>
+              </div>
+              <button type="button" class="action-btn outline-btn sm-btn" id="projGanttTodayBtn">📍 Bugün</button>
+              <button type="button" class="action-btn outline-btn sm-btn" id="projGanttToggleTableBtn">Tabloyu
+                Gizle</button>
+              <button type="button" class="action-btn outline-btn sm-btn btn-trigger-print" id="projGanttPrintBtn"
+                title="Projeler Çizelgesini Yazdır">🖨️ Yazdır</button>
+              <button type="button" class="action-btn primary-btn sm-btn btn-trigger-pdf-a3" id="projGanttPdfBtn"
+                title="A3 Formatında Yatay PDF Kaydet"
+                style="background:#005973; border-color:#005973; color:#ffffff;">📄 A3 PDF Kaydet</button>
+            </div>
+          </div>
+
+          <div class="op-gantt-wrapper" id="projGanttWrapper">
+            <!-- Sol Proje Tablosu -->
+            <div class="op-gantt-table-pane" id="projGanttTablePane" style="width:640px;">
+              <div class="op-gantt-table-header" style="background:#005973; color:#ffffff; font-weight:700;">
+                <div class="g-col" style="width:36px; text-align:center;">#</div>
+                <div class="g-col" style="flex:1; min-width:140px;">Proje Adı</div>
+                <div class="g-col g-col-dates" style="width:210px; text-align:center;">📅 Dönem (Tarih Aralığı)</div>
+                <div class="g-col" style="width:85px; text-align:center;">İlerleme</div>
+                <div class="g-col" style="width:120px; text-align:left;">Yönetici</div>
+              </div>
+              <div class="op-gantt-table-body" id="projGanttTableBody">
+                <!-- Proje satırları -->
+              </div>
+            </div>
+
+            <!-- Ayırıcı Splitter -->
+            <div class="op-gantt-splitter" id="projGanttSplitter" title="Sürükleyerek genişliği ayarlayın">
+              <div class="splitter-grip"></div>
+            </div>
+
+            <!-- Sağ Zaman Çizelgesi -->
+            <div class="op-gantt-chart-pane" id="projGanttChartPane">
+              <div class="timeline-chart-container" id="projGanttChart">
+                <!-- Takvim Cetveli ve Proje Zaman Çubukları -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= GÖRÜNÜM: MÜŞTERİLER & BAŞARI ANALİZİ ================= -->
+      <section id="view-customers" class="view-section">
+        <div class="section-intro"
+          style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+          <div>
+            <h2 class="view-title"
+              style="margin:0 0 4px 0; font-size:1.35rem; font-weight:800; color:var(--text-primary);">🏢 Müşteri
+              Portföyü & Başarı Analizi</h2>
+            <p class="intro-desc" style="margin:0; font-size:0.85rem; color:var(--text-secondary);">FG Group müşteri
+              bazlı proje dağılımı, tamamlanma başarı oranları ve teslim performansı.</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button type="button" class="action-btn primary-btn" id="openNewCustomerModalBtn">
+              + Yeni Müşteri Ekle
+            </button>
+          </div>
+        </div>
+
+        <!-- Müşteri KPI Metrik Kartları -->
+        <div class="customer-kpi-grid"
+          style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:18px;">
+          <div class="kpi-card"
+            style="background:var(--surface-primary); border:1px solid var(--border-color); border-radius:12px; padding:14px 16px;">
+            <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
+              Toplam Müşteri</div>
+            <div id="kpiTotalCustomers"
+              style="font-size:1.8rem; font-weight:800; color:var(--text-primary); margin-top:4px;">4</div>
+            <div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:2px;">Kayıtlı aktif müşteri portföyü
+            </div>
+          </div>
+          <div class="kpi-card"
+            style="background:var(--surface-primary); border:1px solid var(--border-color); border-radius:12px; padding:14px 16px;">
+            <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
+              Müşteri Projeleri</div>
+            <div id="kpiTotalCustomerProjects"
+              style="font-size:1.8rem; font-weight:800; color:#0284c7; margin-top:4px;">0</div>
+            <div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:2px;">Yürütülen toplam proje</div>
+          </div>
+          <div class="kpi-card"
+            style="background:var(--surface-primary); border:1px solid var(--border-color); border-radius:12px; padding:14px 16px;">
+            <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
+              Ortalama Başarı Oranı</div>
+            <div id="kpiAvgSuccessRate" style="font-size:1.8rem; font-weight:800; color:#10b981; margin-top:4px;">%0
+            </div>
+            <div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:2px;">Zamanında teslim ve kalite</div>
+          </div>
+          <div class="kpi-card"
+            style="background:var(--surface-primary); border:1px solid var(--border-color); border-radius:12px; padding:14px 16px;">
+            <div style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">
+              Lider Müşteri (En Çok Proje)</div>
+            <div id="kpiTopCustomer"
+              style="font-size:1.15rem; font-weight:800; color:var(--text-primary); margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              -</div>
+            <div id="kpiTopCustomerDesc" style="font-size:0.75rem; color:var(--text-tertiary); margin-top:2px;">Proje
+              hacmi lideri</div>
+          </div>
+        </div>
+
+        <!-- Müşteri Arama ve Liste Alanı -->
+        <div class="card clean-card" style="padding:16px;">
+          <div
+            style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
+            <div style="position:relative; flex:1; min-width:240px; max-width:400px;">
+              <span
+                style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-tertiary);">🔍</span>
+              <input type="text" id="customerSearchInput" class="styled-input"
+                placeholder="Müşteri adı veya koda göre ara..." style="padding-left:36px; width:100%;">
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="action-btn outline-btn sm-btn" id="refreshCustomersBtn">🔄 Yenile</button>
+            </div>
+          </div>
+
+          <div id="customersGrid" class="customers-grid"
+            style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px;">
+            <!-- Müşteri kartları JS ile render edilir -->
+          </div>
         </div>
       </section>
 
@@ -400,6 +653,15 @@
               <button type="button" class="gantt-tool-btn" id="ganttToggleTableBtn" title="Sol Tabloyu Göster / Gizle">
                 <span class="btn-icon">◫</span> <span id="ganttToggleTableLabel" data-i18n="gantt_toggle_table">Tabloyu
                   Gizle</span>
+              </button>
+              <button type="button" class="gantt-tool-btn btn-trigger-print" id="ganttPrintBtn"
+                title="Zaman Çizelgesini Yazdır">
+                <span class="btn-icon">🖨️</span> <span>Yazdır</span>
+              </button>
+              <button type="button" class="gantt-tool-btn primary btn-trigger-pdf-a3" id="ganttPdfBtn"
+                title="A3 Formatında Yatay PDF Olarak Kaydet"
+                style="background:#005973; color:#ffffff; font-weight:700;">
+                <span class="btn-icon">📄</span> <span>A3 PDF Kaydet</span>
               </button>
               <div class="timeline-legend">
                 <span class="legend-item"><span class="legend-dot dot-blocked"></span> <span
@@ -1446,22 +1708,93 @@
         <button class="modal-close" data-close="projectModal">&times;</button>
       </div>
       <form id="projectForm" class="modal-body" style="max-height: 78vh; overflow-y: auto;">
-        <div class="form-group">
-          <label for="pTitle">Proje Adı *</label>
-          <input type="text" id="pTitle" required class="styled-input" placeholder="Örn: 2026 Mobil Uygulama">
+        <!-- Proje Tipi: Ana Proje mi, Alt Proje mi? -->
+        <div class="form-group"
+          style="background:var(--surface-hover); padding:10px 12px; border-radius:8px; border:1px solid var(--border-color);">
+          <label style="font-weight:700; margin-bottom:6px; display:block;">Proje Seviyesi / Türü:</label>
+          <div style="display:flex; gap:16px;">
+            <label
+              style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.85rem; font-weight:600;">
+              <input type="radio" name="pTypeRadio" value="main" id="pTypeMainRadio" checked>
+              📁 Ana Proje (Müşteri Yıllık Koleksiyonu)
+            </label>
+            <label
+              style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.85rem; font-weight:600;">
+              <input type="radio" name="pTypeRadio" value="sub" id="pTypeSubRadio">
+              📦 Alt Proje (Sezonluk Dönem Projesi)
+            </label>
+          </div>
         </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="pMasterProject" style="margin-bottom:0; font-weight:600;">🏛️ Çatı Yılı / Program</label>
+              <button type="button" id="pAddMasterProjectQuickBtn" class="action-btn text-btn sm-btn"
+                style="padding:0; font-size:0.75rem; color:var(--primary-color); font-weight:700;">+ Yeni Çatı
+                Ekle</button>
+            </div>
+            <select id="pMasterProject" class="styled-select" style="width:100%;">
+              <option value="">-- Çatı Proje Seçiniz --</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label for="pCustomer" style="margin-bottom:0; font-weight:600;">🏢 Müşteri</label>
+              <button type="button" id="pAddCustomerQuickBtn" class="action-btn text-btn sm-btn"
+                style="padding:0; font-size:0.75rem; color:var(--primary-color);">+ Yeni</button>
+            </div>
+            <select id="pCustomer" class="styled-select" style="width:100%;">
+              <option value="">-- Müşteri Seçiniz --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Eğer Alt Proje İse: Bağlı Olduğu Ana Proje -->
+        <div class="form-group" id="pParentProjectGroup"
+          style="display:none; background:#f0f9ff; padding:10px 12px; border-radius:8px; border:1px solid #bae6fd;">
+          <label for="pParentProject" style="font-weight:700; color:#0369a1;">📁 Bağlı Olduğu Ana Proje *</label>
+          <select id="pParentProject" class="styled-select" style="width:100%;">
+            <option value="">-- Ana Proje Seçiniz --</option>
+          </select>
+          <div style="font-size:0.72rem; color:#0284c7; margin-top:4px;">Seçilen ana projenin çatısı ve müşterisi
+            otomatik uygulanır.</div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label for="pTitle" id="pTitleLabel">Proje Adı *</label>
+            <input type="text" id="pTitle" required class="styled-input"
+              placeholder="Örn: NEWYORKER 2026 Koleksiyon Programı">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label for="pSeasonTag" style="font-weight:600;">🏷️ Sezon / Koleksiyon Etiketi</label>
+            <input type="text" id="pSeasonTag" class="styled-input" placeholder="Örn: AW26, Kapsül 1... (Opsiyonel)">
+          </div>
+        </div>
+
         <div class="form-group">
           <label for="pDesc">Açıklama</label>
           <textarea id="pDesc" class="styled-textarea" rows="2" placeholder="Projenin temel hedefleri"></textarea>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="pStart">Başlangıç Tarihi *</label>
-            <input type="date" id="pStart" required class="styled-input">
+
+        <!-- Dönem / Sezon Takvimi (Tarih Aralığı) -->
+        <div class="form-group"
+          style="background:var(--surface-hover); padding:10px 12px; border-radius:8px; border:1px solid var(--border-color);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="font-weight:700; margin-bottom:0;" id="pDateRangeLabel">📅 Dönem / Sezon Takvimi (Tarih
+              Aralığı) *</label>
+            <span id="pDateRangePreview" style="font-size:0.75rem; font-weight:700; color:var(--primary-color);"></span>
           </div>
-          <div class="form-group">
-            <label for="pDue">Hedef Bitiş Tarihi *</label>
-            <input type="date" id="pDue" required class="styled-input">
+          <div class="form-row" style="margin-bottom:0;">
+            <div class="form-group" style="flex:1; margin-bottom:0;">
+              <label for="pStart" style="font-size:0.78rem;">Başlangıç Tarihi *</label>
+              <input type="date" id="pStart" required class="styled-input">
+            </div>
+            <div class="form-group" style="flex:1; margin-bottom:0;">
+              <label for="pDue" style="font-size:0.78rem;">Hedef Bitiş Tarihi *</label>
+              <input type="date" id="pDue" required class="styled-input">
+            </div>
           </div>
         </div>
 
@@ -1881,6 +2214,18 @@
         <button class="modal-close" data-close="projectManageModal">&times;</button>
       </div>
       <div class="modal-body" style="display:flex; flex-direction:column; gap:18px; max-height:74vh; overflow-y:auto;">
+        <!-- Bölüm 0: Proje Müşterisi -->
+        <div class="pm-section-box">
+          <div class="op-section-title" style="margin-bottom:8px;">🏢 Proje Müşterisi (Marka / Portföy)</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="pmCustomerSelect" class="styled-select sm-select" style="flex:1;">
+              <option value="">-- Müşteri Atanmadı --</option>
+            </select>
+            <button type="button" id="pmSaveCustomerBtn" class="action-btn primary-btn sm-btn">Müşteriyi
+              Güncelle</button>
+          </div>
+        </div>
+
         <!-- Bölüm 1: Proje Üyeleri & Roller -->
         <div class="pm-section-box">
           <div class="op-section-title" style="margin-bottom:8px;">👥 Proje Ekibi & Yetki Rolleri</div>
@@ -2261,6 +2606,91 @@
             style="background:#dc2626; border-color:#b91c1c;">
             🚀 Seçili Projeyi Geri Yükle
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Müşteri Ekle / Düzenle Modalı -->
+  <div id="customerModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 id="customerModalTitle">🏢 Yeni Müşteri Ekle</h3>
+        <button class="modal-close" data-close="customerModal">&times;</button>
+      </div>
+      <form id="customerForm" class="modal-body">
+        <input type="hidden" id="custEditId" value="">
+        <div class="form-group">
+          <label for="custName">Müşteri / Marka Adı *</label>
+          <input type="text" id="custName" required class="styled-input"
+            placeholder="Örn: NEWYORKER, JULES, PEPE JEANS...">
+        </div>
+        <div class="form-group">
+          <label for="custCode">Kısa Kod (Opsiyonel)</label>
+          <input type="text" id="custCode" class="styled-input" placeholder="Örn: NY, JLS, PJ, BOS">
+        </div>
+        <div class="form-group">
+          <label for="custDesc">Açıklama / Notlar</label>
+          <textarea id="custDesc" class="styled-textarea" rows="2"
+            placeholder="Müşteri hakkında genel bilgiler, çalışma alanı..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="custContactPerson">İletişim Kişisi</label>
+            <input type="text" id="custContactPerson" class="styled-input" placeholder="Örn: John Doe">
+          </div>
+          <div class="form-group">
+            <label for="custContactEmail">İletişim E-postası</label>
+            <input type="email" id="custContactEmail" class="styled-input" placeholder="Örn: contact@newyorker.de">
+          </div>
+        </div>
+        <div class="modal-footer"
+          style="padding-top:14px; margin-top:10px; border-top:1px solid var(--border-color); display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="action-btn secondary-btn" data-close="customerModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 🏛️ Yeni Çatı Yılı / Program Ekleme Modalı -->
+  <div id="masterProjectModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>🏛️ Yeni Çatı Yılı / Program Tanımla</h3>
+        <button class="modal-close" data-close="masterProjectModal">&times;</button>
+      </div>
+      <form id="masterProjectForm" class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label for="mpYear">Çatı Yılı *</label>
+            <input type="number" id="mpYear" required class="styled-input" value="2027" min="2020" max="2050">
+          </div>
+          <div class="form-group" style="flex:2;">
+            <label for="mpTitle">Çatı Başlığı *</label>
+            <input type="text" id="mpTitle" required class="styled-input" value="FG COLLECTION TIMELINE 2027"
+              placeholder="Örn: FG COLLECTION TIMELINE 2027">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mpStart">Başlangıç Tarihi *</label>
+            <input type="date" id="mpStart" required class="styled-input" value="2027-01-01">
+          </div>
+          <div class="form-group">
+            <label for="mpDue">Hedef Bitiş Tarihi *</label>
+            <input type="date" id="mpDue" required class="styled-input" value="2027-12-31">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="mpDesc">Açıklama / Yıllık Hedef</label>
+          <textarea id="mpDesc" class="styled-textarea" rows="2"
+            placeholder="Yıllık koleksiyon ve müşteri portföy hedefleri..."></textarea>
+        </div>
+        <div class="modal-footer"
+          style="padding-top:14px; margin-top:10px; border-top:1px solid var(--border-color); display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="action-btn secondary-btn" data-close="masterProjectModal">İptal</button>
+          <button type="submit" class="action-btn primary-btn">Çatı Yılını Başlat</button>
         </div>
       </form>
     </div>

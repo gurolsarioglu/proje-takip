@@ -11,15 +11,13 @@ export function seedDatabase(db: Database, forceReset = false) {
   const existingTenants = db.getTenants();
   const prevSmtp = existingTenants.length > 0 ? db.getSmtpConfig(existingTenants[0].id) : undefined;
 
-  // Eğer veritabanında zaten aktif tenant ve projeler mevcutsa ve zorunlu sıfırlama istenmemişse, verileri ve SMTP şifresini koru!
+  // Eğer veritabanında zaten aktif tenant mevcutsa ve zorunlu sıfırlama istenmemişse, verileri ve SMTP şifresini koru!
   if (!forceReset && existingTenants.length > 0) {
     const tId = existingTenants[0].id;
-    const existingProjects = db.getProjects(tId);
-    if (existingProjects.length > 0) {
-      db.getSmtpConfig(tId);
-      console.log('Mevcut veritabanı kayıtları ve şifrelenmiş (AES-256-GCM) SMTP ayarları korundu.');
-      return;
-    }
+    db.ensureDefaultCustomers(tId);
+    db.ensureDefaultMasterProject(tId);
+    console.log('Mevcut veritabanı kayıtları ve şifrelenmiş (AES-256-GCM) SMTP ayarları korundu.');
+    return;
   }
 
   db.reset();

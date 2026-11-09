@@ -277,8 +277,32 @@ app.get('/api/projects', (req, res) => {
         ? db.getVisibilityRequests(auth.tenant_id, p.id).filter(r => r.status === 'PENDING').length
         : 0;
 
+      const members = db.getProjectMembers(auth.tenant_id, p.id);
+      const managerMember = members.find(m => m.role === 'PROJECT_MANAGER');
+      const managerUser = managerMember ? db.getUserById(auth.tenant_id, managerMember.user_id) : null;
+      const manager_name = managerUser ? managerUser.name : 'Atanmadı';
+
+      let customer_name = p.customer_name;
+      let customer_id = p.customer_id;
+      if (customer_id && !customer_name) {
+        const cust = db.getCustomerById(auth.tenant_id, customer_id);
+        if (cust) customer_name = cust.name;
+      }
+      if (!customer_name) {
+        const titleUpper = (p.title || '').toUpperCase();
+        const matched = db.getCustomers(auth.tenant_id).find(c => titleUpper.includes(c.name.toUpperCase()));
+        if (matched) {
+          customer_name = matched.name;
+          customer_id = matched.id;
+          p.customer_id = matched.id;
+          p.customer_name = matched.name;
+        }
+      }
+
       return {
         ...p,
+        customer_id,
+        customer_name,
         total_tasks,
         completed_tasks,
         in_progress_tasks,
@@ -286,6 +310,7 @@ app.get('/api/projects', (req, res) => {
         delayed_tasks,
         completion_rate,
         plan_changes_count: plan_changes.length,
+        manager_name,
         is_manager,
         is_editor,
         is_full_viewer,
@@ -301,15 +326,33 @@ app.get('/api/projects', (req, res) => {
 app.post('/api/projects', async (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const { title, description, initial_start_date, initial_due_date, members } = req.body;
+    const {
+      title,
+      description,
+      initial_start_date,
+      initial_due_date,
+      members,
+      customer_id,
+      customer_name,
+      master_project_id,
+      master_project_title,
+      timeline_period,
+      parent_project_id
+    } = req.body;
     const project = projectService.createProject(
       auth,
       title,
       description,
       initial_start_date,
-      initial_due_date
+      initial_due_date,
+      customer_id,
+      customer_name,
+      master_project_id,
+      master_project_title,
+      timeline_period,
+      parent_project_id
     );
-    console.log(`📁 [PROJECT-MONITOR] Yeni Proje Oluşturuldu: "${project.title}" (${project.id}) | Oluşturan: ${auth.name} (${auth.email})`);
+    console.log(`📁 [PROJECT-MONITOR] Yeni Proje Oluşturuldu: "${project.title}" (${project.id}) | Tür: ${project.parent_project_id ? `Alt Proje (Bağlı: ${project.parent_project_title || '-'})` : 'Ana Proje'} | Çatı: ${project.master_project_title || 'Yok'} | Müşteri: ${project.customer_name || 'Genel'} | Dönem: ${project.timeline_period || '-'} | Oluşturan: ${auth.name} (${auth.email})`);
 
     // Proje açılırken seçilen ekip üyelerini dahil et ve her birine otomatik Adaptive Card e-postası gönder
     if (Array.isArray(members) && members.length > 0) {
@@ -450,6 +493,90 @@ app.post('/api/projects/:id/restore', (req, res) => {
   }
 });
 
+// --- Müşteri (Customer / Client) API Endpoints ---
+app.get('/api/customers', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const stats = projectService.getCustomerStats(auth);
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/customers', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { name, code, description, contact_person, contact_email } = req.body;
+    const customer = projectService.createCustomer(auth, name, code, description, contact_person, contact_email);
+    console.log(`🏢 [CUSTOMER-MONITOR] Yeni Müşteri Eklendi: "${customer.name}" (${customer.code || '-'}) | Ekleyen: ${auth.name}`);
+    res.status(201).json(customer);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/customers/:id', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const updated = projectService.updateCustomer(auth, req.params.id, req.body);
+    console.log(`🏢 [CUSTOMER-MONITOR] Müşteri Güncellendi: "${updated.name}" (${updated.id}) | Güncelleyen: ${auth.name}`);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/projects/:id/customer', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { customer_id } = req.body;
+    const updated = projectService.updateProjectCustomer(auth, req.params.id, customer_id);
+    console.log(`🏢 [PROJECT-MONITOR] Proje Müşterisi Güncellendi: "${updated.title}" -> ${updated.customer_name || 'Yok'}`);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// --- Ana Proje / Çatı Program (Master Projects) API Endpoints ---
+app.get('/api/master-projects', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const list = projectService.listMasterProjects(auth);
+    res.json(list);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/master-projects', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const { title, year, description, start_date, due_date } = req.body;
+    const mp = projectService.createMasterProject(auth, title, year, description, start_date, due_date);
+    console.log(`🏛️ [MASTER-PROJECT-MONITOR] Yeni Ana Proje / Çatı Program Oluşturuldu: "${mp.title}" (${mp.year}) | Ekleyen: ${auth.name}`);
+    res.status(201).json(mp);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/wipe-trial', (req, res) => {
+  try {
+    const auth = getAuthContext(req);
+    const user = db.getUserById(auth.tenant_id, auth.user_id);
+    if (!user || user.system_role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Yalnızca Sistem Yöneticisi (Admin) deneme projelerini temizleyebilir.' });
+    }
+    db.wipeTrialProjects(auth.tenant_id);
+    console.log(`🧹 [PROJECT-MONITOR] Tüm deneme projeleri ve bağlı görevleri kullanıcı isteğiyle temizlendi. İşlemi yapan: ${auth.name}`);
+    res.json({ success: true, message: 'Tüm deneme projeleri ve bağlı görevleri başarıyla temizlendi.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 3. Tasks
 app.get('/api/tasks/search', (req, res) => {
   try {
@@ -491,11 +618,24 @@ app.get('/api/tasks/search', (req, res) => {
 app.get('/api/projects/:id/tasks', (req, res) => {
   try {
     const auth = getAuthContext(req);
-    const isFullViewer = projectService.isFullProjectViewer(auth, req.params.id);
+    const projectId = req.params.id;
+    const isFullViewer = projectService.isFullProjectViewer(auth, projectId);
     const q = (req.query.q as string) || '';
-    const allTasks = q
-      ? taskService.searchTasks(auth, q, req.params.id)
-      : taskService.listTasks(auth, req.params.id);
+
+    // Hedef proje ve varsa bağlı tüm alt projeleri belirle
+    const targetProjectIds = [projectId];
+    const subProjects = db.getProjects(auth.tenant_id).filter(p => p.parent_project_id === projectId && !p.deleted_at);
+    if (subProjects.length > 0) {
+      targetProjectIds.push(...subProjects.map(sp => sp.id));
+    }
+
+    const allTasks: Task[] = [];
+    for (const pid of targetProjectIds) {
+      const pTasks = q
+        ? taskService.searchTasks(auth, q, pid)
+        : taskService.listTasks(auth, pid);
+      allTasks.push(...pTasks);
+    }
 
     const enrichTaskWithAssignerAndDeps = (t: Task) => {
       let assignerId = t.assigned_by_user_id;
@@ -506,16 +646,22 @@ app.get('/api/projects/:id/tasks', (req, res) => {
         if (!assignerId) assignerId = latest.assigned_by_user_id;
         if (latest.assigned_at) assignedAt = latest.assigned_at;
       }
-      if (!assignerId && t.project_id) {
-        const proj = db.getProjectById(auth.tenant_id, t.project_id);
-        if (proj) assignerId = proj.created_by_user_id;
+      const proj = t.project_id ? db.getProjectById(auth.tenant_id, t.project_id) : null;
+      if (!assignerId && proj) {
+        assignerId = proj.created_by_user_id;
       }
       const assignerUser = assignerId ? db.getUserById(auth.tenant_id, assignerId) : null;
+      const parentProj = proj && proj.parent_project_id ? db.getProjectById(auth.tenant_id, proj.parent_project_id) : null;
+
       return {
         ...t,
         assigned_by_user_id: assignerId,
         assigned_by_name: assignerUser ? assignerUser.name : (t.project_id ? 'Proje Yetkilisi' : 'Sistem'),
         assigned_at: assignedAt || t.created_at,
+        project_title: proj ? proj.title : undefined,
+        parent_project_id: proj ? proj.parent_project_id : undefined,
+        parent_project_title: parentProj ? parentProj.title : undefined,
+        is_sub_project: !!(proj && proj.parent_project_id),
         limited_dependencies: dependencyService.getLimitedDependencySummary(auth, t.id)
       };
     };
@@ -1326,8 +1472,12 @@ app.get('/api/projects/:id/dependencies', (req, res) => {
   try {
     const auth = getAuthContext(req);
     const deps = db.getDependencies(auth.tenant_id);
-    const projectTasks = new Set(db.getTasks(auth.tenant_id, req.params.id).map(t => t.id));
-    const filtered = deps.filter(d => projectTasks.has(d.predecessor_id) && projectTasks.has(d.successor_id));
+    const targetProjectIds = [req.params.id];
+    const subProjects = db.getProjects(auth.tenant_id).filter(p => p.parent_project_id === req.params.id && !p.deleted_at);
+    targetProjectIds.push(...subProjects.map(sp => sp.id));
+    const allProjTasks = targetProjectIds.flatMap(pid => db.getTasks(auth.tenant_id, pid));
+    const projectTaskIds = new Set(allProjTasks.map(t => t.id));
+    const filtered = deps.filter(d => projectTaskIds.has(d.predecessor_id) && projectTaskIds.has(d.successor_id));
     res.json(filtered);
   } catch (err: any) {
     res.status(403).json({ error: err.message });
